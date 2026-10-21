@@ -47,12 +47,23 @@ export function normalizeModel(doc: Document, dims: Dims, yaw = 0): NormalizeRes
  * so this should be negative.
  */
 export function topBandCenterZ(doc: Document, band = 0.2): number {
-  const points = worldPositions(doc);
-  const ys = points.map((p) => p[1]);
-  const top = Math.max(...ys);
-  const cutoff = top - (top - Math.min(...ys)) * band;
-  const zs = points.filter((p) => p[1] >= cutoff).map((p) => p[2]);
-  return zs.reduce((sum, z) => sum + z, 0) / zs.length;
+  // Two passes over the vertices instead of collecting them: models can have millions.
+  let minY = Infinity;
+  let maxY = -Infinity;
+  forEachWorldPosition(doc, (p) => {
+    minY = Math.min(minY, p[1]);
+    maxY = Math.max(maxY, p[1]);
+  });
+  const cutoff = maxY - (maxY - minY) * band;
+  let sumZ = 0;
+  let count = 0;
+  forEachWorldPosition(doc, (p) => {
+    if (p[1] >= cutoff) {
+      sumZ += p[2];
+      count++;
+    }
+  });
+  return sumZ / count;
 }
 
 function sceneOf(doc: Document): Scene {
@@ -62,8 +73,7 @@ function sceneOf(doc: Document): Scene {
   return scene;
 }
 
-function worldPositions(doc: Document): Vec3[] {
-  const out: Vec3[] = [];
+function forEachWorldPosition(doc: Document, fn: (p: Vec3) => void): void {
   const el: vec3 = [0, 0, 0];
   for (const node of doc.getRoot().listNodes()) {
     const mesh = node.getMesh();
@@ -73,11 +83,10 @@ function worldPositions(doc: Document): Vec3[] {
       const position = prim.getAttribute('POSITION');
       if (!position) continue;
       for (let i = 0; i < position.getCount(); i++) {
-        out.push(transform(m, position.getElement(i, el) as vec3));
+        fn(transform(m, position.getElement(i, el) as vec3));
       }
     }
   }
-  return out;
 }
 
 function transform(m: mat4, p: vec3): Vec3 {
