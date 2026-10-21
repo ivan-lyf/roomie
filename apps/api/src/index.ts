@@ -4,6 +4,6 @@ import { loadConfig } from './config';
 
 const config = loadConfig();
 
-serve({ fetch: createApp().fetch, port: config.port }, (info) => {
+serve({ fetch: createApp({ dataDir: config.dataDir }).fetch, port: config.port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`);
 });
