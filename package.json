@@ -14,7 +14,8 @@
     "db:generate": "pnpm --filter @roomie/api db:generate",
     "db:migrate": "pnpm --filter @roomie/api db:migrate",
     "catalog:import": "pnpm --filter @roomie/api catalog:import",
-    "scrape": "uv run --project tools/scraper ikea-scrape"
+    "scrape": "uv run --project tools/scraper ikea-scrape",
+    "models:process": "pnpm --filter @roomie/models process"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

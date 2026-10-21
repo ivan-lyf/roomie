@@ -1,0 +1,23 @@
+{
+  "name": "@roomie/models",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "process": "tsx src/cli.ts",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "@roomie/schema": "workspace:*",
+    "draco3dgltf": "^1.5.9",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/draco3dgltf": "^1.4.3",
+    "tsx": "^4.23.15"
+  }
+}
