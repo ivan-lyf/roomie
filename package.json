@@ -11,6 +11,8 @@
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
+    "db:generate": "pnpm --filter @roomie/api db:generate",
+    "db:migrate": "pnpm --filter @roomie/api db:migrate",
     "scrape": "uv run --project tools/scraper ikea-scrape"
   },
   "devDependencies": {
