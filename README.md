@@ -34,7 +34,7 @@ Kitchens, bathrooms, wall-mounted items, user accounts and mobile layouts are ou
 | Web app | React, Vite, TypeScript, React Three Fiber (3D), Tailwind |
 | API | Node, Hono, Claude API, Drizzle ORM |
 | Database and storage | Postgres on Supabase, Cloudflare R2 |
-| Product catalog | Playwright scraper for IKEA.ca |
+| Product catalog | Python scraper for IKEA.ca (public pages, no credentials) |
 | Layout learning | Python, pandas, scikit-learn / LightGBM |
 
 ## Getting started

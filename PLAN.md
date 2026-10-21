@@ -67,7 +67,7 @@ apps/web (React + R3F) ──► apps/api (Node/Hono) ──► Claude API (visi
 | API | Node, Hono, Anthropic SDK, Drizzle ORM |
 | Database | Postgres (Supabase or Neon) |
 | Storage | Cloudflare R2 (GLBs, plan images, screenshots) |
-| Scraper | Playwright (Node), weekly GitHub Actions cron |
+| Scraper | Python (httpx, uv), weekly GitHub Actions cron |
 | 3D pipeline | gltf-transform (normalize, decimate, meshopt) |
 | ML | Python, pandas, scikit-learn / LightGBM, Jupyter |
 | Testing | Vitest (golden floor-plan tests) |

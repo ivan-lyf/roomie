@@ -14,15 +14,16 @@ build/
 *.tsbuildinfo
 coverage/
 
-# Scraper / model pipeline caches
-tools/scraper/.cache/
-tools/models/.cache/
+# Scraped IKEA data and models: personal use only, never commit
+/data/
 
-# Python (ml/)
+# Python
 .venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
 
 # Editors / OS
 .vscode/

@@ -10,7 +10,8 @@
     "dev": "pnpm -r --parallel --if-present dev",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "scrape": "uv run --project tools/scraper ikea-scrape"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

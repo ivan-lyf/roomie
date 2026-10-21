@@ -23,7 +23,7 @@ apps/web            React + Vite + React Three Fiber frontend
 apps/api            Node + Hono API (generation, catalog, rooms, ratings)
 packages/schema     zod schemas: the single source of truth for all types
 packages/geometry   collision, clearance, scorer, solver (pure TS, runs in browser and server)
-tools/scraper       IKEA.ca scraper + dimension normalizer (Playwright)
+tools/scraper       IKEA.ca scraper (Python, uv): product data in meters, GLBs
 tools/models        GLB normalization pipeline (gltf-transform) + procedural fallbacks
 ml/                 Python notebooks and scripts for the rating and reward model
 fixtures/plans      test floor plans (golden test set)
@@ -39,11 +39,11 @@ pnpm typecheck
 pnpm lint
 pnpm db:generate         # drizzle migrations from schema
 pnpm db:migrate
-pnpm scrape -- --category sofas   # run the scraper for one category
+pnpm scrape --category fu003     # scrape one IKEA category (fu003 = sofas); no flag = everything
 pnpm models:process      # normalize GLBs and upload to R2
 ```
 
-Python (`ml/`): `uv sync`, then `uv run jupyter lab`.
+Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `ml/`, `uv sync`, then `uv run jupyter lab`.
 
 ## Conventions
 
@@ -81,6 +81,9 @@ Python (`ml/`): `uv sync`, then `uv run jupyter lab`.
 - Prefer IKEA.ca's JSON endpoints and embedded JSON-LD over HTML parsing.
 - Rate-limit (≥ 1 s between requests), cache raw responses to disk, and stamp `scrapedAt` on every record.
 - Store raw responses so the normalizer can be rerun without re-scraping.
+- Only fetch URLs on the allowlist in `tools/scraper/src/ikea_scraper/http.py`. Each entry was checked against robots.txt; re-check before adding one (www.ikea.com disallows `*/global/assets/rotera/*`).
+- No credentials: no API keys, client IDs, logins or cookies, even ones embedded in IKEA's pages.
+- Scraped data and models live in `data/`, which is gitignored. The repo is public: never commit them, or real IKEA pages as test fixtures.
 - Data is for personal and portfolio use. Don't add features that redistribute the catalog or IKEA's 3D models publicly.
 
 ### Logging and data for ML
