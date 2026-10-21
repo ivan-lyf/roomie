@@ -1,0 +1,10 @@
+[project]
+name = "roomie-ml"
+version = "0.1.0"
+description = "Ratings, reward model and scorer weights for Roomie"
+requires-python = ">=3.12"
+dependencies = [
+    "jupyterlab>=4.6.4",
+    "pandas>=3.0.6",
+    "scikit-learn>=1.9.1",
+]
