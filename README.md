@@ -4,7 +4,7 @@
 
 Roomie takes the floor plan of a single room or studio and turns it into a 3D room. It then fills the room with real furniture from IKEA.ca. You can walk around the result, swap or delete pieces, and click any item to open it on IKEA's site. Every product has a real price, so you can see what the whole room would cost.
 
-> **Status:** early planning. Nothing is built yet. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. Next is M1, the full catalog. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## How it works
 
@@ -27,7 +27,7 @@ Every generated layout is saved and rated internally, so layouts get better over
 
 Kitchens, bathrooms, wall-mounted items, user accounts and mobile layouts are out of scope for now.
 
-## Tech stack (planned)
+## Tech stack
 
 | Part | Tools |
 |---|---|
@@ -39,13 +39,38 @@ Kitchens, bathrooms, wall-mounted items, user accounts and mobile layouts are ou
 
 ## Getting started
 
-The code isn't set up yet. When it is, you'll need:
+You'll need:
 
 - Node 24+ and pnpm
-- Python with [uv](https://docs.astral.sh/uv/) (for the `ml/` folder)
-- A Supabase project, a Claude API key and a Cloudflare R2 bucket
+- Python with [uv](https://docs.astral.sh/uv/) (for the scraper and the `ml/` folder)
+- Later: a Supabase project, a Claude API key and a Cloudflare R2 bucket
 
-Copy `.env.example` to `.env` and fill in your own values. `.env` is gitignored and must never be committed.
+Copy `.env.example` to `.env` and fill in your own values. `.env` is gitignored and must never be committed. Nothing needs a database yet.
+
+To see a real IKEA sofa in 3D:
+
+```bash
+pnpm install
+pnpm scrape --category fu003 --models   # fetch IKEA.ca's sofas and their 3D models (~20 min)
+pnpm catalog:import                     # turn them into catalog products
+pnpm models:process                     # fit each model to its listed size
+pnpm dev                                # then open http://localhost:5173
+```
+
+Scraped data and models stay in `data/`, which is gitignored.
+
+## Repository layout
+
+| Folder | What's in it |
+|---|---|
+| `apps/web` | The React + React Three Fiber frontend |
+| `apps/api` | The Hono API and the database tables |
+| `packages/schema` | Zod schemas: the one definition of every data type |
+| `packages/geometry` | Pure geometry code, shared by the browser and the server |
+| `tools/scraper` | The Python IKEA.ca scraper ([README](tools/scraper/README.md)) |
+| `tools/models` | Fits downloaded 3D models to their listed sizes |
+| `ml/` | Python notebooks for learning from layout ratings |
+| `fixtures/plans` | The test floor plans ([README](fixtures/plans/README.md)) |
 
 ## Project docs
 

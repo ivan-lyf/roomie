@@ -92,10 +92,10 @@ Rating    { id, layoutA, layoutB, winner, note, createdAt }
 Each milestone ends with something demoable. Estimates assume about 10 hours a week, for a total of about **10–12 weeks**. M1 and M2 are independent and can be interleaved.
 
 ### M0 — Foundations (1 week)
-- [ ] pnpm monorepo: `apps/web`, `apps/api`, `packages/schema`, `packages/geometry`, `tools/`, `ml/`
-- [ ] zod schemas for every entity above; Drizzle tables generated from them
-- [ ] Collect 10–15 test floor plans into `fixtures/plans/`
-- [ ] **Spike:** scrape one category (sofas) end to end: dimensions, price, link, GLB
+- [x] pnpm monorepo: `apps/web`, `apps/api`, `packages/schema`, `packages/geometry`, `tools/`, `ml/`
+- [x] zod schemas for every entity above; Drizzle tables generated from them
+- [ ] Collect 10–15 test floor plans into `fixtures/plans/` (folder and format ready)
+- [x] **Spike:** scrape one category (sofas) end to end: dimensions, price, link, GLB
 
 **Done when:** one sofa renders in a blank R3F scene at its correct real-world size.
 
