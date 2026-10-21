@@ -1,0 +1,71 @@
+import { useGLTF } from '@react-three/drei';
+import { useEffect, useLayoutEffect, useMemo } from 'react';
+import { Box3, type Material, type Mesh, type Object3D, Texture, Vector3 } from 'three';
+import type { Size } from './size';
+
+type Props = {
+  url: string;
+  onMeasured: (size: Size) => void;
+};
+
+/**
+ * A processed product model. tools/models already scaled it to its listed
+ * dims, with the origin at the bottom center and the front facing +Z, so it
+ * renders as is: never adjust scale or orientation here.
+ */
+export function ProductModel({ url, onMeasured }: Props) {
+  const { scene } = useGLTF(url);
+  const model = useMemo(() => withShadows(scene.clone(true)), [scene]);
+
+  useLayoutEffect(() => {
+    const size = new Box3().setFromObject(model, true).getSize(new Vector3());
+    onMeasured([size.x, size.y, size.z]);
+  }, [model, onMeasured]);
+
+  useEffect(() => {
+    clearTimeout(pendingRelease.get(url));
+    pendingRelease.delete(url);
+    return () => scheduleRelease(url, scene);
+  }, [url, scene]);
+
+  return <primitive object={model} />;
+}
+
+const pendingRelease = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Free a model's GPU resources and loader cache entry once nothing shows it.
+ * Deferred so React StrictMode's unmount-and-remount in development, which
+ * cancels it, doesn't dispose a model that's still on screen.
+ */
+function scheduleRelease(url: string, scene: Object3D) {
+  pendingRelease.set(
+    url,
+    setTimeout(() => {
+      pendingRelease.delete(url);
+      dispose(scene);
+      useGLTF.clear(url);
+    }, 0),
+  );
+}
+
+function withShadows(root: Object3D): Object3D {
+  root.traverse((o) => {
+    if ((o as Mesh).isMesh) o.castShadow = true;
+  });
+  return root;
+}
+
+function dispose(root: Object3D) {
+  root.traverse((o) => {
+    const mesh = o as Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry.dispose();
+    for (const material of ([] as Material[]).concat(mesh.material)) {
+      for (const value of Object.values(material)) {
+        if (value instanceof Texture) value.dispose();
+      }
+      material.dispose();
+    }
+  });
+}
