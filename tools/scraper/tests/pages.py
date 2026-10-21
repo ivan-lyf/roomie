@@ -9,7 +9,9 @@ PRODUCT_URL = "https://www.ikea.com/ca/en/p/testa-sofa-gray-s12345678/"
 MODEL_URL = "https://web-api.ikea.com/dimma/assets/test/12345678/simple/glb/testa.glb?cn=pip"
 
 
-def product_page(*, with_model: bool = True, with_hydration: bool = True) -> str:
+def product_page(
+    *, with_model: bool = True, with_hydration: bool = True, with_decoy: bool = False
+) -> str:
     breadcrumbs = {
         "@context": "https://schema.org",
         "@type": "BreadcrumbList",
@@ -73,10 +75,38 @@ def product_page(*, with_model: bool = True, with_hydration: bool = True) -> str
     scripts = [_script("application/ld+json", breadcrumbs), _script("application/ld+json", product)]
     if with_model:
         scripts.append(_script("application/ld+json", model, extra=' id="pip-range-json-ld"'))
+    if with_decoy:
+        # Some real pages embed another product's hydration data before their own.
+        decoy = _script("text/hydrate", _decoy_hydration(), extra=' data-fika-hydration-id="d"')
+        scripts.append(decoy)
     if with_hydration:
         scripts.append(_script("text/hydrate", {"unrelated": True}))
         scripts.append(_script("text/hydrate", hydration, extra=' data-fika-hydration-id="x"'))
     return "<!doctype html><html><head></head><body>" + "".join(scripts) + "</body></html>"
+
+
+def _decoy_hydration() -> dict[str, Any]:
+    return {
+        "0": {
+            "loaderData": {
+                "pageProps": {
+                    "product": {
+                        "itemNo": "99999999",
+                        "visibleItemNo": "999.999.99",
+                        "name": "OTHER",
+                        "price": 131,
+                        "currencyCode": "EUR",
+                        "type": "SPR",
+                    },
+                    "productInformationSectionProps": {
+                        "measurementsProps": {
+                            "measurements": [{"measure": "10 cm", "name": "Width", "type": "00047"}]
+                        }
+                    },
+                }
+            }
+        }
+    }
 
 
 def _script(script_type: str, data: Any, extra: str = "") -> str:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable, Iterator
 from datetime import datetime
 from typing import Any
 
@@ -25,13 +26,13 @@ def parse_product_page(html: str, url: str, scraped_at: datetime) -> dict[str, A
     product_ld = _first_of_type(json_ld, "Product")
     if product_ld is None:
         return None
-    props = _page_props(html) or {}
+    url_item_no = item_no_from_url(url)
+    props = _page_props(html, url_item_no, product_ld.get("mpn")) or {}
     product = props.get("product") or {}
     offer = _offer(product_ld.get("offers"))
 
-    url_item_no = item_no_from_url(url)
     return {
-        "itemNo": product.get("itemNo") or url_item_no,
+        "itemNo": url_item_no or product.get("itemNo"),
         "articleNo": product.get("visibleItemNo") or product_ld.get("mpn"),
         "itemType": product.get("type") or ("SPR" if f"-s{url_item_no}/" in url else "ART"),
         "url": url,
@@ -94,36 +95,42 @@ def _first_of_type(nodes: list[dict[str, Any]], type_name: str) -> dict[str, Any
     return None
 
 
-def _page_props(html: str) -> dict[str, Any] | None:
-    """The hydration data that holds the product and its measurements."""
+def _page_props(html: str, item_no: str | None, article_no: str | None) -> dict[str, Any] | None:
+    """The hydration data for this page's product, with its measurements.
+
+    Some pages also embed hydration data for unrelated products (even from other
+    markets), so match on the item number instead of taking the first block.
+    """
     for body in _scripts(html, "text/hydrate"):
         if _PROPS_MARKER not in body:
             continue
         try:
-            found = _find_props(json.loads(body), depth=0)
+            data = json.loads(body)
         except ValueError:
             continue
-        if found is not None:
-            return found
+        for props in _iter_props(data, depth=0):
+            product = props.get("product") or {}
+            if (item_no and product.get("itemNo") == item_no) or (
+                article_no and product.get("visibleItemNo") == article_no
+            ):
+                return props
     return None
 
 
-def _find_props(node: Any, depth: int) -> dict[str, Any] | None:
+def _iter_props(node: Any, depth: int) -> Iterator[dict[str, Any]]:
     if depth > 8:
-        return None
+        return
     if isinstance(node, dict):
         if "product" in node and "productInformationSectionProps" in node:
-            return node
-        children = node.values()
+            yield node
+            return
+        children: Iterable[Any] = node.values()
     elif isinstance(node, list):
         children = node
     else:
-        return None
+        return
     for child in children:
-        found = _find_props(child, depth + 1)
-        if found is not None:
-            return found
-    return None
+        yield from _iter_props(child, depth + 1)
 
 
 def _offer(offers: Any) -> dict[str, Any]:

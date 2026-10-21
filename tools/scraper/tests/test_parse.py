@@ -70,3 +70,20 @@ def test_trimmed_page_parses_the_same() -> None:
     assert parse_product_page(trimmed, PRODUCT_URL, SCRAPED_AT) == parse_product_page(
         page, PRODUCT_URL, SCRAPED_AT
     )
+
+
+def test_ignores_hydration_data_for_other_products() -> None:
+    item = parse_product_page(product_page(with_decoy=True), PRODUCT_URL, SCRAPED_AT)
+    assert item is not None
+    assert (item["itemNo"], item["productName"], item["currency"]) == ("12345678", "TESTA", "CAD")
+    assert item["measurements"][0]["minM"] == 2.24
+
+
+def test_uses_json_ld_only_when_no_hydration_data_matches() -> None:
+    page = product_page(with_hydration=False, with_decoy=True)
+    item = parse_product_page(page, PRODUCT_URL, SCRAPED_AT)
+    assert item is not None
+    assert item["itemNo"] == "12345678"
+    assert item["articleNo"] == "123.456.78"
+    assert item["currency"] == "CAD"
+    assert item["measurements"] == []
