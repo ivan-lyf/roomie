@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { Product } from '@roomie/schema';
+import { ModelManifest, type ModelManifestEntry, Product } from '@roomie/schema';
 import { z } from 'zod';
 
 const ProductList = z.array(Product);
@@ -20,4 +20,16 @@ export async function readProducts(dataDir: string): Promise<Product[]> {
 /** A processed model written by `pnpm models:process`. */
 export function modelPath(dataDir: string, itemNo: string): string {
   return path.join(dataDir, 'models', `${itemNo}.glb`);
+}
+
+/** Processed models by item number, from data/models/manifest.json. Empty before `pnpm models:process`. */
+export async function readModels(dataDir: string): Promise<Map<string, ModelManifestEntry>> {
+  let text: string;
+  try {
+    text = await readFile(path.join(dataDir, 'models', 'manifest.json'), 'utf8');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return new Map();
+    throw e;
+  }
+  return new Map(ModelManifest.parse(JSON.parse(text)).entries.map((e) => [e.itemNo, e]));
 }

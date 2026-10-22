@@ -1,6 +1,7 @@
 // Fits each catalog product's downloaded IKEA model (data/ikea/models) to the conventions
-// in CLAUDE.md and writes it to data/models. data/models/manifest.json records what happened
-// to every product, and unchanged products are skipped on the next run.
+// in CLAUDE.md and writes it to data/models, or a stand-in when there's no usable IKEA model,
+// so every product has one. data/models/manifest.json records what happened to every product,
+// and unchanged products are skipped on the next run.
 import { access, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,10 +20,11 @@ import { z } from 'zod';
 import { BACKED, chooseYaw, scaleChange } from './fit';
 import { facesBackwards, normalizeModel, sourceSize } from './normalize';
 import { optimizeModel } from './optimize';
+import { standInModel } from './procedural';
 
 /** Bump when the processing changes, so every model is redone. */
-const PIPELINE_VERSION = 4;
-/** IKEA models already face +Z (checked on 116 sofa models, 2026-10-21). */
+const PIPELINE_VERSION = 5;
+/** IKEA models already face +Z (checked on 116 sofas and 75 models across all categories). */
 const IKEA_YAW = 0;
 /** Scale changes above this get a warning, and above the hard limit the model is skipped. */
 const WARN_SCALE_CHANGE = 0.1;
@@ -67,20 +69,20 @@ for (const product of products) {
     sourceStat?.mtimeMs ?? 0,
     JSON.stringify(product.dims),
     product.shape,
+    product.color,
   ].join(':');
 
   const before = previous.get(itemNo);
-  if (before?.inputs === inputs && (before.source === null || (await exists(out)))) {
+  if (before?.inputs === inputs && (await exists(out))) {
     entries.push(before);
     reused++;
     continue;
   }
-  const entry = { itemNo, category: product.category, inputs };
-  entries.push(
-    sourceStat
-      ? await processModel(product, source, out, entry)
-      : { ...entry, ...empty('no_model') },
-  );
+  const fields = { itemNo, category: product.category, inputs };
+  const entry = sourceStat
+    ? await processModel(product, source, out, fields)
+    : { ...fields, ...empty('no_model') };
+  entries.push(entry.source ? entry : await writeStandIn(product, out, entry));
 }
 
 // Outputs of products that left the catalog or lost their model.
@@ -148,6 +150,17 @@ async function processModel(
   };
 }
 
+async function writeStandIn(
+  product: Product,
+  out: string,
+  entry: ModelManifestEntry,
+): Promise<ModelManifestEntry> {
+  const doc = standInModel(product.category, product.dims, product.shape, product.color);
+  const glb = await io.writeBinary(doc);
+  await writeFile(out, glb);
+  return { ...entry, source: 'procedural', bytes: glb.byteLength };
+}
+
 function empty(outcome: ModelOutcome) {
   return { outcome, source: null, bytes: null, scale: null, notes: [] };
 }
@@ -177,12 +190,13 @@ function report(all: ModelManifestEntry[], reusedCount: number) {
   const flagged = all.filter((e) => e.notes.some((n) => n.startsWith('check facing')));
   for (const e of flagged.slice(0, 20)) console.log(`check facing: ${e.itemNo} (${e.category})`);
   if (flagged.length > 20) console.log(`... and ${flagged.length - 20} more facing flags`);
-  const written = all.filter((e) => e.source);
-  const bytes = written.reduce((sum, e) => sum + (e.bytes ?? 0), 0);
-  const big = written.filter((e) => (e.bytes ?? 0) > SIZE_BUDGET_BYTES).length;
+  const ikea = all.filter((e) => e.source === 'ikea');
+  const bytes = ikea.reduce((sum, e) => sum + (e.bytes ?? 0), 0);
+  const big = ikea.filter((e) => (e.bytes ?? 0) > SIZE_BUDGET_BYTES).length;
   console.log(
-    `${written.length} models, ${(bytes / 2 ** 20).toFixed(0)} MB in all, ` +
-      `${(bytes / 2 ** 10 / Math.max(written.length, 1)).toFixed(0)} KB on average, ${big} over 1 MB`,
+    `${ikea.length} IKEA models, ${(bytes / 2 ** 20).toFixed(0)} MB in all, ` +
+      `${(bytes / 2 ** 10 / Math.max(ikea.length, 1)).toFixed(0)} KB on average, ${big} over 1 MB`,
   );
+  console.log(`${all.filter((e) => e.source === 'procedural').length} stand-ins`);
   console.log(`${reusedCount} unchanged; manifest: ${manifestPath}`);
 }

@@ -1,18 +1,12 @@
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { Category } from '@roomie/schema';
 import { Hono } from 'hono';
 import { itemNoOf } from './catalog/ikea';
-import { modelPath, readProducts } from './catalog/store';
+import { modelPath, readModels, readProducts } from './catalog/store';
 
 export type AppOptions = {
   dataDir: string;
 };
-
-const exists = (file: string) =>
-  access(file).then(
-    () => true,
-    () => false,
-  );
 
 export function createApp({ dataDir }: AppOptions) {
   const app = new Hono().basePath('/api');
@@ -23,18 +17,18 @@ export function createApp({ dataDir }: AppOptions) {
     const query = c.req.query('category');
     const category = query === undefined ? undefined : Category.safeParse(query);
     if (category && !category.success) return c.json({ error: `unknown category: ${query}` }, 400);
-    const products = (await readProducts(dataDir)).filter(
-      (p) => !category || p.category === category.data,
-    );
-    // M0 serves processed models from disk; M1 stores their R2 URLs in the catalog.
-    const withModels = await Promise.all(
-      products.map(async (p) => {
+    const [all, models] = await Promise.all([readProducts(dataDir), readModels(dataDir)]);
+    const products = all.filter((p) => !category || p.category === category.data);
+    // The model pipeline decides what each product shows: its IKEA model or a stand-in.
+    return c.json(
+      products.map((p) => {
         const itemNo = itemNoOf(p);
-        if (!(await exists(modelPath(dataDir, itemNo)))) return p;
-        return { ...p, modelUrl: new URL(`/api/models/${itemNo}.glb`, c.req.url).href };
+        const source = models.get(itemNo)?.source;
+        if (!source) return { ...p, modelUrl: null };
+        const modelUrl = new URL(`/api/models/${itemNo}.glb`, c.req.url).href;
+        return { ...p, modelSource: source, modelUrl };
       }),
     );
-    return c.json(withModels);
   });
 
   app.get('/models/:file', async (c) => {

@@ -40,6 +40,26 @@ afterEach(async () => {
 const writeProducts = (products: unknown) =>
   writeFile(path.join(dataDir, 'catalog', 'products.json'), JSON.stringify(products));
 
+/** A model manifest, as `pnpm models:process` writes it: item number -> model source. */
+const writeModels = (sources: Record<string, 'ikea' | 'procedural' | null>) =>
+  writeFile(
+    path.join(dataDir, 'models', 'manifest.json'),
+    JSON.stringify({
+      pipelineVersion: 1,
+      generatedAt: '2026-10-21T00:00:00.000Z',
+      entries: Object.entries(sources).map(([itemNo, source]) => ({
+        itemNo,
+        category: 'sofa',
+        outcome: source === 'ikea' ? 'fitted' : 'no_model',
+        source,
+        bytes: source ? 100 : null,
+        scale: null,
+        notes: [],
+        inputs: '',
+      })),
+    }),
+  );
+
 describe('GET /api/health', () => {
   it('reports ok', async () => {
     const res = await createApp({ dataDir }).request('/api/health');
@@ -55,14 +75,19 @@ describe('GET /api/products', () => {
     expect(await res.json()).toEqual([]);
   });
 
-  it('links processed models', async () => {
-    await writeProducts([product('111.111.11'), product('222.222.22')]);
-    await writeFile(path.join(dataDir, 'models', '11111111.glb'), 'glTF');
+  it('links each product to the model the pipeline made for it', async () => {
+    await writeProducts([product('111.111.11'), product('222.222.22'), product('333.333.33')]);
+    await writeModels({ '11111111': 'ikea', '22222222': 'procedural', '33333333': null });
     const res = await createApp({ dataDir }).request('http://localhost:5173/api/products');
-    const body = (await res.json()) as { articleNo: string; modelUrl: string | null }[];
-    expect(body.map((p) => [p.articleNo, p.modelUrl])).toEqual([
-      ['111.111.11', 'http://localhost:5173/api/models/11111111.glb'],
-      ['222.222.22', null],
+    const body = (await res.json()) as {
+      articleNo: string;
+      modelSource: string;
+      modelUrl: string | null;
+    }[];
+    expect(body.map((p) => [p.articleNo, p.modelSource, p.modelUrl])).toEqual([
+      ['111.111.11', 'ikea', 'http://localhost:5173/api/models/11111111.glb'],
+      ['222.222.22', 'procedural', 'http://localhost:5173/api/models/22222222.glb'],
+      ['333.333.33', 'ikea', null],
     ]);
   });
 
