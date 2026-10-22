@@ -1,5 +1,5 @@
 export * from './geometry';
-export * from './room';
+export * from './floorplan';
 export * from './product';
 export * from './layout';
 export * from './models';

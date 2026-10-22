@@ -1,22 +1,39 @@
 import type {
   Category,
+  CeilingHeightSource,
   Dims,
+  FloorplanStatus,
   GenerationInputs,
   LayoutStatus,
   Materials,
   ModelSource,
+  Obstacle,
   Opening,
   Placement,
+  PlanImage,
+  PlanReading,
+  PlanText,
   ProductOption,
   ProductShape,
   ProductStatus,
   Rating,
   RatingStatus,
-  RoomType,
+  Room,
+  Scale,
   Wall,
 } from '@roomie/schema';
 import { sql } from 'drizzle-orm';
-import { index, jsonb, numeric, pgTable, real, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  real,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 // Tables mirror the zod schemas in @roomie/schema (schema.test.ts checks they match).
 // JSONB columns are typed here, but still validate them with zod on read and write.
@@ -26,15 +43,25 @@ import { index, jsonb, numeric, pgTable, real, text, timestamp, uuid } from 'dri
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const emptyTextArray = sql`'{}'::text[]`;
 
-export const rooms = pgTable('rooms', {
+/** A home's plan: walls, openings and rooms in meters (plan space, see CLAUDE.md). */
+export const floorplans = pgTable('floorplans', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
-  roomType: text('room_type').$type<RoomType>().notNull(),
+  status: text('status').$type<FloorplanStatus>().notNull(),
+  image: jsonb('image').$type<PlanImage>(),
   walls: jsonb('walls').$type<Wall[]>().notNull(),
   openings: jsonb('openings').$type<Opening[]>().notNull(),
+  rooms: jsonb('rooms').$type<Room[]>().notNull(),
+  obstacles: jsonb('obstacles').$type<Obstacle[]>().notNull(),
+  labels: jsonb('labels').$type<PlanText[]>().notNull(),
+  scale: jsonb('scale').$type<Scale>(),
+  ceilingHeight: real('ceiling_height').notNull(),
+  ceilingHeightSource: text('ceiling_height_source').$type<CeilingHeightSource>().notNull(),
   materials: jsonb('materials').$type<Materials>().notNull(),
-  sourceImageUrl: text('source_image_url'),
+  reading: jsonb('reading').$type<PlanReading>(),
+  editSeconds: integer('edit_seconds').notNull().default(0),
   createdAt: createdAt(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
 
 export const products = pgTable(
@@ -69,9 +96,9 @@ export const layouts = pgTable(
   'layouts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    roomId: uuid('room_id')
+    floorplanId: uuid('floorplan_id')
       .notNull()
-      .references(() => rooms.id),
+      .references(() => floorplans.id),
     generationId: uuid('generation_id').notNull(),
     inputs: jsonb('inputs').$type<GenerationInputs>().notNull(),
     placements: jsonb('placements').$type<Placement[]>().notNull(),
@@ -84,7 +111,7 @@ export const layouts = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    index('layouts_room_id_idx').on(t.roomId),
+    index('layouts_floorplan_id_idx').on(t.floorplanId),
     index('layouts_generation_id_idx').on(t.generationId),
   ],
 ).enableRLS();

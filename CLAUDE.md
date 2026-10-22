@@ -54,7 +54,7 @@ Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `m
 ### Units and coordinates (most common source of bugs)
 - **All lengths are meters** internally. Convert cm and inches at the boundary (scraper, UI input, floor plan scale) and nowhere else.
 - **Floor plan scale:** extraction works in image pixels; one `metersPerPixel` per floorplan (from dimension labels or user calibration, see `PLAN.md` §5.1) converts everything to meters once. Store the detected source unit and the calibration inputs; never guess a unit without the plausibility checks.
-- **2D plan space:** `(x, y)`, x to the right, y down the page as drawn in the source image after scaling.
+- **2D plan space:** `(x, y)`, x to the right, y down the page as drawn in the source image after scaling, with the origin at the image's top-left corner: a pixel times `metersPerPixel` is a point in plan space.
 - **3D space:** Y-up. Plan `(x, y)` maps to 3D `(x, 0, y)`.
 - **Rotation:** radians about the vertical axis. `0` means the product's front faces plan **+y** (3D +Z).
 - **Product models:** origin at the **bottom center** of the bounding box, front facing **+Z**, scaled to listed dimensions. The model pipeline enforces this; never compensate in render code.

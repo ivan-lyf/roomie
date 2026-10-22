@@ -1,22 +1,27 @@
 import { z } from 'zod';
 import { Radians } from './geometry';
 import { ArticleNo, Category } from './product';
-import { RoomType } from './room';
 
 // Placeholder presets; revisit once the catalog's style tags are known.
 export const StylePreset = z.enum(['scandinavian', 'modern', 'warm_minimal']);
 export type StylePreset = z.infer<typeof StylePreset>;
 
 export const GenerationInputs = z.object({
-  roomType: RoomType,
+  /** The rooms to furnish: by default every furnishable room of the floorplan. */
+  roomIds: z.array(z.string().min(1)).min(1),
+  /** One budget for the whole home. */
   budgetCad: z.number().positive(),
+  /** One style, shared by every room. */
   style: StylePreset,
-  mustHaves: z.array(Category),
+  /** What each room must have, by room id. */
+  mustHaves: z.record(z.string(), z.array(Category)),
 });
 export type GenerationInputs = z.infer<typeof GenerationInputs>;
 
 export const Placement = z.object({
   articleNo: ArticleNo,
+  /** The room the item stands in. */
+  roomId: z.string().min(1),
   x: z.number().finite(),
   y: z.number().finite(),
   rotation: Radians,
@@ -29,7 +34,7 @@ export type LayoutStatus = z.infer<typeof LayoutStatus>;
 
 export const Layout = z.object({
   id: z.uuid(),
-  roomId: z.uuid(),
+  floorplanId: z.uuid(),
   /** Groups the best-of-N candidates from one generation request. */
   generationId: z.uuid(),
   inputs: GenerationInputs,

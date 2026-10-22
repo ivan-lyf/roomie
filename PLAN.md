@@ -87,9 +87,9 @@ apps/web (React + R3F) ──► apps/api (Node/Hono) ──► Claude API (visi
 All lengths in **meters**. See `CLAUDE.md` for the coordinate conventions.
 
 ```ts
-Floorplan { id, name, walls: Wall[], openings: Opening[], rooms: Room[], obstacles: Obstacle[], labels: PlanText[], scale: Scale, ceilingHeight, ceilingHeightSource: 'user' | 'plan' | 'default', sourceImageUrl }
+Floorplan { id, name, status, image, walls: Wall[], openings: Opening[], rooms: Room[], obstacles: Obstacle[], labels: PlanText[], scale: Scale, ceilingHeight, ceilingHeightSource: 'user' | 'plan' | 'default', materials, reading, editSeconds }
 Room      { id, name, roomType, boundary: Vec2[], labelTextIds: string[], furnishable, ceilingHeight?, materials }
-Wall      { id, a: Vec2, b: Vec2, thickness, height }
+Wall      { id, a: Vec2, b: Vec2, thickness }
 Opening   { id, wallId, kind: 'door' | 'window' | 'passage', offset, width, height, sillHeight?, swing? }
 Obstacle  { id, kind: 'counter' | 'appliance' | 'closet' | 'column' | 'radiator' | 'fireplace' | 'other', polygon: Vec2[], height? }
 PlanText  { id, text, bbox, kind: 'room_label' | 'dimension' | 'area' | 'other', parsed?: { meters?, squareMeters?, roomType? } }
@@ -100,7 +100,7 @@ Placement { articleNo, roomId, x, y, rotation }
 Rating    { id, layoutA, layoutB, winner, note, createdAt }
 ```
 
-Walls and openings belong to the floorplan, not to a room, so a wall between two rooms is stored once and a door between them is one opening whose swing can enter either room. A room is a polygon over the floorplan; its walls are the ones along its boundary. Open-plan areas (a living room flowing into a dining area) are separate rooms with no wall between them. `PlanText` keeps every piece of text read from the image, so a wrong room type or scale can be traced back to the label that caused it.
+Walls and openings belong to the floorplan, not to a room, so a wall between two rooms is stored once and takes its height from the ceilings of the rooms it bounds, and a door between them is one opening whose swing can enter either room. A room is a polygon over the floorplan; its walls are the ones along its boundary. Open-plan areas (a living room flowing into a dining area) are separate rooms with no wall between them. `PlanText` keeps every piece of text read from the image, so a wrong room type or scale can be traced back to the label that caused it.
 
 ### 5.1 Scale, units, and heights
 

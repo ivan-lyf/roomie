@@ -56,10 +56,10 @@ describe('Layout', () => {
   it('rejects scores outside [0, 1]', () => {
     const layout = {
       id: '00000000-0000-4000-8000-000000000001',
-      roomId: '00000000-0000-4000-8000-000000000002',
+      floorplanId: '00000000-0000-4000-8000-000000000002',
       generationId: '00000000-0000-4000-8000-000000000003',
-      inputs: { roomType: 'studio', budgetCad: 2000, style: 'modern', mustHaves: ['bed'] },
-      placements: [{ articleNo: '123.456.78', x: 1, y: 2, rotation: 0 }],
+      inputs: { roomIds: ['r1'], budgetCad: 2000, style: 'modern', mustHaves: { r1: ['bed'] } },
+      placements: [{ articleNo: '123.456.78', roomId: 'r1', x: 1, y: 2, rotation: 0 }],
       score: 1.2,
       scoreBreakdown: {},
       llmIntent: null,
