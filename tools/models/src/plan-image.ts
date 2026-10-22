@@ -2,7 +2,7 @@
 // fixtures and the plan's own text, at its scale. The demo plan's image is drawn with it, so the
 // public repo never needs a plan image someone else owns.
 //
-// Usage: tsx src/plan-image.ts fixtures/plans/00-demo-1br
+// Usage: pnpm --filter @roomie/models plan:draw fixtures/plans/00-demo-1br
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -92,8 +92,9 @@ export function planSvg(plan: Floorplan, size: { width: number; height: number }
 }
 
 async function main() {
-  const dir = process.argv[2];
-  if (!dir) throw new Error('Usage: tsx src/plan-image.ts <plan folder>');
+  if (!process.argv[2]) throw new Error('Usage: tsx src/plan-image.ts <plan folder>');
+  // Relative to where pnpm was run, not to this package.
+  const dir = path.resolve(process.env['INIT_CWD'] ?? process.cwd(), process.argv[2]);
   const plan = Floorplan.parse(
     JSON.parse(await readFile(path.join(dir, 'floorplan.json'), 'utf8')),
   );
