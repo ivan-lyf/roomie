@@ -83,7 +83,9 @@ export function PlansPage() {
         ) : (
           <>
             <span className="font-medium">Drop a floor plan here, or choose a file</span>
-            <span className="text-xs text-stone-500">PNG, JPEG, WebP or PDF (its first page)</span>
+            <span className="text-xs text-stone-500">
+              PNG, JPEG, WebP or PDF (its first page). Google Gemini reads it.
+            </span>
           </>
         )}
       </button>

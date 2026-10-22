@@ -11,7 +11,7 @@ import {
   wallLength,
   type Snap,
 } from '@roomie/geometry';
-import type { Floorplan, Vec2 } from '@roomie/schema';
+import type { Floorplan, PlanDraft, Vec2 } from '@roomie/schema';
 import type Konva from 'konva';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, Group, Image, Layer, Line, Rect, Stage, Text } from 'react-konva';
@@ -206,10 +206,16 @@ export function PlanCanvas({ plan, imageUrl }: { plan: Floorplan; imageUrl?: str
       }
       case 'measure': {
         const toPx = (p: Vec2) => ({ x: p.x / (mpp ?? 1), y: p.y / (mpp ?? 1) });
+        // The reader's draft, waiting for a scale, is already in pixels.
+        const pending = !mpp ? plan.reading?.draft : undefined;
         if (measuring === 'line') {
           const wall = target?.kind === 'wall' && plan.walls.find((w) => w.id === target.id);
           if (!last && wall && mpp)
             return editor.set({ measure: { ...measure, line: [toPx(wall.a), toPx(wall.b)] } });
+          const drafted =
+            target?.kind === 'draft-wall' && pending?.walls.find((w) => w.id === target.id);
+          if (!last && drafted)
+            return editor.set({ measure: { ...measure, line: [drafted.a, drafted.b] } });
           const s = mpp ? toPx(snapped(m, shift, last && toMeters(last)).point) : pixels;
           if (!last) return editor.setDraft([s]);
           editor.set({ measure: { ...measure, line: [last, s] } });
@@ -218,6 +224,11 @@ export function PlanCanvas({ plan, imageUrl }: { plan: Floorplan; imageUrl?: str
         const room = target?.kind === 'room' && plan.rooms.find((r) => r.id === target.id);
         if (draft.length === 0 && room && mpp) {
           return editor.set({ measure: { ...measure, outline: room.boundary.map(toPx) } });
+        }
+        const draftRoom =
+          target?.kind === 'draft-room' && pending?.rooms.find((r) => r.id === target.id);
+        if (draft.length === 0 && draftRoom) {
+          return editor.set({ measure: { ...measure, outline: draftRoom.polygon } });
         }
         const s = mpp ? toPx(snapped(m, shift, last && toMeters(last)).point) : pixels;
         if (draft.length >= 3 && distance(s, draft[0]!) <= SNAP_PX / v.zoom) {
@@ -438,6 +449,9 @@ export function PlanCanvas({ plan, imageUrl }: { plan: Floorplan; imageUrl?: str
               listening={false}
             />
           ))}
+          {!mpp && plan.reading && (
+            <DraftShapes draft={plan.reading.draft} zoom={v.zoom} listening={tool === 'measure'} />
+          )}
         </Layer>
         {mpp && (
           <Layer scaleX={1 / mpp} scaleY={1 / mpp}>
@@ -545,6 +559,45 @@ export function PlanCanvas({ plan, imageUrl }: { plan: Floorplan; imageUrl?: str
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * What the reader read, in image pixels, while the plan waits for a scale: faint, and clickable
+ * with the Scale tool to measure a wall or a room by.
+ */
+function DraftShapes(props: { draft: PlanDraft; zoom: number; listening: boolean }) {
+  const { draft, zoom, listening } = props;
+  const flat = (points: Vec2[]) => points.flatMap((p) => [p.x, p.y]);
+  return (
+    <Group listening={listening}>
+      {draft.rooms.map((r) => (
+        <Line
+          key={r.id}
+          points={flat(r.polygon)}
+          closed
+          fill="#f59e0b"
+          opacity={0.12}
+          stroke="#b45309"
+          strokeWidth={1 / zoom}
+          kind="draft-room"
+          elementId={r.id}
+        />
+      ))}
+      {draft.walls.map((w) => (
+        <Line
+          key={w.id}
+          points={flat([w.a, w.b])}
+          stroke="#d97706"
+          strokeWidth={w.thickness}
+          hitStrokeWidth={Math.max(w.thickness, 12 / zoom)}
+          lineCap="square"
+          opacity={0.45}
+          kind="draft-wall"
+          elementId={w.id}
+        />
+      ))}
+    </Group>
   );
 }
 

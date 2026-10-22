@@ -2,6 +2,7 @@ import {
   addWall,
   area,
   centeredOffset,
+  convertDraft,
   defaultOpeningHeight,
   deleteWall,
   labelsIn,
@@ -10,9 +11,11 @@ import {
   moveWall,
   nextId,
   rescalePlan,
+  ROOM_NAMES,
   roomTypeFromLabels,
   splitPolygon,
   splitWall,
+  uniqueRoomName,
   wallHeight,
   wallLength,
 } from '@roomie/geometry';
@@ -27,11 +30,11 @@ import {
   type Room,
   type RoomType,
   type Scale,
+  type SourceUnit,
   type Vec2,
 } from '@roomie/schema';
 import { temporal } from 'zundo';
 import { create } from 'zustand';
-import { ROOM_TYPES } from '../format';
 
 /** How wide a new opening is, before the user drags its ends. */
 export const OPENING_WIDTHS: Record<OpeningKind, number> = { door: 0.8, window: 1.2, passage: 0.9 };
@@ -42,8 +45,12 @@ export type RoomChange = Partial<
 
 type FloorplanState = {
   plan: Floorplan | undefined;
+  /** The plan as it was last loaded from the server, so autosave knows it's saved. */
+  loaded: Floorplan | undefined;
   /** Starts a plan afresh, with no history to undo. */
   load: (plan: Floorplan) => void;
+  /** Swaps in a new version of the plan, such as a fresh reading, as one edit to undo. */
+  replace: (plan: Floorplan) => void;
   rename: (name: string) => void;
   /** Changes the home's materials, or with a room, overrides them in that room only. */
   setMaterials: (roomId: string | undefined, change: Partial<Materials>) => void;
@@ -79,7 +86,10 @@ type FloorplanState = {
 
   /** Removes walls (with their openings), openings, rooms and obstacles. */
   remove: (ids: readonly string[]) => void;
-  /** Sets the scale, rescaling everything drawn under the old one. */
+  /**
+   * Sets the scale, rescaling everything drawn under the old one; on a plan the reader read but
+   * couldn't scale, converts its draft.
+   */
   calibrate: (scale: Scale) => void;
   setCeiling: (height: number) => void;
 };
@@ -92,11 +102,21 @@ const allIds = (plan: Floorplan) => [
 ];
 
 /** "Bedroom", then "Bedroom 2" and so on. */
-function roomName(rooms: readonly Room[], type: RoomType): string {
-  const base = ROOM_TYPES[type];
-  const taken = new Set(rooms.map((r) => r.name));
-  if (!taken.has(base)) return base;
-  for (let n = 2; ; n++) if (!taken.has(`${base} ${n}`)) return `${base} ${n}`;
+const roomName = (rooms: readonly Room[], type: RoomType) =>
+  uniqueRoomName(
+    rooms.map((r) => r.name),
+    ROOM_NAMES[type],
+  );
+
+/**
+ * The unit the plan's labels are in, for a scale the user measured: the one the reader's
+ * candidates put within 10% of it, so its labels can be checked against it.
+ */
+function labelUnit(plan: Floorplan, metersPerPixel: number): SourceUnit {
+  const near = plan.reading?.scaleCandidates.find(
+    (c) => Math.abs(c.metersPerPixel / metersPerPixel - 1) < 0.1,
+  );
+  return near?.sourceUnit ?? 'none';
 }
 
 /** The type and labels of a new outline, from the plan text inside it. */
@@ -130,10 +150,12 @@ export const useFloorplan = create<FloorplanState>()(
 
       return {
         plan: undefined,
+        loaded: undefined,
         load: (plan) => {
-          set({ plan });
+          set({ plan, loaded: plan });
           useFloorplan.temporal.getState().clear();
         },
+        replace: (plan) => edit(() => plan),
         rename: (name) => edit((plan) => ({ ...plan, name })),
         setMaterials: (roomId, change) =>
           roomId
@@ -313,6 +335,20 @@ export const useFloorplan = create<FloorplanState>()(
           }),
         calibrate: (scale) =>
           edit((plan) => {
+            const draft = plan.reading?.draft;
+            const untraced = plan.walls.length === 0 && plan.rooms.length === 0;
+            if (!plan.scale && draft && untraced) {
+              const sourceUnit =
+                scale.sourceUnit === 'none'
+                  ? labelUnit(plan, scale.metersPerPixel)
+                  : scale.sourceUnit;
+              const converted = { ...scale, sourceUnit };
+              return {
+                ...plan,
+                ...convertDraft(draft, converted, plan.ceilingHeight),
+                scale: converted,
+              };
+            }
             const factor = plan.scale ? scale.metersPerPixel / plan.scale.metersPerPixel : 1;
             return { ...rescalePlan(plan, factor), scale };
           }),

@@ -6,6 +6,7 @@ import { floorplanImageUrl } from '../api';
 import { type SaveState, useAutosave } from '../autosave';
 import { PlanCanvas } from '../editor/PlanCanvas';
 import { DEMO_ID, usePlan } from '../plans';
+import { usePlanReader } from '../reading';
 import { useEditor } from '../stores/editor';
 import { redo, undo, useFloorplan } from '../stores/floorplan';
 import { Inspector } from '../ui/editor/Inspector';
@@ -29,7 +30,9 @@ const typing = (e: KeyboardEvent) =>
 export function EditorPage({ id }: { id: string }) {
   const { plan, error } = usePlan(id);
   const save = useAutosave(id);
+  const reader = usePlanReader(id, plan);
   const calibrated = Boolean(plan?.scale);
+  const reading = reader.read.state === 'reading';
 
   // A new plan opens on the scale; every visit starts with nothing selected.
   useEffect(() => {
@@ -101,6 +104,13 @@ export function EditorPage({ id }: { id: string }) {
   }
   if (!plan) return null;
   const status = planStatus(plan);
+  const traced = plan.walls.length > 0 || plan.rooms.length > 0;
+  const readAgain = () => {
+    const sure =
+      !traced ||
+      confirm("Reading the plan again replaces what's traced. You can undo it afterwards.");
+    if (sure) void reader.run(traced);
+  };
 
   return (
     <main className="flex h-full flex-col text-sm text-stone-800">
@@ -134,6 +144,16 @@ export function EditorPage({ id }: { id: string }) {
               ? 'Needs its scale'
               : 'Not finished'}
         </span>
+        {id !== DEMO_ID && plan.image && (
+          <button
+            type="button"
+            onClick={readAgain}
+            disabled={reading}
+            className="rounded-md border border-stone-300 px-3 py-1.5 hover:bg-stone-50 disabled:opacity-40"
+          >
+            {plan.reading ? 'Read the plan again' : 'Read the plan'}
+          </button>
+        )}
         <Link
           href={`/plans/${id}/3d`}
           className={`rounded-md px-3 py-1.5 ${
@@ -147,7 +167,7 @@ export function EditorPage({ id }: { id: string }) {
       </header>
       <div className="flex min-h-0 flex-1">
         <Toolbar calibrated={calibrated} />
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
           <PlanCanvas
             key={plan.id}
             plan={plan}
@@ -155,6 +175,37 @@ export function EditorPage({ id }: { id: string }) {
               id === DEMO_ID ? demoImage : plan.image ? floorplanImageUrl(plan.id) : undefined
             }
           />
+          {reading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+              <p className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg">
+                <span className="size-4 animate-spin rounded-full border-2 border-stone-300 border-t-stone-800" />
+                Reading the plan with Gemini… this can take a few minutes.
+              </p>
+            </div>
+          )}
+          {reader.read.state === 'failed' && (
+            <div className="absolute inset-x-4 top-4 flex items-start gap-3 rounded-lg bg-amber-50 px-4 py-3 text-amber-900 shadow">
+              <p className="flex-1">
+                {reader.read.noReader
+                  ? 'No plan reader is set up (it needs GEMINI_API_KEY), so trace the plan by hand.'
+                  : `The plan couldn't be read: ${reader.read.message}`}
+              </p>
+              {!reader.read.noReader && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void reader.run(reader.read.state === 'failed' && reader.read.replace)
+                  }
+                  className="underline"
+                >
+                  Try again
+                </button>
+              )}
+              <button type="button" onClick={reader.dismiss} className="underline">
+                {reader.read.noReader ? 'OK' : 'Trace it by hand'}
+              </button>
+            </div>
+          )}
         </div>
         <aside className="flex w-80 shrink-0 flex-col gap-5 overflow-y-auto border-l border-stone-200 bg-white p-4">
           <Section title="Scale">

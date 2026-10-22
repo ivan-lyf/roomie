@@ -82,8 +82,8 @@ export function useAutosave(id: string): { state: SaveState; retry: () => void }
     saver.saved = useFloorplan.getState().plan;
     const unsubscribe = useFloorplan.subscribe((s, prev) => {
       if (s.plan === prev.plan || !s.plan || s.plan.id !== id) return;
-      // A plan just loaded is what's saved.
-      if (prev.plan?.id !== s.plan.id) saver.saved = s.plan;
+      // A plan just loaded from the server is what's saved.
+      if (s.plan === s.loaded) saver.saved = s.plan;
       else if (s.plan !== saver.saved) saver.schedule();
     });
     const flush = () => {

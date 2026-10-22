@@ -9,10 +9,21 @@ export async function fetchProducts(category: Category, signal?: AbortSignal): P
   return ProductList.parse(await res.json());
 }
 
+/** An error the API answered with. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 /** The API's error message, else the status. */
-async function failure(res: Response, what: string): Promise<Error> {
+async function failure(res: Response, what: string): Promise<ApiError> {
   const body = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
-  return new Error(body?.error ?? `${what}: HTTP ${res.status}`);
+  return new ApiError(body?.error ?? `${what}: HTTP ${res.status}`, res.status);
 }
 
 export async function fetchFloorplans(signal?: AbortSignal): Promise<FloorplanSummary[]> {
@@ -49,5 +60,18 @@ export async function saveFloorplan(plan: Floorplan, signal?: AbortSignal): Prom
     signal,
   });
   if (!res.ok) throw await failure(res, 'PUT /api/floorplans/:id');
+  return Floorplan.parse(await res.json());
+}
+
+/**
+ * Has the plan reader read the plan's image (up to a few minutes). A plan already traced is
+ * only read again with `replace`, which replaces what was traced.
+ */
+export async function readFloorplan(id: string, replace = false): Promise<Floorplan> {
+  const query = replace ? '?replace=1' : '';
+  const res = await fetch(`/api/floorplans/${encodeURIComponent(id)}/read${query}`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw await failure(res, 'POST /api/floorplans/:id/read');
   return Floorplan.parse(await res.json());
 }

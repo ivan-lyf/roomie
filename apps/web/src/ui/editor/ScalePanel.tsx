@@ -6,7 +6,7 @@ import {
   scaleFromAreaAndSide,
   scaleFromWallLength,
 } from '@roomie/geometry';
-import type { Floorplan, Scale } from '@roomie/schema';
+import { type Floorplan, Scale, type ScaleCandidate, type SourceUnit } from '@roomie/schema';
 import { useState } from 'react';
 import { formatLength, parseLength, parseSquareMeters, squareMeters } from '../../format';
 import { type CalibrationMethod, useEditor } from '../../stores/editor';
@@ -30,6 +30,14 @@ const COVERS_HINT: Record<Covers, string> = {
   inside: 'Trace along the inner face of the walls.',
   with_walls: 'Trace along the outer face of the outside walls.',
   with_extras: 'Trace around everything the figure includes, the balcony or closets too.',
+};
+
+const UNITS: Record<SourceUnit, string> = {
+  imperial: 'Feet and inches',
+  metric_m: 'Meters',
+  metric_cm: 'Centimeters',
+  metric_mm: 'Millimeters',
+  none: 'No unit',
 };
 
 const METHOD_NAMES: Record<Scale['method'], string> = {
@@ -117,14 +125,23 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
     };
   }
 
+  // A plan the reader read but couldn't scale: setting the scale converts what it read.
+  const waiting = !scale && plan.reading !== null && plan.walls.length === 0;
   const apply = () => {
     if (!result) return;
     calibrate(result.scale);
     set({ measure: {} });
     setLengthText('');
     setAreaText('');
-    if (plan.walls.length === 0) setTool('wall');
+    if (waiting) setTool('select');
+    else if (plan.walls.length === 0) setTool('wall');
   };
+  const choose = (candidate: ScaleCandidate) => {
+    // As a plain scale: parsing drops `plausible`.
+    calibrate(Scale.parse(candidate));
+    setTool('select');
+  };
+  const candidates = waiting ? (plan.reading?.scaleCandidates ?? []) : [];
   const checks = scale ? checkRoomLabels(plan) : [];
   const mpp = scale?.metersPerPixel ?? 0;
   const mpp2 = mpp * mpp;
@@ -145,6 +162,34 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
           </>
         )}
       </p>
+
+      {candidates.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-stone-600">
+            The plan&apos;s dimension labels fit more than one unit. Which are they in?
+          </p>
+          {candidates.map((c) => (
+            <button
+              key={c.sourceUnit}
+              type="button"
+              onClick={() => choose(c)}
+              className="rounded-md border border-stone-300 px-2 py-1 text-left hover:bg-stone-50"
+            >
+              {UNITS[c.sourceUnit]}
+              <span className="block text-xs text-stone-500">
+                Labels agree within {(c.residual * 100).toFixed(1)}%
+                {!c.plausible && '; doors or rooms come out odd sizes'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {waiting && candidates.length === 0 && (
+        <p className="text-xs text-stone-600">
+          The plan was read (in orange) but has no dimension labels to scale it by. With the Scale
+          tool, click one of its walls or rooms you know the size of.
+        </p>
+      )}
 
       <div className="flex flex-col gap-1">
         {(Object.keys(METHODS) as CalibrationMethod[]).map((m) => (
@@ -252,6 +297,11 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
             })}
           </ul>
         </div>
+      )}
+      {plan.reading && (
+        <p className="text-xs text-stone-400">
+          Read by {plan.reading.model} in {Math.round(plan.reading.durationMs / 1000)} s.
+        </p>
       )}
     </div>
   );

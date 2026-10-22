@@ -1,4 +1,4 @@
-import { Floorplan } from '@roomie/schema';
+import { Floorplan, type PlanDraft } from '@roomie/schema';
 import { beforeEach, describe, expect, it } from 'vitest';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import { redo, undo, useFloorplan } from './floorplan';
@@ -106,7 +106,7 @@ describe('editing the plan', () => {
       { x: 23, y: 23 },
     ]);
     expect(current().rooms.find((r) => r.id === another)).toMatchObject({
-      name: 'Other',
+      name: 'Room',
       roomType: 'other',
       furnishable: false,
     });
@@ -147,3 +147,71 @@ describe('editing the plan', () => {
 });
 
 const room0 = plan.rooms[0]!;
+
+describe('a plan the reader read', () => {
+  const P = (x: number, y: number) => ({ x, y });
+  const draft: PlanDraft = {
+    walls: [
+      { id: 'w1', a: P(100, 100), b: P(500, 100), thickness: 15 },
+      { id: 'w2', a: P(500, 100), b: P(500, 400), thickness: 15 },
+      { id: 'w3', a: P(500, 400), b: P(100, 400), thickness: 15 },
+      { id: 'w4', a: P(100, 400), b: P(100, 100), thickness: 15 },
+    ],
+    openings: [{ id: 'o1', wallId: 'w1', kind: 'window', offset: 100, width: 120 }],
+    rooms: [{ id: 'r1', polygon: [P(100, 100), P(500, 100), P(500, 400), P(100, 400)] }],
+    obstacles: [],
+    texts: [{ id: 't1', text: 'LIVING', bbox: { x: 270, y: 240, w: 60, h: 20 } }],
+  };
+  const unscaled: Floorplan = {
+    ...plan,
+    walls: [],
+    openings: [],
+    rooms: [],
+    obstacles: [],
+    labels: [],
+    scale: null,
+    reading: {
+      provider: 'gemini',
+      model: 'gemini-test',
+      promptVersion: 'plan-read.v1',
+      durationMs: 1000,
+      raw: null,
+      draft,
+      scaleCandidates: [
+        {
+          metersPerPixel: 0.0125,
+          sourceUnit: 'imperial',
+          method: 'labels',
+          inputs: {},
+          residual: 0.01,
+          plausible: true,
+        },
+      ],
+    },
+  };
+  beforeEach(() => state().load(unscaled));
+
+  it('converts its draft when the scale is set, checking labels in their unit', () => {
+    state().calibrate({
+      metersPerPixel: 0.012,
+      sourceUnit: 'none',
+      method: 'wall_length',
+      inputs: {},
+      residual: 0,
+    });
+    expect(current().walls[0]).toMatchObject({ a: { x: 1.2, y: 1.2 }, thickness: 0.18 });
+    expect(current().rooms[0]).toMatchObject({ name: 'Living', roomType: 'living_room' });
+    expect(current().openings[0]).toMatchObject({ width: 1.44, sillHeight: 0.9 });
+    expect(current().scale?.sourceUnit).toBe('imperial');
+    undo();
+    expect(current()).toEqual(unscaled);
+  });
+
+  it('takes a fresh reading as one edit to undo', () => {
+    state().replace({ ...unscaled, name: 'Read again' });
+    expect(current().name).toBe('Read again');
+    undo();
+    expect(current().name).toBe(plan.name);
+    expect(state().loaded).toBe(unscaled);
+  });
+});
