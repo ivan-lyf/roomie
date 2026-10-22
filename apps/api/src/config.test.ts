@@ -17,6 +17,7 @@ describe('loadConfig', () => {
       databaseUrl: 'postgresql://u:p@h:5432/db',
       dataDir: '/d',
       storage: undefined,
+      plansStorage: undefined,
     });
   });
 
@@ -35,6 +36,8 @@ describe('loadConfig', () => {
       secretAccessKey: 'secret',
       bucket: 'models',
     });
+    expect(loadConfig(storage).plansStorage?.bucket).toBe('plans');
+    expect(loadConfig({ ...storage, STORAGE_PLANS_BUCKET: 'p' }).plansStorage?.bucket).toBe('p');
     expect(() => loadConfig({ ...storage, STORAGE_BUCKET: '' })).toThrow(/also set STORAGE_BUCKET/);
   });
 

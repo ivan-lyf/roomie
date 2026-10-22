@@ -229,3 +229,26 @@ export const Floorplan = z.object({
   updatedAt: z.coerce.date(),
 });
 export type Floorplan = z.infer<typeof Floorplan>;
+
+/** A floorplan in a list of them. */
+export const FloorplanSummary = Floorplan.pick({
+  id: true,
+  name: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type FloorplanSummary = z.infer<typeof FloorplanSummary>;
+
+/**
+ * What a save can change: everything but the identity, the uploaded image, what the reader
+ * returned, and the timestamps, which the server keeps.
+ */
+export const FloorplanEdit = Floorplan.omit({
+  id: true,
+  image: true,
+  reading: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type FloorplanEdit = z.infer<typeof FloorplanEdit>;

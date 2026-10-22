@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
+    "@roomie/geometry": "workspace:*",
     "@roomie/schema": "workspace:*",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.45.4",

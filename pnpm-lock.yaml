@@ -196,6 +196,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.5
         version: 2.1.5(hono@4.13.13)
+      '@roomie/geometry':
+        specifier: workspace:*
+        version: link:../../packages/geometry
       '@roomie/schema':
         specifier: workspace:*
         version: link:../../packages/schema

@@ -22,13 +22,18 @@ const Env = z.object({
   STORAGE_ACCESS_KEY_ID: optional(),
   STORAGE_SECRET_ACCESS_KEY: optional(),
   STORAGE_BUCKET: optional(),
+  /** Uploaded plan images, in a second private bucket on the same service. */
+  STORAGE_PLANS_BUCKET: unsetIfEmpty(z.string().default('plans')),
 });
 
 export type Config = {
   port: number;
   databaseUrl: string | undefined;
   dataDir: string;
+  /** The models' bucket. */
   storage: StorageConfig | undefined;
+  /** The plan images' bucket; without storage, plans are kept under DATA_DIR. */
+  plansStorage: StorageConfig | undefined;
 };
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
@@ -37,11 +42,13 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     throw new Error(`Invalid environment:\n${z.prettifyError(parsed.error)}`);
   }
   const e = parsed.data;
+  const storage = storageConfig(e);
   return {
     port: e.PORT,
     databaseUrl: e.DATABASE_URL,
     dataDir: e.DATA_DIR,
-    storage: storageConfig(e),
+    storage,
+    plansStorage: storage && { ...storage, bucket: e.STORAGE_PLANS_BUCKET },
   };
 }
 
