@@ -34,3 +34,30 @@ export function chooseYaw(size: Vec3, product: FitTarget): number {
     scaleChange(fitScale(s, product.dims, product.shape === 'round'), product.category);
   return change([size[2], size[1], size[0]]) < change(size) ? Math.PI / 2 : 0;
 }
+
+export type Donor = { itemNo: string; rawSize: Vec3 };
+
+/**
+ * The sibling variant whose IKEA model best fits a product's listed size (another color fits
+ * exactly, another size gets rescaled), within `maxChange`. Ties go to the lowest item number.
+ */
+export function pickDonor(
+  product: FitTarget,
+  donors: readonly Donor[],
+  maxChange: number,
+): (Donor & { change: number }) | undefined {
+  let best: (Donor & { change: number }) | undefined;
+  for (const donor of donors) {
+    const [x, y, z] = donor.rawSize;
+    const size: Vec3 = chooseYaw(donor.rawSize, product) ? [z, y, x] : donor.rawSize;
+    const change = scaleChange(
+      fitScale(size, product.dims, product.shape === 'round'),
+      product.category,
+    );
+    if (change > maxChange) continue;
+    if (!best || change < best.change || (change === best.change && donor.itemNo < best.itemNo)) {
+      best = { ...donor, change };
+    }
+  }
+  return best;
+}

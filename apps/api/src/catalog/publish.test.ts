@@ -24,6 +24,8 @@ const models = (sources: Record<string, ModelSource | null>) =>
         bytes: source ? 100 : null,
         scale: null,
         bounds: null,
+        rawSize: null,
+        fromItemNo: null,
         notes: [],
         inputs: '',
       },

@@ -23,13 +23,18 @@ export const ModelManifestEntry = z.object({
   itemNo: z.string(),
   category: Category,
   outcome: ModelOutcome,
-  /** Which model data/models/<itemNo>.glb holds, or null when there is none. */
+  /** Which model data/models/<itemNo>.glb holds, or null when there is none. `outcome` is about
+   * the product's own IKEA model, so a borrowed one keeps e.g. `no_model`. */
   source: ModelSource.nullable(),
   bytes: z.number().int().positive().nullable(),
   /** Scale applied on each axis to reach the listed dims. */
   scale: Vec3.nullable(),
   /** Bounds of the written file in meters, measured by reading it back. */
   bounds: z.object({ min: Vec3, max: Vec3 }).nullable().default(null),
+  /** Size of the IKEA model used, before fitting: lets siblings borrow it without a re-read. */
+  rawSize: Vec3.nullable().default(null),
+  /** The sibling variant whose IKEA model this product shows, when it has none of its own. */
+  fromItemNo: z.string().nullable().default(null),
   notes: z.array(z.string()),
   /** What the entry was built from, so unchanged products are skipped on the next run. */
   inputs: z.string(),

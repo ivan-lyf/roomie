@@ -16,6 +16,8 @@ const model = (
   scale: [1, 1, 1],
   notes: [],
   bounds: { min: [-size[0] / 2, 0, -size[2] / 2], max: [size[0] / 2, size[1], size[2] / 2] },
+  rawSize: null,
+  fromItemNo: null,
   inputs: '',
 });
 

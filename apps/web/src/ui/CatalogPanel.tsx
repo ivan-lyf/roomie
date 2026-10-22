@@ -31,6 +31,12 @@ const LABELS: Record<Category, string> = {
   floor_lamp: 'Floor lamps',
 };
 
+const SOURCE_LABELS: Record<Product['modelSource'], string> = {
+  ikea: 'IKEA model',
+  ikea_variant: 'IKEA model of another variant',
+  procedural: 'Stand-in',
+};
+
 /** A model within this many meters of its listed dims counts as true to size. */
 const TOLERANCE_M = 0.01;
 
@@ -146,7 +152,7 @@ function Details({ product, measured }: { product: Product; measured: Size | und
 
 function ModelSize({ product, measured }: { product: Product; measured: Size | undefined }) {
   if (!product.modelUrl) return <span>None yet, showing a box</span>;
-  const source = product.modelSource === 'ikea' ? 'IKEA model' : 'Stand-in';
+  const source = SOURCE_LABELS[product.modelSource];
   if (!measured) return <span>{source}, loading…</span>;
   const error = sizeError(measured, product.dims, product.shape);
   return (

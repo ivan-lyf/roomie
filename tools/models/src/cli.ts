@@ -1,7 +1,8 @@
 // Fits each catalog product's downloaded IKEA model (data/ikea/models) to the conventions
-// in CLAUDE.md and writes it to data/models, or a stand-in when there's no usable IKEA model,
-// so every product has one. data/models/manifest.json records what happened to every product,
-// and unchanged products are skipped on the next run.
+// in CLAUDE.md and writes it to data/models. A product without a usable model of its own gets
+// a sibling variant's (another color or size) or else a stand-in, so every product has one.
+// data/models/manifest.json records what happened to every product, and unchanged products
+// are skipped on the next run.
 import { access, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,13 +19,13 @@ import {
 import draco3d from 'draco3dgltf';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 import { z } from 'zod';
-import { BACKED, chooseYaw, scaleChange } from './fit';
+import { BACKED, chooseYaw, pickDonor, scaleChange } from './fit';
 import { facesBackwards, normalizeModel, sourceSize } from './normalize';
 import { optimizeModel } from './optimize';
 import { standInModel } from './procedural';
 
 /** Bump when the processing changes, so every model is redone. */
-const PIPELINE_VERSION = 5;
+const PIPELINE_VERSION = 6;
 /** IKEA models already face +Z (checked on 116 sofas and 75 models across all categories). */
 const IKEA_YAW = 0;
 /** Scale changes above this get a warning, and above the hard limit the model is skipped. */
@@ -58,33 +59,81 @@ const products = z.array(Product).parse(JSON.parse(await readFile(productsPath, 
 await mkdir(outDir, { recursive: true });
 const previous = new Map((await readManifest()).map((e) => [e.itemNo, e]));
 
+const itemNoOf = (product: Product) => product.articleNo.replaceAll('.', '');
+const rawPath = (itemNo: string) => path.join(dataDir, 'ikea', 'models', `${itemNo}.glb`);
+const fileKey = async (file: string) => {
+  const s = await stat(file).catch(() => null);
+  return s ? `${s.size}:${s.mtimeMs}` : 'none';
+};
+
+// First pass: each product's own IKEA model.
 const entries: ModelManifestEntry[] = [];
+const pending: { product: Product; out: string; entry: ModelManifestEntry }[] = [];
 let reused = 0;
 for (const product of products) {
-  const itemNo = product.articleNo.replaceAll('.', '');
-  const source = path.join(dataDir, 'ikea', 'models', `${itemNo}.glb`);
+  const itemNo = itemNoOf(product);
+  const source = rawPath(itemNo);
   const out = path.join(outDir, `${itemNo}.glb`);
-  const sourceStat = await stat(source).catch(() => null);
   const inputs = [
     PIPELINE_VERSION,
-    sourceStat?.size ?? 0,
-    sourceStat?.mtimeMs ?? 0,
+    await fileKey(source),
     JSON.stringify(product.dims),
     product.shape,
     product.color,
   ].join(':');
 
   const before = previous.get(itemNo);
-  if (before?.inputs === inputs && (await exists(out))) {
-    entries.push(before.bounds ? before : { ...before, bounds: await measure(out) });
+  if (before?.source === 'ikea' && before.inputs === inputs && (await exists(out))) {
+    entries.push(before);
     reused++;
     continue;
   }
   const fields = { itemNo, category: product.category, inputs };
-  const entry = sourceStat
+  const entry = (await exists(source))
     ? await processModel(product, source, out, fields)
     : { ...fields, ...empty('no_model') };
-  entries.push(entry.source ? entry : await writeStandIn(product, out, entry));
+  if (entry.source) entries.push(entry);
+  else pending.push({ product, out, entry });
+}
+
+// Second pass: the rest borrow a sibling variant's model, or get a stand-in.
+const working = new Map(entries.filter((e) => e.rawSize).map((e) => [e.itemNo, e.rawSize!]));
+const families = new Map<string, string[]>();
+for (const p of products) {
+  families.set(p.familyId, [...(families.get(p.familyId) ?? []), itemNoOf(p)]);
+}
+for (const { product, out, entry } of pending) {
+  const before = previous.get(entry.itemNo);
+  const donors = (families.get(product.familyId) ?? [])
+    .filter((itemNo) => working.has(itemNo))
+    .map((itemNo) => ({ itemNo, rawSize: working.get(itemNo)! }));
+  const donor = pickDonor(product, donors, MAX_SCALE_CHANGE);
+  if (donor) {
+    const inputs = `${entry.inputs}:from:${donor.itemNo}:${await fileKey(rawPath(donor.itemNo))}`;
+    if (before?.source === 'ikea_variant' && before.inputs === inputs && (await exists(out))) {
+      entries.push(before);
+      reused++;
+      continue;
+    }
+    const borrowed = await processModel(product, rawPath(donor.itemNo), out, { ...entry, inputs });
+    if (borrowed.source) {
+      const notes = [`shows ${donor.itemNo}'s model`, ...borrowed.notes];
+      entries.push({
+        ...borrowed,
+        outcome: entry.outcome,
+        source: 'ikea_variant',
+        fromItemNo: donor.itemNo,
+        notes,
+      });
+      continue;
+    }
+  }
+  if (before?.source === 'procedural' && before.inputs === entry.inputs && (await exists(out))) {
+    entries.push(before);
+    reused++;
+    continue;
+  }
+  entries.push(await writeStandIn(product, out, entry));
 }
 
 // Outputs of products that left the catalog or lost their model.
@@ -111,9 +160,11 @@ async function processModel(
   let doc;
   let scale;
   let turn;
+  let rawSize;
   try {
     doc = await io.read(source);
-    turn = chooseYaw(sourceSize(doc), product);
+    rawSize = sourceSize(doc);
+    turn = chooseYaw(rawSize, product);
     const round = product.shape === 'round';
     ({ scale } = normalizeModel(doc, product.dims, { yaw: IKEA_YAW + turn, round }));
   } catch (e) {
@@ -150,6 +201,8 @@ async function processModel(
     bytes: glb.byteLength,
     scale: rounded,
     bounds,
+    rawSize: rawSize.map((v) => Math.round(v * 1000) / 1000) as [number, number, number],
+    fromItemNo: null,
     notes,
   };
 }
@@ -174,7 +227,16 @@ async function measure(file: string): Promise<ModelManifestEntry['bounds']> {
 }
 
 function empty(outcome: ModelOutcome) {
-  return { outcome, source: null, bytes: null, scale: null, bounds: null, notes: [] };
+  return {
+    outcome,
+    source: null,
+    bytes: null,
+    scale: null,
+    bounds: null,
+    rawSize: null,
+    fromItemNo: null,
+    notes: [],
+  };
 }
 
 async function readManifest(): Promise<ModelManifestEntry[]> {
@@ -202,11 +264,13 @@ function report(all: ModelManifestEntry[], reusedCount: number) {
   const flagged = all.filter((e) => e.notes.some((n) => n.startsWith('check facing')));
   for (const e of flagged.slice(0, 20)) console.log(`check facing: ${e.itemNo} (${e.category})`);
   if (flagged.length > 20) console.log(`... and ${flagged.length - 20} more facing flags`);
-  const ikea = all.filter((e) => e.source === 'ikea');
+  const ikea = all.filter((e) => e.source === 'ikea' || e.source === 'ikea_variant');
+  const borrowed = ikea.filter((e) => e.source === 'ikea_variant').length;
   const bytes = ikea.reduce((sum, e) => sum + (e.bytes ?? 0), 0);
   const big = ikea.filter((e) => (e.bytes ?? 0) > SIZE_BUDGET_BYTES).length;
   console.log(
-    `${ikea.length} IKEA models, ${(bytes / 2 ** 20).toFixed(0)} MB in all, ` +
+    `${ikea.length} IKEA models (${borrowed} from a sibling variant), ` +
+      `${(bytes / 2 ** 20).toFixed(0)} MB in all, ` +
       `${(bytes / 2 ** 10 / Math.max(ikea.length, 1)).toFixed(0)} KB on average, ${big} over 1 MB`,
   );
   console.log(`${all.filter((e) => e.source === 'procedural').length} stand-ins`);

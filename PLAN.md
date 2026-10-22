@@ -148,7 +148,7 @@ Each milestone ends with something demoable. Estimates assume about 10 hours a w
 **Done when:** one sofa renders in a blank R3F scene at its correct real-world size.
 
 ### M1 — Catalog (2 weeks)
-The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 4,146 candidates; after the category rules, **2,937 products** remain. 1,744 of them render with IKEA's own 3D model (330 KB on average) and 1,193 with a stand-in, all at their listed size. L-shaped, T-shaped and corner pieces stay out until the geometry supports them (§8).
+The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 4,146 candidates; after the category rules, **2,937 products** remain. 1,744 of them render with IKEA's own 3D model (330 KB on average), 469 with a sibling variant's (another color or size), and 724 with a stand-in, all at their listed size. L-shaped, T-shaped and corner pieces stay out until the geometry supports them (§8).
 
 - [x] Scraper for every category: IKEA.ca sitemap, each page's JSON-LD and embedded JSON (`tools/scraper`)
 - [x] Rate limiting, caching, `scrapedAt` timestamps
@@ -160,6 +160,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] GLB capture for the catalog: 1,783 models, 0 failures (`pnpm models:download`)
 - [x] Model pipeline: rescale to listed dims, origin at bottom center, front facing +Z (checked on 75 samples across every category), fit rules per category, simplify, meshopt compression, textures ≤ 1024 px; 97% of models under 1 MB
 - [x] Procedural fallback model per category, at the listed size and tinted with the product's color
+- [x] Products without a usable IKEA model of their own show a sibling variant's when it fits within 25% (469 products)
 - [x] Products in Postgres; the API reads them from the database (`pnpm catalog:publish`; products gone from IKEA are marked discontinued, never deleted)
 - [x] Catalog viewer (category tabs, families with color and size pickers, 3D preview, IKEA model or stand-in badge) and `pnpm catalog:check`
 - [x] Models in a private Supabase Storage bucket (2,937 files, about 570 MB), uploaded by `pnpm catalog:publish` and served through signed links; without storage settings the API serves them from disk

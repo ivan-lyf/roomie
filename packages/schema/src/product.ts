@@ -35,7 +35,8 @@ export type Dims = z.infer<typeof Dims>;
 export const ProductShape = z.enum(['rect', 'round']);
 export type ProductShape = z.infer<typeof ProductShape>;
 
-export const ModelSource = z.enum(['ikea', 'procedural']);
+/** The product's own IKEA model, a sibling variant's (another color or size), or a stand-in. */
+export const ModelSource = z.enum(['ikea', 'ikea_variant', 'procedural']);
 export type ModelSource = z.infer<typeof ModelSource>;
 
 /** Products are never deleted, so layouts keep resolving them; gone from IKEA is discontinued. */

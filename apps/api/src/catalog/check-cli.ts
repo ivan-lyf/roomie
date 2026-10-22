@@ -18,6 +18,13 @@ const exists = (file: string) =>
     () => false,
   );
 
+/** The check's table column for each model source. */
+const COLUMN = {
+  ikea: 'IKEA model',
+  ikea_variant: 'other variant',
+  procedural: 'stand-in',
+} as const;
+
 const { dataDir, databaseUrl, storage } = loadConfig();
 const db = createDb(databaseUrl);
 try {
@@ -29,11 +36,17 @@ try {
   const hasFile = async (itemNo: string) =>
     stored ? stored.has(`${itemNo}.glb`) : exists(modelPath(dataDir, itemNo));
 
-  type Row = { products: number; 'IKEA model': number; 'stand-in': number; failed: number };
+  type Row = {
+    products: number;
+    'IKEA model': number;
+    'other variant': number;
+    'stand-in': number;
+    failed: number;
+  };
   const table = Object.fromEntries(
     Category.options.map((c): [Category, Row] => [
       c,
-      { products: 0, 'IKEA model': 0, 'stand-in': 0, failed: 0 },
+      { products: 0, 'IKEA model': 0, 'other variant': 0, 'stand-in': 0, failed: 0 },
     ]),
   );
   const failed: string[] = [];
@@ -46,17 +59,18 @@ try {
     }
     const row = table[product.category]!;
     row.products++;
-    row[product.modelSource === 'ikea' ? 'IKEA model' : 'stand-in']++;
+    row[COLUMN[product.modelSource]]++;
     if (problems.length > 0) {
       row.failed++;
       failed.push(`${product.articleNo} ${product.name}: ${problems.join('; ')}`);
     }
   }
   console.table(table);
-  const ikea = active.filter((p) => p.modelSource === 'ikea').length;
+  const share = (source: Product['modelSource']) =>
+    Math.round((active.filter((p) => p.modelSource === source).length / active.length) * 100);
   console.log(
-    `${active.length} active products, ${Math.round((ikea / Math.max(active.length, 1)) * 100)}% ` +
-      'with an IKEA model, the rest with stand-ins',
+    `${active.length} active products: ${share('ikea')}% with their own IKEA model, ` +
+      `${share('ikea_variant')}% with a sibling variant's, ${share('procedural')}% with stand-ins`,
   );
 
   const report = await readImportReport(dataDir);
