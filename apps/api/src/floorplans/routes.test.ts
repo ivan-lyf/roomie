@@ -106,10 +106,29 @@ describe('floorplans', () => {
     });
     expect(res.status).toBe(200);
     const saved = Floorplan.parse(await (await app().request(`/api/floorplans/${plan.id}`)).json());
-    expect(saved).toMatchObject({ id: plan.id, image: plan.image, name: 'Demo one-bedroom' });
+    expect(saved).toMatchObject({
+      id: plan.id,
+      image: plan.image,
+      name: 'Demo one-bedroom',
+      status: 'ready',
+    });
     expect(saved.rooms).toEqual(edit.rooms);
     expect(saved.createdAt).toEqual(plan.createdAt);
     expect(saved.updatedAt.getTime()).toBeGreaterThan(plan.updatedAt.getTime());
+  });
+
+  it('works out the status from the plan', async () => {
+    const plan = await uploaded();
+    const save = async (edit: object) => {
+      const res = await app().request(`/api/floorplans/${plan.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ ...plan, ...edit, status: 'ready' }),
+      });
+      return Floorplan.parse(await res.json()).status;
+    };
+    expect(await save({})).toBe('needs_calibration');
+    const scale = Floorplan.parse(demo).scale;
+    expect(await save({ scale })).toBe('uploaded');
   });
 
   it('rejects an invalid edit with the reason', async () => {

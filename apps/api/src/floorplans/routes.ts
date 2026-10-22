@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_CEILING_HEIGHT } from '@roomie/geometry';
+import { DEFAULT_CEILING_HEIGHT, planStatus } from '@roomie/geometry';
 import { Floorplan, FloorplanEdit, FloorplanSummary, type Materials } from '@roomie/schema';
 import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -118,12 +118,15 @@ export function floorplanRoutes({ db, plans, dataDir }: FloorplanOptions) {
 
   app.put('/:id', async (c) => {
     const id = c.req.param('id');
-    if (!(await load(c.var.db, id))) return c.json({ error: 'No such floor plan.' }, 404);
+    const saved = await load(c.var.db, id);
+    if (!saved) return c.json({ error: 'No such floor plan.' }, 404);
     const edit = FloorplanEdit.safeParse(await c.req.json().catch(() => undefined));
     if (!edit.success) return c.json({ error: z.prettifyError(edit.error) }, 400);
+    // The status follows from the plan, whatever the client says.
+    const status = planStatus({ ...saved, ...edit.data });
     const [row] = await c.var.db
       .update(floorplans)
-      .set({ ...edit.data, updatedAt: new Date() })
+      .set({ ...edit.data, status, updatedAt: new Date() })
       .where(eq(floorplans.id, id))
       .returning();
     return c.json(Floorplan.parse(row));
