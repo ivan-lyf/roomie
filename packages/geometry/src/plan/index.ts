@@ -1,4 +1,5 @@
 export * from './heights';
+export * from './labels';
 export * from './polygon';
 export * from './rooms';
 export * from './scale';
