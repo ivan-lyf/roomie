@@ -67,9 +67,11 @@ async function loadPlan(dir: string): Promise<EvalPlan | undefined> {
   return undefined;
 }
 
+// Folders given are relative to where pnpm was run, not to this package.
+const cwd = process.env['INIT_CWD'] ?? process.cwd();
 const dirs =
   folders.length > 0
-    ? folders.map((f) => path.resolve(f))
+    ? folders.map((f) => path.resolve(cwd, f))
     : [
         ...(await children(path.join(root, 'fixtures', 'plans'))),
         ...(await children(path.join(config.dataDir, 'plans', 'eval'))),
