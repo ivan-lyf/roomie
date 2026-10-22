@@ -14,7 +14,8 @@ type Props = {
  * renders as is: never adjust scale or orientation here.
  */
 export function ProductModel({ url, onMeasured }: Props) {
-  const { scene } = useGLTF(url);
+  // Models are meshopt-compressed, which three.js decodes without fetching a Draco decoder.
+  const { scene } = useGLTF(url, false);
   const model = useMemo(() => withShadows(scene.clone(true)), [scene]);
 
   useLayoutEffect(() => {
