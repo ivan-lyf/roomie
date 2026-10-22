@@ -4,7 +4,7 @@
 
 Roomie takes the floor plan of a room, a studio, or a whole apartment and turns it into 3D. It then fills the rooms with real furniture from IKEA.ca. You can walk around the result, swap or delete pieces, and click any item to open it on IKEA's site. Every product has a real price, so you can see what each room, and the whole home, would cost.
 
-> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the catalog, is nearly done: 2,937 IKEA.ca products are in Postgres, each with a true-to-size 3D model or a stand-in, browsable in a catalog viewer. Moving the models into Supabase Storage is what's left. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the catalog, is done too: 2,937 IKEA.ca products in Postgres, each with a true-to-size 3D model (IKEA's own or a stand-in) in Supabase Storage, browsable in a catalog viewer. Next is M2, turning a floor plan into a 3D home. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## How it works
 

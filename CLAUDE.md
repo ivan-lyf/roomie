@@ -43,7 +43,7 @@ pnpm scrape --category fu003     # scrape one IKEA category (fu003 = sofas); no 
 pnpm catalog:import      # scraped items -> data/catalog/products.json
 pnpm models:download     # IKEA's GLBs for every catalog product -> data/ikea/models
 pnpm models:process      # fit GLBs to listed dims, or make stand-ins -> data/models + manifest.json
-pnpm catalog:publish     # products + model manifest -> Postgres (gone products: discontinued)
+pnpm catalog:publish     # models -> Supabase Storage, products -> Postgres (gone ones: discontinued)
 pnpm catalog:check       # every active product: sound data, a true-to-size model; fails otherwise
 ```
 

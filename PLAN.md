@@ -162,7 +162,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] Procedural fallback model per category, at the listed size and tinted with the product's color
 - [x] Products in Postgres; the API reads them from the database (`pnpm catalog:publish`; products gone from IKEA are marked discontinued, never deleted)
 - [x] Catalog viewer (category tabs, families with color and size pickers, 3D preview, IKEA model or stand-in badge) and `pnpm catalog:check`
-- [ ] Models in a private Supabase Storage bucket, uploaded by `pnpm catalog:publish` and served through signed links; without storage settings the API serves them from disk
+- [x] Models in a private Supabase Storage bucket (2,937 files, about 570 MB), uploaded by `pnpm catalog:publish` and served through signed links; without storage settings the API serves them from disk
 - Dropped: taking the height from the model when the listing has none. It would recover about 25 products, whose models aren't downloaded because they aren't in the catalog.
 - Deferred until after M4: a weekly GitHub Actions refresh of the MVP categories. It needs model caching between runs and secrets in GitHub, and a public repo must never store IKEA data as workflow artifacts.
 
