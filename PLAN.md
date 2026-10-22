@@ -148,7 +148,7 @@ Each milestone ends with something demoable. Estimates assume about 10 hours a w
 **Done when:** one sofa renders in a blank R3F scene at its correct real-world size.
 
 ### M1 — Catalog (2 weeks)
-The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 4,146 candidates; after the category rules, **2,937 products** remain, 1,783 of them with an IKEA model. L-shaped, T-shaped and corner pieces stay out until the geometry supports them (§8).
+The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 4,146 candidates; after the category rules, **2,937 products** remain. 1,744 of them render with IKEA's own 3D model (330 KB on average) and 1,193 with a stand-in, all at their listed size. L-shaped, T-shaped and corner pieces stay out until the geometry supports them (§8).
 
 - [x] Scraper for every category: IKEA.ca sitemap, each page's JSON-LD and embedded JSON (`tools/scraper`)
 - [x] Rate limiting, caching, `scrapedAt` timestamps
@@ -157,12 +157,14 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] Dimension normalizer per category: diameter for round tables, rugs, and lamps; bed length as depth; the everyday size of extendable tables, with the extended length stored
 - [x] Product fields: footprint shape, extended width, image URL
 - [x] Product → variant modeling: colors, sizes, and options grouped into 1,106 families, from each page's pickers
-- [ ] GLB capture for the MVP categories (about 2,000 models)
-- [ ] Model pipeline: rescale to listed dims, origin at bottom center, front facing +Z (checked per category), height from the model when the listing has none, decimate, compress, textures ≤ 1024 px, < 1 MB per model, upload to R2
-- [ ] Procedural fallback model per category, at the listed size
-- [ ] Products in Postgres; the API reads them from the database
-- [ ] Catalog viewer (category tabs, product list, 3D preview, IKEA model or stand-in badge) and `pnpm catalog:check`
-- [ ] Optional: weekly GitHub Actions refresh of the MVP categories only (the full crawl takes about 7 hours, over the 6-hour job limit)
+- [x] GLB capture for the catalog: 1,783 models, 0 failures (`pnpm models:download`)
+- [x] Model pipeline: rescale to listed dims, origin at bottom center, front facing +Z (checked on 75 samples across every category), fit rules per category, simplify, meshopt compression, textures ≤ 1024 px; 97% of models under 1 MB
+- [x] Procedural fallback model per category, at the listed size and tinted with the product's color
+- [x] Products in Postgres; the API reads them from the database (`pnpm catalog:publish`; products gone from IKEA are marked discontinued, never deleted)
+- [x] Catalog viewer (category tabs, families with color and size pickers, 3D preview, IKEA model or stand-in badge) and `pnpm catalog:check`
+- [ ] Upload the models to a private R2 bucket, served through presigned redirects; until then the API serves them from disk
+- Dropped: taking the height from the model when the listing has none. It would recover about 25 products, whose models aren't downloaded because they aren't in the catalog.
+- Deferred until after M4: a weekly GitHub Actions refresh of the MVP categories. It needs model caching between runs and secrets in GitHub, and a public repo must never store IKEA data as workflow artifacts.
 
 **Done when:** every valid product in the MVP categories has valid dimensions, price, and link, renders as its IKEA model or a stand-in, and `pnpm catalog:check` passes.
 
