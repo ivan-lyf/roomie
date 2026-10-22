@@ -170,17 +170,17 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 **Done when:** every valid product in the MVP categories has valid dimensions, price, and link, renders as its IKEA model or a stand-in, and `pnpm catalog:check` passes.
 
 ### M2 — Floorplan (3–4 weeks)
-- [ ] Schema: `Floorplan` holding walls, openings, rooms, obstacles, plan text, and scale (§5); Drizzle migration and fixtures in the same change
-- [ ] Floor plan upload (image or PDF)
+- [x] Schema: `Floorplan` holding walls, openings, rooms, obstacles, plan text, and scale (§5); Drizzle migration and fixtures in the same change
+- [x] Floor plan upload (image or PDF)
 - [ ] Vision-model extraction to Floorplan JSON in plan pixels: walls, openings, room boundaries, fixed obstacles, and every piece of text with its position. Sample furniture drawn on the plan is ignored
 - [ ] Text → meaning: room labels mapped to room types (abbreviations like `BR`, `LR`, `DR`, `W/D`, `WIC`, `DN`, `ENS`, `PDR`), dimension labels attached to the room or wall they describe, area labels parsed
 - [ ] Unit detection and scale from the dimension labels (§5.1), with the plausibility checks
 - [ ] Calibration UI for plans without labels: wall length, area, or area plus side (§5.1); runs before the plan is converted to meters
 - [ ] Ceiling height: defaults to 2.44 m when the user doesn't enter one or the plan doesn't state it (§5.1); editable for the home and per room
 - [ ] 2D correction editor: drag wall endpoints, add/move/resize openings, set door swing, split/merge/relabel rooms, add/remove obstacles, recalibrate scale
-- [ ] 3D render: the whole home with extruded walls, window and door cutouts, floor, ceiling toggle; a room picker that frames one room and cuts away the walls in front of it
-- [ ] Wall color, floor material (3–5 textures), light warmth and intensity, per room or for the whole home
-- [ ] Environment lighting, soft shadows, ambient occlusion
+- [x] 3D render: the whole home with extruded walls, window and door cutouts, floor, ceiling toggle; a room picker that frames one room and cuts away the walls in front of it
+- [x] Wall color, floor material (3–5 textures), light warmth and intensity, per room or for the whole home
+- [x] Environment lighting, soft shadows, ambient occlusion
 
 **Done when:** every test plan becomes a correct 3D home, with rooms labelled and scale within 3%, in ≤ 2 min of correction for a studio and ≤ 5 min for a multi-room plan.
 
