@@ -15,17 +15,16 @@ import {
 } from '@roomie/schema';
 import draco3d from 'draco3dgltf';
 import { z } from 'zod';
-import { normalizeModel, topBandCenterZ } from './normalize';
+import { BACKED, chooseYaw, scaleChange } from './fit';
+import { facesBackwards, normalizeModel, sourceSize } from './normalize';
 
 /** Bump when the processing changes, so every model is redone. */
-const PIPELINE_VERSION = 1;
+const PIPELINE_VERSION = 2;
 /** IKEA models already face +Z (checked on 116 sofa models, 2026-10-21). */
 const IKEA_YAW = 0;
 /** Scale changes above this get a warning, and above the hard limit the model is skipped. */
 const WARN_SCALE_CHANGE = 0.1;
 const MAX_SCALE_CHANGE = 0.25;
-/** Categories whose tall part is at the back, so the facing check applies. */
-const BACKED: ReadonlySet<Category> = new Set(['sofa', 'armchair', 'dining_chair', 'desk_chair']);
 
 const dataDir = process.env.DATA_DIR || fileURLToPath(new URL('../../../data', import.meta.url));
 const productsPath = path.join(dataDir, 'catalog', 'products.json');
@@ -98,20 +97,24 @@ async function processModel(
 ): Promise<ModelManifestEntry> {
   let doc;
   let scale;
+  let turn;
   try {
     doc = await io.read(source);
-    ({ scale } = normalizeModel(doc, product.dims, IKEA_YAW));
+    turn = chooseYaw(sourceSize(doc), product);
+    const round = product.shape === 'round';
+    ({ scale } = normalizeModel(doc, product.dims, { yaw: IKEA_YAW + turn, round }));
   } catch (e) {
-    return { ...fields, ...empty('unreadable'), notes: [e instanceof Error ? e.message : String(e)] };
+    const notes = [e instanceof Error ? e.message : String(e)];
+    return { ...fields, ...empty('unreadable'), notes };
   }
   const rounded = scale.map((s) => Math.round(s * 1000) / 1000) as [number, number, number];
-  const change = Math.max(...scale.map((s) => Math.abs(s - 1)));
+  const change = scaleChange(scale, product.category);
+  const notes: string[] = turn ? ['turned a quarter to fit'] : [];
   if (change > MAX_SCALE_CHANGE) {
-    const notes = [`off its listed dims by ${Math.round(change * 100)}%`];
+    notes.push(`off its listed dims by ${Math.round(change * 100)}%`);
     return { ...fields, ...empty('off_size'), scale: rounded, notes };
   }
-  const notes: string[] = [];
-  if (BACKED.has(product.category) && topBandCenterZ(doc) > 0) {
+  if (BACKED.has(product.category) && facesBackwards(doc, product.dims.d)) {
     notes.push('check facing: its tallest part is not at the back');
   }
   // Write plain geometry so the browser needs no Draco decoder.

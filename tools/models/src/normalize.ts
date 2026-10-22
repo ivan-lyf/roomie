@@ -11,13 +11,41 @@ export type NormalizeResult = {
   scale: Vec3;
 };
 
+export type NormalizeOptions = {
+  /** Rotation of the source about +Y, for sources whose front faces another way. */
+  yaw?: number;
+  /** Scale X and Z alike, for round products: w = d = diameter. */
+  round?: boolean;
+};
+
+/** A model's bounding-box size as it is, [x, y, z] in meters. */
+export function sourceSize(doc: Document): Vec3 {
+  const { min, max } = getBounds(sceneOf(doc));
+  return [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+}
+
+/**
+ * Scale on each axis that fits a model of `size` to `dims`. Round products scale X and Z
+ * alike, so the wider of the two matches the diameter.
+ */
+export function fitScale(size: Vec3, dims: Dims, round = false): Vec3 {
+  if (round) {
+    const s = dims.w / Math.max(size[0], size[2]);
+    return [s, dims.h / size[1], s];
+  }
+  return [dims.w / size[0], dims.h / size[1], dims.d / size[2]];
+}
+
 /**
  * Fit a model to the conventions in CLAUDE.md: scaled to its listed dims
  * (w = X, h = Y, d = Z), origin at the bottom center of its bounding box,
- * front facing +Z. `yaw` first rotates the source about +Y, for sources whose
- * front faces another way.
+ * front facing +Z.
  */
-export function normalizeModel(doc: Document, dims: Dims, yaw = 0): NormalizeResult {
+export function normalizeModel(
+  doc: Document,
+  dims: Dims,
+  { yaw = 0, round = false }: NormalizeOptions = {},
+): NormalizeResult {
   const scene = sceneOf(doc);
   // fit (translate + scale) -> turn (yaw) -> original roots, so the scale
   // applies along the final axes.
@@ -30,15 +58,15 @@ export function normalizeModel(doc: Document, dims: Dims, yaw = 0): NormalizeRes
   scene.addChild(fit);
 
   const { min, max } = getBounds(scene);
-  const sourceSize: Vec3 = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
-  if (!sourceSize.every((s) => s > 0)) throw new Error('model has an empty bounding box');
-  const scale: Vec3 = [dims.w / sourceSize[0], dims.h / sourceSize[1], dims.d / sourceSize[2]];
+  const size: Vec3 = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+  if (!size.every((s) => s > 0)) throw new Error('model has an empty bounding box');
+  const scale = fitScale(size, dims, round);
   fit.setScale(scale).setTranslation([
     (-(min[0] + max[0]) / 2) * scale[0],
     -min[1] * scale[1],
     (-(min[2] + max[2]) / 2) * scale[2],
   ]);
-  return { sourceSize, scale };
+  return { sourceSize: size, scale };
 }
 
 /**
@@ -64,6 +92,18 @@ export function topBandCenterZ(doc: Document, band = 0.2): number {
     }
   });
   return sumZ / count;
+}
+
+/** How far in front of the middle the tallest part may sit, as a share of the depth. */
+const FACING_MARGIN = 0.1;
+
+/**
+ * True when a normalized model's tallest part is clearly in front of its middle, so it
+ * probably faces -Z. The margin keeps low-backed sofas, whose armrests are almost as tall
+ * as the back, from being flagged.
+ */
+export function facesBackwards(doc: Document, depth: number): boolean {
+  return topBandCenterZ(doc) > FACING_MARGIN * depth;
 }
 
 function sceneOf(doc: Document): Scene {
