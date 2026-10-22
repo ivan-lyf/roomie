@@ -7,3 +7,4 @@ export * from './scale';
 export * from './snap';
 export * from './validate';
 export * from './walls';
+export * from './read/tidy';
