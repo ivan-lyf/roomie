@@ -1,0 +1,11 @@
+{
+  "source": "Drawn for Roomie as a test fixture",
+  "collectedAt": "2026-10-22",
+  "kind": "studio",
+  "rooms": ["studio", "bathroom"],
+  "units": "metric_m",
+  "listedAreaSqft": null,
+  "listedAreaIncludes": "unknown",
+  "calibration": null,
+  "notes": "A Quebec-style studio: French labels, bare metric sizes measured inside the walls, a ceiling height (HSP 2,50), an L-shaped main room. 1 px = 0.8 cm."
+}

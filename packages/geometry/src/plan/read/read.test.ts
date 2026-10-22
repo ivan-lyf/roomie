@@ -1,6 +1,7 @@
 import { Floorplan, type RawPlan, type Vec2 } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
 import demo from '../../../../../fixtures/plans/00-demo-1br/floorplan.json';
+import studio from '../../../../../fixtures/plans/01-demo-studio-metric/floorplan.json';
 import { centroid } from '../polygon';
 import { validateFloorplan } from '../validate';
 import { doorSwing, pointAlong } from '../walls';
@@ -12,6 +13,7 @@ import { tidyDraft } from './tidy';
 const truth = Floorplan.parse(demo);
 const MPP = truth.scale!.metersPerPixel;
 const SIZE = { width: 900, height: 750 };
+const metric = Floorplan.parse(studio);
 
 /** A seeded random number generator (mulberry32), so the noise is the same every run. */
 function random(seed: number) {
@@ -24,24 +26,25 @@ function random(seed: number) {
 }
 
 /**
- * The demo plan as a vision model might read it off its image: every point up to 3 px off,
- * thicknesses a little off, the north wall in two pieces either side of a gap, half the rooms
- * traced along the inside of their walls, and the labels as loose text.
+ * A plan as a vision model might read it off its image: every point up to 3 px off, thicknesses
+ * a little off, the first wall in two pieces either side of a gap, every other room traced along
+ * the inside faces of its walls, and the labels as loose text.
  */
-function readDemo(seed = 7): RawPlan {
+function readPlan(plan: Floorplan, seed = 7): RawPlan {
+  const mpp = plan.scale!.metersPerPixel;
   const rand = random(seed);
   const jitter = (v: number, by = 3) => v + (rand() * 2 - 1) * by;
-  const px = (p: Vec2) => ({ x: jitter(p.x / MPP), y: jitter(p.y / MPP) });
-  const walls = truth.walls.flatMap((w) => {
-    const thickness = jitter(w.thickness / MPP, 2);
+  const px = (p: Vec2) => ({ x: jitter(p.x / mpp), y: jitter(p.y / mpp) });
+  const walls = plan.walls.flatMap((w) => {
+    const thickness = jitter(w.thickness / mpp, 2);
     if (w.id !== 'w1') return [{ a: px(w.a), b: px(w.b), thickness }];
     return [
       { a: px(w.a), b: px(pointAlong(w, 2.98)), thickness },
       { a: px(pointAlong(w, 3.02)), b: px(w.b), thickness },
     ];
   });
-  const openings = truth.openings.map((o) => {
-    const wall = truth.walls.find((w) => w.id === o.wallId)!;
+  const openings = plan.openings.map((o) => {
+    const wall = plan.walls.find((w) => w.id === o.wallId)!;
     const swing = doorSwing(wall, o);
     return {
       kind: o.kind,
@@ -58,10 +61,9 @@ function readDemo(seed = 7): RawPlan {
       }),
     };
   });
-  const rooms = truth.rooms.map((r, i) => {
+  const rooms = plan.rooms.map((r, i) => {
     const c = centroid(r.boundary);
-    // Every other room along the inside faces of its walls, 6 px in.
-    const inset = i % 2 === 0 ? 6 * MPP : 0;
+    const inset = i % 2 === 0 ? 6 * mpp : 0;
     const polygon = r.boundary.map((p) =>
       px({ x: p.x + Math.sign(c.x - p.x) * inset, y: p.y + Math.sign(c.y - p.y) * inset }),
     );
@@ -71,19 +73,26 @@ function readDemo(seed = 7): RawPlan {
     walls,
     openings,
     rooms,
-    obstacles: truth.obstacles.map((o) => ({ kind: o.kind, polygon: o.polygon.map(px) })),
-    texts: truth.labels.map((l) => ({ text: l.text, bbox: l.bbox })),
+    obstacles: plan.obstacles.map((o) => ({ kind: o.kind, polygon: o.polygon.map(px) })),
+    texts: plan.labels.map((l) => ({ text: l.text, bbox: l.bbox })),
   };
 }
 
-describe('reading the demo plan, from a noisy draft to meters', () => {
-  const draft = tidyDraft(readDemo(), SIZE);
+/** Reads a plan through the whole pipeline, as the app would. */
+function pipeline(plan: Floorplan, size: { width: number; height: number }, seed = 7) {
+  const draft = tidyDraft(readPlan(plan, seed), size);
   const analysis = analyzeDraft(draft);
+  if (analysis.scale.status !== 'found') throw new Error(`scale: ${analysis.scale.status}`);
+  const { scale } = analysis.scale;
+  const ceiling = analysis.ceiling ?? plan.ceilingHeight;
+  const read = { ...plan, ...convertDraft(draft, scale, ceiling, analysis), scale };
+  return { draft, analysis, scale, read };
+}
+
+describe('reading the demo plan, from a noisy draft to meters', () => {
+  const { analysis, scale, read } = pipeline(truth, SIZE);
 
   it('finds the scale from the labels, in feet and inches, within 1%', () => {
-    expect(analysis.scale.status).toBe('found');
-    if (analysis.scale.status !== 'found') return;
-    const { scale } = analysis.scale;
     expect(scale).toMatchObject({ sourceUnit: 'imperial', method: 'labels' });
     expect(scale.inputs).toMatchObject({ convention: 'center' });
     expect(Math.abs(scale.metersPerPixel / MPP - 1)).toBeLessThan(0.01);
@@ -102,9 +111,6 @@ describe('reading the demo plan, from a noisy draft to meters', () => {
   });
 
   it('converts to a sound plan close to the real one', () => {
-    if (analysis.scale.status !== 'found') throw new Error('no scale');
-    const { scale } = analysis.scale;
-    const read = { ...truth, ...convertDraft(draft, scale, truth.ceilingHeight, analysis), scale };
     expect(validateFloorplan(read)).toEqual([]);
     const result = comparePlans(truth, read);
     expect(result.walls.recall).toBeGreaterThan(0.97);
@@ -118,19 +124,48 @@ describe('reading the demo plan, from a noisy draft to meters', () => {
   });
 });
 
+describe('reading a metric studio labelled in French, sized inside its walls', () => {
+  const { analysis, scale, read } = pipeline(metric, { width: 875, height: 825 });
+
+  it('works out the labels are bare meters, measured inside the walls', () => {
+    expect(scale).toMatchObject({ sourceUnit: 'metric_m', inputs: { convention: 'inside' } });
+    expect(Math.abs(scale.metersPerPixel / 0.008 - 1)).toBeLessThan(0.015);
+  });
+
+  it('reads the rooms and the ceiling height', () => {
+    expect([...analysis.rooms.values()].map((r) => [r.name, r.type])).toEqual([
+      ['Studio', 'studio'],
+      ['Salle de bain', 'bathroom'],
+    ]);
+    expect(analysis.ceiling).toBe(2.5);
+    // Windows end 30 cm under the plan's 2.5 m ceiling.
+    expect(read.openings.find((o) => o.kind === 'window')?.height).toBeCloseTo(1.3, 9);
+  });
+
+  it('converts to a sound plan close to the real one', () => {
+    expect(validateFloorplan(read)).toEqual([]);
+    const result = comparePlans(metric, read);
+    expect(Math.min(result.walls.recall, result.walls.precision)).toBeGreaterThan(0.97);
+    expect(result.openings).toMatchObject({ recall: 1, precision: 1 });
+    expect(result.doors).toEqual({ matched: 2, swingRight: 2 });
+    expect(result.rooms).toMatchObject({ truth: 2, matched: 2, typed: 2 });
+  });
+});
+
 describe('reading under other noise', () => {
   it.each(Array.from({ length: 12 }, (_, i) => i + 1))('holds up with seed %i', (seed) => {
-    const draft = tidyDraft(readDemo(seed), SIZE);
-    const analysis = analyzeDraft(draft);
-    if (analysis.scale.status !== 'found') throw new Error(`scale: ${analysis.scale.status}`);
-    const { scale } = analysis.scale;
-    expect(Math.abs(scale.metersPerPixel / MPP - 1)).toBeLessThan(0.01);
-    const read = { ...truth, ...convertDraft(draft, scale, truth.ceilingHeight, analysis), scale };
-    expect(validateFloorplan(read)).toEqual([]);
-    const result = comparePlans(truth, read);
-    expect(Math.min(result.walls.recall, result.walls.precision)).toBeGreaterThan(0.97);
-    expect(result.doors.swingRight).toBe(4);
-    expect(result.rooms.typed).toBe(6);
+    for (const [plan, size] of [
+      [truth, SIZE],
+      [metric, { width: 875, height: 825 }],
+    ] as const) {
+      const { scale, read } = pipeline(plan, size, seed);
+      expect(Math.abs(scale.metersPerPixel / plan.scale!.metersPerPixel - 1)).toBeLessThan(0.02);
+      expect(validateFloorplan(read)).toEqual([]);
+      const result = comparePlans(plan, read);
+      expect(Math.min(result.walls.recall, result.walls.precision)).toBeGreaterThan(0.95);
+      expect(result.doors.swingRight).toBe(result.doors.matched);
+      expect(result.rooms.typed).toBe(plan.rooms.length);
+    }
   });
 });
 

@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import demo from '../../../fixtures/plans/00-demo-1br/floorplan.json';
+import studio from '../../../fixtures/plans/01-demo-studio-metric/floorplan.json';
 import { FURNISHABLE, Floorplan } from './index';
 
 describe('fixtures/plans', () => {
-  it('has a valid demo floorplan', () => {
-    const plan = Floorplan.parse(demo);
+  it.each([
+    ['00-demo-1br', demo],
+    ['01-demo-studio-metric', studio],
+  ])('%s is a valid floorplan', (_, json) => {
+    const plan = Floorplan.parse(json);
     const labels = new Set(plan.labels.map((t) => t.id));
     const walls = new Set(plan.walls.map((w) => w.id));
     for (const room of plan.rooms) {
