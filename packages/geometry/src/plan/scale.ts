@@ -52,17 +52,23 @@ export type ScaleDetection =
   | { status: 'ask'; candidates: UnitCandidate[] }
   | { status: 'none' };
 
-/** Doors are 0.6–1.0 m wide. */
-const DOOR_WIDTH: [number, number] = [0.6, 1.0];
+/**
+ * Doors are 0.6–1.0 m wide, but a plan's double and French doors, and a reader's loose jambs,
+ * widen that. Wide enough for both, the check still tells units apart (10× or 3.28× off).
+ */
+const DOOR_WIDTH: [number, number] = [0.5, 1.5];
 /** Any room side outside this range means the unit is wrong: from a shallow closet to a loft. */
 const ROOM_SIDE: [number, number] = [0.4, 30];
-/** Labels disagreeing more than this mean the unit (or the labels) is wrong. */
-const MAX_RESIDUAL = 0.05;
+/**
+ * Labels disagreeing more than this mean the unit (or the labels) is wrong. Room outlines read
+ * off an image are only so exact, so this allows for them; the editor shows each label's fit.
+ */
+const MAX_RESIDUAL = 0.1;
 
 /**
  * Which unit the labels are in. Every hypothesis gets a scale; it's plausible when the labels
- * agree with it, the doors come out 0.6–1.0 m wide, and every room 0.4–30 m a side. Exactly
- * one plausible unit is used; otherwise the user picks, with the most plausible first.
+ * agree with it within 10%, the doors come out 0.5–1.5 m wide, and every room 0.4–30 m a side.
+ * Exactly one plausible unit is used; otherwise the user picks, with the most plausible first.
  */
 export function detectScale(
   hypotheses: readonly UnitHypothesis[],
