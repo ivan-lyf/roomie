@@ -87,8 +87,8 @@ apps/web (React + R3F) ──► apps/api (Node/Hono) ──► Claude API (visi
 All lengths in **meters**. See `CLAUDE.md` for the coordinate conventions.
 
 ```ts
-Floorplan { id, name, walls: Wall[], openings: Opening[], rooms: Room[], obstacles: Obstacle[], labels: PlanText[], scale: Scale, sourceImageUrl }
-Room      { id, name, roomType, boundary: Vec2[], labelTextIds: string[], furnishable, materials }
+Floorplan { id, name, walls: Wall[], openings: Opening[], rooms: Room[], obstacles: Obstacle[], labels: PlanText[], scale: Scale, ceilingHeight, ceilingHeightSource: 'user' | 'plan' | 'default', sourceImageUrl }
+Room      { id, name, roomType, boundary: Vec2[], labelTextIds: string[], furnishable, ceilingHeight?, materials }
 Wall      { id, a: Vec2, b: Vec2, thickness, height }
 Opening   { id, wallId, kind: 'door' | 'window' | 'passage', offset, width, height, sillHeight?, swing? }
 Obstacle  { id, kind: 'counter' | 'appliance' | 'closet' | 'column' | 'radiator' | 'fireplace' | 'other', polygon: Vec2[], height? }
@@ -102,7 +102,7 @@ Rating    { id, layoutA, layoutB, winner, note, createdAt }
 
 Walls and openings belong to the floorplan, not to a room, so a wall between two rooms is stored once and a door between them is one opening whose swing can enter either room. A room is a polygon over the floorplan; its walls are the ones along its boundary. Open-plan areas (a living room flowing into a dining area) are separate rooms with no wall between them. `PlanText` keeps every piece of text read from the image, so a wrong room type or scale can be traced back to the label that caused it.
 
-### 5.1 Scale and units
+### 5.1 Scale, units, and heights
 
 Scale is a single `metersPerPixel` for the image, fixed once per floorplan before anything else is measured. Units are converted to meters here, at the extraction boundary, and nowhere else.
 
@@ -122,6 +122,16 @@ Bare numbers are ambiguous, so every hypothesis is checked against the drawing: 
 1. **Wall length.** Select one wall in the 2D editor and enter its measured length (in any unit). `metersPerPixel = length / pixelLength`.
 2. **Area.** Enter a known area (usually the listing's total, or one room's) and select what it covers: the whole unit outline or one room. Since the shape is known up to scale, `metersPerPixel = sqrt(area / pixelArea)`. The UI says which outline it measures, because a listing's area often includes walls, closets, or a balcony, and asks whether the figure includes them.
 3. **Area plus a measured side.** Both inputs, which over-determine a uniform scale. The side sets the scale and the area becomes a check: if they disagree by more than 5%, show both dimension sets and ask which to trust. A consistent mismatch along one axis means the image is stretched: offer to solve separate x and y scales (the side fixes one axis, the area fixes the product), then resample the plan to a uniform scale before extraction continues.
+
+**Heights.** A floor plan almost never shows heights, so they are defaults the user can change, never something the vision model guesses:
+
+| Height | Default | Notes |
+|---|---|---|
+| Ceiling | 2.44 m (8 ft) | The most common ceiling height in Canadian apartments. Entered once for the home, optionally overridden per room (lofts, dropped ceilings) |
+| Door | 2.03 m (80 in) | Standard interior and entry door |
+| Window sill | 0.90 m | Head height defaults to 0.30 m below the ceiling |
+
+A height label on the plan (e.g. `9' CLG`) is used when the text step finds one. Each floorplan records whether its ceiling height was entered, read from the plan, or defaulted, so layouts on defaulted heights can be told apart later.
 
 Every method stores its inputs and a `residual` (how well the other labels or inputs agree with the chosen scale), so a scale can be audited. Dimension labels, when present, are always checked against the calibrated scale and disagreements are flagged in the editor.
 
@@ -163,6 +173,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [ ] Text → meaning: room labels mapped to room types (abbreviations like `BR`, `LR`, `DR`, `W/D`, `WIC`, `DN`, `ENS`, `PDR`), dimension labels attached to the room or wall they describe, area labels parsed
 - [ ] Unit detection and scale from the dimension labels (§5.1), with the plausibility checks
 - [ ] Calibration UI for plans without labels: wall length, area, or area plus side (§5.1); runs before the plan is converted to meters
+- [ ] Ceiling height: defaults to 2.44 m when the user doesn't enter one or the plan doesn't state it (§5.1); editable for the home and per room
 - [ ] 2D correction editor: drag wall endpoints, add/move/resize openings, set door swing, split/merge/relabel rooms, add/remove obstacles, recalibrate scale
 - [ ] 3D render: the whole home with extruded walls, window and door cutouts, floor, ceiling toggle; a room picker that frames one room and cuts away the walls in front of it
 - [ ] Wall color, floor material (3–5 textures), light warmth and intensity, per room or for the whole home
