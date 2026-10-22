@@ -105,6 +105,23 @@ describe('POST /api/floorplans/:id/read', () => {
     expect(result.reading!.draft.walls.length).toBeGreaterThan(0);
   });
 
+  it('keeps what was saved while the plan was being read', async () => {
+    const plan = await uploaded();
+    const reader: PlanReader = {
+      ...fakeReader().reader,
+      async read() {
+        // The user renames the plan while Gemini thinks.
+        await app().request(`/api/floorplans/${plan.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ ...plan, name: 'Renamed meanwhile' }),
+        });
+        return { raw: {}, plan: demoRawPlan(), durationMs: 1 };
+      },
+    };
+    const result = Floorplan.parse(await (await read(plan.id, { reader })).json());
+    expect(result).toMatchObject({ name: 'Renamed meanwhile', status: 'ready' });
+  });
+
   it('only replaces a traced plan when asked to', async () => {
     const plan = await uploaded();
     await read(plan.id, fakeReader());

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_CEILING_HEIGHT, planStatus } from '@roomie/geometry';
+import { DEFAULT_CEILING_HEIGHT, isTraced, planStatus } from '@roomie/geometry';
 import { Floorplan, FloorplanEdit, FloorplanSummary, type Materials } from '@roomie/schema';
 import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -150,8 +150,7 @@ export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions
     const plan = await load(c.var.db, c.req.param('id'));
     if (!plan) return c.json({ error: 'No such floor plan.' }, 404);
     if (!plan.image) return c.json({ error: 'The plan has no image to read.' }, 400);
-    const traced = plan.walls.length > 0 || plan.rooms.length > 0;
-    if (traced && c.req.query('replace') !== '1') {
+    if (isTraced(plan) && c.req.query('replace') !== '1') {
       return c.json({ error: 'The plan is already traced: read it again with replace=1.' }, 409);
     }
     const { key, width, height } = plan.image;
@@ -168,7 +167,11 @@ export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions
       if (e instanceof ReaderError) return c.json({ error: e.message }, e.status);
       throw e;
     }
-    const read = applyReading({ ...plan, image: plan.image }, reader, result);
+    // Reading takes minutes: the plan as saved now keeps anything saved meanwhile (its name, a
+    // scale the user measured), and the reading replaces only what was traced.
+    const latest = await load(c.var.db, plan.id);
+    if (!latest) return c.json({ error: 'No such floor plan.' }, 404);
+    const read = applyReading({ ...latest, image: plan.image }, reader, result);
     const [row] = await c.var.db
       .update(floorplans)
       .set({ ...read, updatedAt: new Date() })
