@@ -3,9 +3,9 @@ import type { PlanTextKind, RoomType, SourceUnit } from '@roomie/schema';
 // Plan text to meaning: room names, dimensions and areas, in English and French (Quebec
 // listings use French). Pure, so the API and the editor read text the same way.
 
-const FOOT = 0.3048;
-const INCH = 0.0254;
-const SQUARE_FOOT = FOOT * FOOT;
+export const FOOT = 0.3048;
+export const INCH = 0.0254;
+export const SQUARE_FOOT = FOOT * FOOT;
 
 /**
  * Words and abbreviations for each room type, after normalizing (upper case, no accents),

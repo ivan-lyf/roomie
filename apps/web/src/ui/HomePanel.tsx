@@ -1,25 +1,7 @@
 import { area } from '@roomie/geometry';
-import type { Floorplan, RoomType } from '@roomie/schema';
+import type { Floorplan } from '@roomie/schema';
+import { ROOM_TYPES, squareMeters } from '../format';
 import { LookControls } from './LookControls';
-
-const ROOM_TYPES: Record<RoomType, string> = {
-  living_room: 'Living room',
-  bedroom: 'Bedroom',
-  studio: 'Studio',
-  dining_area: 'Dining area',
-  den_office: 'Den or office',
-  kitchen: 'Kitchen',
-  bathroom: 'Bathroom',
-  hallway: 'Hallway',
-  closet: 'Closet',
-  laundry: 'Laundry',
-  balcony: 'Balcony',
-  other: 'Other',
-};
-
-const SQUARE_FEET_PER_SQUARE_METER = 10.7639;
-const squareMeters = (m2: number) =>
-  `${m2.toFixed(1)} m² · ${Math.round(m2 * SQUARE_FEET_PER_SQUARE_METER)} sq ft`;
 
 type Props = {
   plan: Floorplan;

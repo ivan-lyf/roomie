@@ -1,7 +1,15 @@
 import { Floorplan, type Obstacle } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
-import { obstacleHeight, roomAt, roomMaterials, roomsBeside, wallBreaks } from './rooms';
+import {
+  labelsIn,
+  obstacleHeight,
+  roomAt,
+  roomMaterials,
+  roomsBeside,
+  roomTypeFromLabels,
+  wallBreaks,
+} from './rooms';
 
 const plan = Floorplan.parse(demo);
 const wall = (id: string) => plan.walls.find((w) => w.id === id)!;
@@ -66,5 +74,15 @@ describe('obstacleHeight', () => {
     expect(obstacleHeight(loft, obstacle({ kind: 'column', polygon: square(1, 1) }))).toBe(3);
     expect(obstacleHeight(loft, obstacle({ kind: 'closet' }))).toBe(2.44);
     expect(obstacleHeight(plan, obstacle({ height: 5 }))).toBe(2.44);
+  });
+});
+
+describe('labelsIn', () => {
+  it("finds the text inside a room's outline, and the type it names", () => {
+    const labels = labelsIn(plan, room('r1').boundary);
+    expect(labels.map((l) => l.id)).toEqual(['t1', 't2']);
+    expect(roomTypeFromLabels(labels)).toBe('bedroom');
+    expect(roomTypeFromLabels(labelsIn(plan, room('r5').boundary))).toBe('closet');
+    expect(labelsIn({ ...plan, scale: null }, room('r1').boundary)).toEqual([]);
   });
 });

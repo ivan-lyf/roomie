@@ -1,4 +1,14 @@
-import type { Floorplan, Materials, Obstacle, Room, Vec2, Wall } from '@roomie/schema';
+import type {
+  Floorplan,
+  Materials,
+  Obstacle,
+  PlanText,
+  Room,
+  RoomType,
+  Vec2,
+  Wall,
+} from '@roomie/schema';
+import { roomTypeFromLabel } from './labels';
 import { OBSTACLE_HEIGHTS } from './heights';
 import { centroid, contains } from './polygon';
 import { leftNormal, pointAlong, wallDirection, wallLength } from './walls';
@@ -102,4 +112,28 @@ export function wallHeight(plan: Pick<Floorplan, 'ceilingHeight' | 'rooms'>, wal
     .filter((room) => roomWalls(room, [wall]).length > 0)
     .map((room) => roomCeiling(plan, room));
   return ceilings.length > 0 ? Math.max(...ceilings) : plan.ceilingHeight;
+}
+
+/** The plan's text inside an outline: labels are boxes in image pixels, placed by their center. */
+export function labelsIn(
+  plan: Pick<Floorplan, 'labels' | 'scale'>,
+  boundary: readonly Vec2[],
+): PlanText[] {
+  const mpp = plan.scale?.metersPerPixel;
+  if (!mpp) return [];
+  return plan.labels.filter((label) =>
+    contains(boundary, {
+      x: (label.bbox.x + label.bbox.w / 2) * mpp,
+      y: (label.bbox.y + label.bbox.h / 2) * mpp,
+    }),
+  );
+}
+
+/** The room type the first room label in a list names. */
+export function roomTypeFromLabels(labels: readonly PlanText[]): RoomType | undefined {
+  for (const label of labels) {
+    const type = label.parsed?.roomType ?? roomTypeFromLabel(label.text);
+    if (type) return type;
+  }
+  return undefined;
 }

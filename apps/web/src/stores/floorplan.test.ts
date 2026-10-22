@@ -1,7 +1,7 @@
 import { Floorplan } from '@roomie/schema';
 import { beforeEach, describe, expect, it } from 'vitest';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
-import { useFloorplan } from './floorplan';
+import { redo, undo, useFloorplan } from './floorplan';
 
 const plan = Floorplan.parse(demo);
 const room = (id: string) => useFloorplan.getState().plan!.rooms.find((r) => r.id === id)!;
@@ -29,3 +29,121 @@ describe('floorplan store', () => {
     expect(room('r4').materials).toEqual({ floor: 'tile' });
   });
 });
+
+const state = () => useFloorplan.getState();
+const current = () => state().plan!;
+const history = () => useFloorplan.temporal.getState();
+
+describe('editing the plan', () => {
+  beforeEach(() => state().load(plan));
+
+  it('starts a loaded plan with nothing to undo', () => {
+    expect(history().pastStates).toHaveLength(0);
+  });
+
+  it('undoes and redoes each edit', () => {
+    state().movePoint({ x: 8.5, y: 0.5 }, { x: 9, y: 0.5 });
+    state().rename('Moved');
+    expect(history().pastStates).toHaveLength(2);
+    undo();
+    expect(current().name).toBe(plan.name);
+    expect(current().walls.find((w) => w.id === 'w1')!.b).toEqual({ x: 9, y: 0.5 });
+    undo();
+    expect(current()).toEqual(plan);
+    redo();
+    redo();
+    expect(current().name).toBe('Moved');
+  });
+
+  it('draws walls and puts openings in them', () => {
+    const wallId = state().addWall({ x: 9, y: 0 }, { x: 13, y: 0 }, 0.15);
+    expect(wallId).toBe('w10');
+    const doorId = state().addOpening('door', wallId, 0.1)!;
+    expect(current().openings.find((o) => o.id === doorId)).toMatchObject({
+      offset: 0,
+      width: 0.8,
+      height: 2.03,
+      swing: { hinge: 'start', side: 'left' },
+    });
+    state().flipHinge(doorId);
+    state().flipSide(doorId);
+    state().setOpening(doorId, { offset: 10, width: 0.9 });
+    expect(current().openings.find((o) => o.id === doorId)).toMatchObject({
+      offset: 3.1,
+      width: 0.9,
+      swing: { hinge: 'end', side: 'right' },
+    });
+    const windowId = state().addOpening('window', wallId, 2)!;
+    expect(current().openings.find((o) => o.id === windowId)).toMatchObject({
+      offset: 1.4,
+      sillHeight: 0.9,
+    });
+  });
+
+  it('removes a wall with its openings, and other things by id', () => {
+    state().remove(['w1', 'r5', 'k1', 'o1']);
+    const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
+    expect(ids(current().walls)).not.toContain('w1');
+    expect(ids(current().openings)).not.toEqual(expect.arrayContaining(['o1', 'o6', 'o7']));
+    expect(ids(current().rooms)).not.toContain('r5');
+    expect(ids(current().obstacles)).toEqual(['k2']);
+    undo();
+    expect(current()).toEqual(plan);
+  });
+
+  it('names and types a new room from the labels inside it', () => {
+    state().remove(['r1']);
+    const roomId = state().addRoom(room0.boundary);
+    expect(current().rooms.find((r) => r.id === roomId)).toMatchObject({
+      name: 'Bedroom',
+      roomType: 'bedroom',
+      labelTextIds: ['t1', 't2'],
+      furnishable: true,
+    });
+    const another = state().addRoom([
+      { x: 20, y: 20 },
+      { x: 23, y: 20 },
+      { x: 23, y: 23 },
+    ]);
+    expect(current().rooms.find((r) => r.id === another)).toMatchObject({
+      name: 'Other',
+      roomType: 'other',
+      furnishable: false,
+    });
+  });
+
+  it('splits a room along a line and merges it back', () => {
+    // The living room, cut into living and dining at x = 6.
+    expect(state().splitRoom('r2', { x: 6, y: 0 }, { x: 6, y: 5 })).toBe(true);
+    const halves = current().rooms.filter((r) => r.id === 'r2' || r.id === 'r7');
+    expect(halves.map((r) => r.labelTextIds)).toEqual([['t3', 't4'], []]);
+    expect(halves[1]).toMatchObject({ name: 'Living room', roomType: 'living_room' });
+    state().setRoom('r7', { roomType: 'dining_area', name: 'Dining' });
+    expect(state().mergeRooms('r2', 'r7')).toBe(true);
+    expect(current().rooms.find((r) => r.id === 'r2')!.boundary).toHaveLength(4);
+    expect(current().rooms).toHaveLength(plan.rooms.length);
+    expect(state().splitRoom('r2', { x: 6, y: 1 }, { x: 6, y: 2 })).toBe(false);
+  });
+
+  it('sets a room type with its furnishing default, and ceiling overrides', () => {
+    state().setRoom('r1', { roomType: 'den_office' });
+    expect(room('r1')).toMatchObject({ roomType: 'den_office', furnishable: true });
+    state().setRoom('r1', { roomType: 'closet', furnishable: true });
+    expect(room('r1').furnishable).toBe(true);
+    state().setRoom('r1', { ceilingHeight: 3 });
+    expect(room('r1').ceilingHeight).toBe(3);
+    state().setRoom('r1', { ceilingHeight: undefined });
+    expect(room('r1')).not.toHaveProperty('ceilingHeight');
+  });
+
+  it('rescales everything for a new scale, and sets the ceiling', () => {
+    state().calibrate({ ...plan.scale!, metersPerPixel: 0.011, method: 'wall_length' });
+    expect(current().walls[0]!.b.x).toBeCloseTo(9.35, 9);
+    expect(current().walls[0]!.b.y).toBeCloseTo(0.55, 9);
+    expect(current().scale?.method).toBe('wall_length');
+    state().setCeiling(2.7);
+    expect(current()).toMatchObject({ ceilingHeight: 2.7, ceilingHeightSource: 'user' });
+  });
+});
+
+const room0 = plan.rooms[0]!;
