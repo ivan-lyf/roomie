@@ -15,8 +15,10 @@ import {
 // trained on; `toRawPlan` turns that into pixels.
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
-/** Gemini's larger models can think for a minute or more over a detailed plan. */
-const TIMEOUT_MS = 240_000;
+/** Gemini's models can think for a few minutes over a detailed plan. */
+const TIMEOUT_MS = 300_000;
+/** Gemini's free tier is often briefly too busy (503): it's asked again after these pauses. */
+const BUSY_RETRY_MS = [5_000, 15_000];
 
 const Point = z.array(z.number()).length(2).describe('[y, x], each 0–1000');
 const Box = z.array(z.number()).length(4).describe('[ymin, xmin, ymax, xmax], each 0–1000');
@@ -137,32 +139,46 @@ export type GeminiOptions = {
   model: string;
   fetch?: typeof fetch;
   timeoutMs?: number;
+  /** How long to wait before asking a busy Gemini again, once per entry. */
+  busyRetryMs?: readonly number[];
 };
 
 /** A plan reader on the Gemini API: one request, and one retry when the answer is malformed. */
 export function geminiReader(options: GeminiOptions): PlanReader {
   const send = options.fetch ?? fetch;
 
-  async function generate(contents: Content[], signal: AbortSignal) {
-    let res: Response;
-    try {
-      res = await send(`${API}/models/${encodeURIComponent(options.model)}:generateContent`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': options.apiKey },
-        body: JSON.stringify({
-          contents,
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseJsonSchema: RESPONSE_SCHEMA,
-            mediaResolution: 'MEDIA_RESOLUTION_HIGH',
-          },
-        }),
-        signal,
-      });
-    } catch (e) {
+  /** One request; a busy Gemini (500, 503) is asked again after a pause, twice. */
+  async function post(contents: Content[], signal: AbortSignal): Promise<Response> {
+    const pauses = options.busyRetryMs ?? BUSY_RETRY_MS;
+    for (let attempt = 0; ; attempt++) {
+      let res: Response;
+      try {
+        res = await send(`${API}/models/${encodeURIComponent(options.model)}:generateContent`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-goog-api-key': options.apiKey },
+          body: JSON.stringify({
+            contents,
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseJsonSchema: RESPONSE_SCHEMA,
+              mediaResolution: 'MEDIA_RESOLUTION_HIGH',
+            },
+          }),
+          signal,
+        });
+      } catch (e) {
+        if (signal.aborted) throw new ReaderError("Gemini didn't answer in time.", 504);
+        throw new ReaderError(`Gemini couldn't be reached: ${(e as Error).message}`, 502);
+      }
+      const busy = res.status === 500 || res.status === 503;
+      if (res.ok || !busy || attempt >= pauses.length) return res;
+      await new Promise((resolve) => setTimeout(resolve, pauses[attempt]));
       if (signal.aborted) throw new ReaderError("Gemini didn't answer in time.", 504);
-      throw new ReaderError(`Gemini couldn't be reached: ${(e as Error).message}`, 502);
     }
+  }
+
+  async function generate(contents: Content[], signal: AbortSignal) {
+    const res = await post(contents, signal);
     if (!res.ok) {
       const body = (await res.json().catch(() => undefined)) as
         | { error?: { message?: string } }
@@ -173,6 +189,9 @@ export function geminiReader(options: GeminiOptions): PlanReader {
           `Gemini is over its rate limit; try again in a minute. (${message})`,
           429,
         );
+      }
+      if (res.status === 503) {
+        throw new ReaderError('Gemini is too busy right now; try again in a few minutes.', 502);
       }
       throw new ReaderError(`Gemini: ${message}`, 502);
     }

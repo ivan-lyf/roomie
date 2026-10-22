@@ -135,6 +135,32 @@ describe('geminiReader', () => {
     await expect(reader.read(image)).rejects.toMatchObject({ status: 429 });
   });
 
+  it('asks a busy Gemini again, and says so when it stays busy', async () => {
+    const busy = () => Response.json({ error: { message: 'high demand' } }, { status: 503 });
+    const once = fakeGemini(busy(), JSON.stringify(plan));
+    const reader = geminiReader({
+      apiKey: 'k',
+      model: 'm',
+      fetch: once.fetch,
+      busyRetryMs: [0, 0],
+    });
+    expect((await reader.read(image)).plan.walls).toHaveLength(1);
+    expect(once.requests).toHaveLength(2);
+
+    const always = fakeGemini(busy(), busy(), busy());
+    const stuck = geminiReader({
+      apiKey: 'k',
+      model: 'm',
+      fetch: always.fetch,
+      busyRetryMs: [0, 0],
+    });
+    await expect(stuck.read(image)).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringMatching(/too busy/),
+    });
+    expect(always.requests).toHaveLength(3);
+  });
+
   it('reads a cached answer back into pixels', () => {
     const reader = geminiReader({ apiKey: 'key', model: 'm', fetch: fakeGemini().fetch });
     expect(reader.planFromRaw(plan, image)).toEqual(toRawPlan(plan, image));
