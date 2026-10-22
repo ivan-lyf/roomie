@@ -35,6 +35,14 @@ export function createStorage(config: StorageConfig, now: () => number = Date.no
       if (!res.ok) throw new Error(`PUT ${key}: HTTP ${res.status} ${await res.text()}`);
     },
 
+    /** A file's bytes, or undefined if there's no such file. */
+    async get(key: string): Promise<Uint8Array | undefined> {
+      const res = await client.fetch(urlOf(key));
+      if (res.status === 404) return undefined;
+      if (!res.ok) throw new Error(`GET ${key}: HTTP ${res.status} ${await res.text()}`);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+
     /** Every file in the bucket, with its MD5 (the ETag of a single-part upload). */
     async list(): Promise<Map<string, string>> {
       const files = new Map<string, string>();

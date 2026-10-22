@@ -54,6 +54,20 @@ describe('createStorage', () => {
     expect(req?.headers.get('authorization')).toMatch(/^AWS4-HMAC-SHA256 Credential=key-id\//);
   });
 
+  it('downloads a file, or nothing when it is missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (req: Request) =>
+        req.url.endsWith('/plan.png')
+          ? new Response(new Uint8Array([7, 8]))
+          : new Response('', { status: 404 }),
+      ),
+    );
+    const storage = createStorage(config);
+    expect(await storage.get('plan.png')).toEqual(new Uint8Array([7, 8]));
+    expect(await storage.get('gone.png')).toBeUndefined();
+  });
+
   it('fails on an error response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('denied', { status: 403 })));
     await expect(createStorage(config).put('x.glb', new Uint8Array(), 'model/gltf-binary')).rejects.toThrow(

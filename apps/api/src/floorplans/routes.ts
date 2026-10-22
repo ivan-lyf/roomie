@@ -9,8 +9,10 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { Db } from '../db/client';
 import { floorplans } from '../db/schema';
+import { type PlanReader, ReaderError } from '../plan-reader/reader';
 import type { Storage } from '../storage';
 import { readImageInfo } from './image';
+import { applyReading } from './reading';
 
 /** The browser scales plans down to 3,000 px before uploading, so this is plenty. */
 export const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
@@ -28,12 +30,17 @@ const EXTENSIONS = { png: 'png', jpeg: 'jpg' } as const;
 export type FloorplanOptions = {
   db: Db | undefined;
   /** The private bucket for plan images; without it they're kept under `dataDir`. */
-  plans: Pick<Storage, 'put' | 'signedUrl'> | undefined;
+  plans: Pick<Storage, 'put' | 'get' | 'signedUrl'> | undefined;
   dataDir: string;
+  /** Reads uploaded plans; without one, plans are traced by hand. */
+  reader?: PlanReader | undefined;
 };
 
-/** Upload a plan image, list the plans, and load and save one. Mounted at /api/floorplans. */
-export function floorplanRoutes({ db, plans, dataDir }: FloorplanOptions) {
+/**
+ * Upload a plan image, list the plans, load and save one, and have one read. Mounted at
+ * /api/floorplans.
+ */
+export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions) {
   const app = new Hono<{ Variables: { db: Db } }>();
   const localPath = (key: string) => path.join(dataDir, 'uploads', 'plans', key);
 
@@ -128,6 +135,44 @@ export function floorplanRoutes({ db, plans, dataDir }: FloorplanOptions) {
       .update(floorplans)
       .set({ ...edit.data, status, updatedAt: new Date() })
       .where(eq(floorplans.id, id))
+      .returning();
+    return c.json(Floorplan.parse(row));
+  });
+
+  /**
+   * Reads the plan's image with the plan reader. A plan that's already traced is only read again
+   * with `?replace=1`, since the reading replaces what was traced.
+   */
+  app.post('/:id/read', async (c) => {
+    if (!reader) {
+      return c.json({ error: 'No plan reader is set up: add GEMINI_API_KEY to .env.' }, 503);
+    }
+    const plan = await load(c.var.db, c.req.param('id'));
+    if (!plan) return c.json({ error: 'No such floor plan.' }, 404);
+    if (!plan.image) return c.json({ error: 'The plan has no image to read.' }, 400);
+    const traced = plan.walls.length > 0 || plan.rooms.length > 0;
+    if (traced && c.req.query('replace') !== '1') {
+      return c.json({ error: 'The plan is already traced: read it again with replace=1.' }, 409);
+    }
+    const { key, width, height } = plan.image;
+    const bytes = plans
+      ? await plans.get(key)
+      : await readFile(localPath(key)).then((b) => new Uint8Array(b), () => undefined);
+    if (!bytes) return c.json({ error: 'The image file is missing.' }, 404);
+
+    let result;
+    try {
+      const mimeType = key.endsWith('.png') ? CONTENT_TYPES.png : CONTENT_TYPES.jpeg;
+      result = await reader.read({ bytes, mimeType, width, height }, c.req.raw.signal);
+    } catch (e) {
+      if (e instanceof ReaderError) return c.json({ error: e.message }, e.status);
+      throw e;
+    }
+    const read = applyReading({ ...plan, image: plan.image }, reader, result);
+    const [row] = await c.var.db
+      .update(floorplans)
+      .set({ ...read, updatedAt: new Date() })
+      .where(eq(floorplans.id, plan.id))
       .returning();
     return c.json(Floorplan.parse(row));
   });

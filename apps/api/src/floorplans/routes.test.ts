@@ -56,6 +56,7 @@ describe('POST /api/floorplans', () => {
     const puts: [string, string][] = [];
     const plans = {
       put: async (key: string, _body: Uint8Array, type: string) => void puts.push([key, type]),
+      get: async () => undefined,
       signedUrl: async (key: string) => `https://storage.test/plans/${key}?signed`,
     };
     const res = await upload(pngHeader(10, 10), { name: '  My condo ' }, { plans });

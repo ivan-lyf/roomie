@@ -7,6 +7,7 @@ import { modelPath } from './catalog/store';
 import type { Db } from './db/client';
 import { floorplanRoutes } from './floorplans/routes';
 import { products } from './db/schema';
+import type { PlanReader } from './plan-reader/reader';
 import type { Storage } from './storage';
 
 export type AppOptions = {
@@ -16,17 +17,19 @@ export type AppOptions = {
   /** Where the models are; without it, they're served from data/models. */
   storage?: Pick<Storage, 'signedUrl'>;
   /** Where uploaded plan images go; without it, under dataDir. */
-  plans?: Pick<Storage, 'put' | 'signedUrl'>;
+  plans?: Pick<Storage, 'put' | 'get' | 'signedUrl'>;
+  /** Reads uploaded plans; without one, they're traced by hand. */
+  reader?: PlanReader;
 };
 
 const ProductList = z.array(Product);
 
-export function createApp({ dataDir, db, storage, plans }: AppOptions) {
+export function createApp({ dataDir, db, storage, plans, reader }: AppOptions) {
   const app = new Hono().basePath('/api');
 
   app.get('/health', (c) => c.json({ ok: true }));
 
-  app.route('/floorplans', floorplanRoutes({ db, plans, dataDir }));
+  app.route('/floorplans', floorplanRoutes({ db, plans, dataDir, reader }));
 
   app.get('/products', async (c) => {
     const query = c.req.query('category');
