@@ -22,6 +22,7 @@ import {
   ReadingCache,
 } from './eval';
 import { geminiReader } from './gemini';
+import { ReaderError } from './reader';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const config = loadConfig();
@@ -102,6 +103,8 @@ for (const dir of dirs) {
     console.log('done');
   } catch (e) {
     console.log(`failed: ${e instanceof Error ? e.message : String(e)}`);
+    // Out of quota (or rate limited): the rest would fail the same way.
+    if (e instanceof ReaderError && e.status === 429) break;
   }
 }
 if (results.length === 0) {
