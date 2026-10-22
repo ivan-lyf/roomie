@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from './config';
+import { DEFAULT_GEMINI_MODEL, loadConfig } from './config';
 
 describe('loadConfig', () => {
   it('uses defaults and treats empty values as unset', () => {
@@ -18,7 +18,21 @@ describe('loadConfig', () => {
       dataDir: '/d',
       storage: undefined,
       plansStorage: undefined,
+      reader: undefined,
     });
+  });
+
+  it('reads plans with Gemini when there is a key, unless told not to', () => {
+    expect(loadConfig({ GEMINI_API_KEY: 'key' }).reader).toEqual({
+      provider: 'gemini',
+      apiKey: 'key',
+      model: DEFAULT_GEMINI_MODEL,
+    });
+    expect(loadConfig({ GEMINI_API_KEY: 'key', GEMINI_MODEL: 'gemini-x' }).reader?.model).toBe(
+      'gemini-x',
+    );
+    expect(loadConfig({ GEMINI_API_KEY: 'key', PLAN_READER: 'none' }).reader).toBeUndefined();
+    expect(() => loadConfig({ PLAN_READER: 'gemini' })).toThrow(/needs GEMINI_API_KEY/);
   });
 
   it('reads the storage settings as a set', () => {

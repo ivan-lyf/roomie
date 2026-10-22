@@ -4,6 +4,12 @@ import type { StorageConfig } from './storage';
 
 const defaultDataDir = fileURLToPath(new URL('../../../data', import.meta.url));
 
+/**
+ * Google's current Flash model: the free tier has no Pro ones. `pnpm plans:eval --model` compares
+ * others.
+ */
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+
 /** Treat empty values in .env as unset. */
 const unsetIfEmpty = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (v === '' ? undefined : v), schema);
@@ -24,7 +30,14 @@ const Env = z.object({
   STORAGE_BUCKET: optional(),
   /** Uploaded plan images, in a second private bucket on the same service. */
   STORAGE_PLANS_BUCKET: unsetIfEmpty(z.string().default('plans')),
+  // The vision model that reads uploaded plans: Gemini when there's a key, unless set to none.
+  PLAN_READER: unsetIfEmpty(z.enum(['gemini', 'none']).optional()),
+  GEMINI_API_KEY: optional(),
+  GEMINI_MODEL: unsetIfEmpty(z.string().default(DEFAULT_GEMINI_MODEL)),
 });
+
+/** Which vision model reads plans, and how to reach it. */
+export type ReaderConfig = { provider: 'gemini'; apiKey: string; model: string };
 
 export type Config = {
   port: number;
@@ -34,6 +47,8 @@ export type Config = {
   storage: StorageConfig | undefined;
   /** The plan images' bucket; without storage, plans are kept under DATA_DIR. */
   plansStorage: StorageConfig | undefined;
+  /** Without one, plans are traced by hand. */
+  reader: ReaderConfig | undefined;
 };
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
@@ -49,7 +64,19 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     dataDir: e.DATA_DIR,
     storage,
     plansStorage: storage && { ...storage, bucket: e.STORAGE_PLANS_BUCKET },
+    reader: readerConfig(e),
   };
+}
+
+function readerConfig(e: z.infer<typeof Env>): ReaderConfig | undefined {
+  if (e.PLAN_READER === 'none') return undefined;
+  if (!e.GEMINI_API_KEY) {
+    if (e.PLAN_READER === 'gemini') {
+      throw new Error('Invalid environment: PLAN_READER=gemini needs GEMINI_API_KEY');
+    }
+    return undefined;
+  }
+  return { provider: 'gemini', apiKey: e.GEMINI_API_KEY, model: e.GEMINI_MODEL };
 }
 
 /** All five STORAGE_* settings, or none: a partial set is almost always a typo. */
