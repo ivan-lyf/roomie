@@ -16,6 +16,7 @@
     "catalog:import": "pnpm --filter @roomie/api catalog:import",
     "catalog:publish": "pnpm --filter @roomie/api catalog:publish",
     "catalog:check": "pnpm --filter @roomie/api catalog:check",
+    "plans:eval": "pnpm --filter @roomie/api plans:eval",
     "scrape": "uv run --project tools/scraper ikea-scrape",
     "models:download": "uv run --project tools/scraper ikea-scrape --models-for data/catalog/products.json",
     "models:process": "pnpm --filter @roomie/models process"
