@@ -1,4 +1,5 @@
-import type { RoomType, SourceUnit } from '@roomie/schema';
+import type { Floorplan, RoomType, SourceUnit } from '@roomie/schema';
+import { bounds } from './polygon';
 
 // One meters-per-pixel scale for the whole image, from the plan's labels or the user's
 // measurements (PLAN.md §5.1). Everything is converted to meters with it, once.
@@ -125,6 +126,64 @@ export function scaleFromAreaAndSide(input: {
     consistent: disagreement <= 0.05,
     stretched: input.axis === 'x' ? { x: side, y: other } : { x: other, y: side },
   };
+}
+
+/** A room's dimension label next to the room as drawn. */
+export type LabelCheck = {
+  labelId: string;
+  roomId: string;
+  text: string;
+  /** What the label says, in meters. */
+  stated: number[];
+  /** The room's width and depth on the plan, paired with `stated`. */
+  measured: number[];
+  /** The worst side, as a fraction off. */
+  error: number;
+  agrees: boolean;
+};
+
+/**
+ * Checks every room's dimension labels against the room as drawn at the current scale. Rooms are
+ * outlined at the walls' center lines while labels usually give the inside, so a label up to a
+ * wall's thickness short still agrees.
+ */
+export function checkRoomLabels(
+  plan: Pick<Floorplan, 'rooms' | 'labels'>,
+  tolerance = 0.03,
+  wall = 0.2,
+): LabelCheck[] {
+  const labels = new Map(plan.labels.map((l) => [l.id, l]));
+  return plan.rooms.flatMap((room) => {
+    const { min, max } = bounds(room.boundary);
+    const sides = [max.x - min.x, max.y - min.y];
+    return room.labelTextIds.flatMap((id): LabelCheck[] => {
+      const label = labels.get(id);
+      const stated = label?.parsed?.meters;
+      if (!label || !stated) return [];
+      const off = (meters: number, side: number) => {
+        if (meters > side) return meters / side - 1;
+        if (meters < side - wall) return 1 - meters / (side - wall);
+        return 0;
+      };
+      const pair = (order: number[]) => ({
+        measured: stated.map((_, i) => order[i]!),
+        error: Math.max(...stated.map((m, i) => off(m, order[i]!))),
+      });
+      const options =
+        stated.length === 1 ? [[sides[0]!], [sides[1]!]] : [sides, sides.toReversed()];
+      const best = options.map(pair).toSorted((a, b) => a.error - b.error)[0]!;
+      return [
+        {
+          labelId: id,
+          roomId: room.id,
+          text: label.text,
+          stated,
+          ...best,
+          agrees: best.error <= tolerance,
+        },
+      ];
+    });
+  });
 }
 
 function median(values: readonly number[]): number {

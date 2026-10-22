@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { Floorplan } from '@roomie/schema';
+import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import {
+  checkRoomLabels,
   detectScale,
   disagreeing,
   scaleFromArea,
@@ -116,5 +119,24 @@ describe('calibration', () => {
     expect(r.consistent).toBe(false);
     expect(r.stretched.x).toBeCloseTo(0.01, 9);
     expect(r.stretched.y).toBeCloseTo(0.012, 9);
+  });
+});
+
+describe('checkRoomLabels', () => {
+  const plan = Floorplan.parse(demo);
+
+  it('agrees with the demo home', () => {
+    const checks = checkRoomLabels(plan);
+    expect(checks.map((c) => c.labelId)).toEqual(['t2', 't4', 't6']);
+    expect(checks.every((c) => c.agrees)).toBe(true);
+  });
+
+  it('flags a label the room as drawn disagrees with', () => {
+    const rooms = plan.rooms.map((r) =>
+      r.id === 'r1' ? { ...r, boundary: r.boundary.map((p) => ({ x: p.x * 1.1, y: p.y })) } : r,
+    );
+    const bad = checkRoomLabels({ ...plan, rooms }).filter((c) => !c.agrees);
+    expect(bad.map((c) => c.labelId)).toEqual(['t2']);
+    expect(bad[0]!.error).toBeGreaterThan(0.03);
   });
 });

@@ -1,7 +1,7 @@
 import { Floorplan } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
-import { validateFloorplan } from './validate';
+import { planStatus, validateFloorplan } from './validate';
 
 const plan = Floorplan.parse(demo);
 const codes = (p: Floorplan) => validateFloorplan(p).map((problem) => problem.code);
@@ -35,5 +35,30 @@ describe('validateFloorplan', () => {
       r.id === 'r5' ? { ...r, boundary: [r.boundary[0]!, r.boundary[1]!, r.boundary[0]!] } : r,
     );
     expect(codes({ ...plan, openings, rooms }).sort()).toEqual(['room_too_small', 'unknown_wall']);
+  });
+});
+
+describe('more checks', () => {
+  it('needs rooms, and flags overlapping rooms and stub walls', () => {
+    expect(codes({ ...plan, rooms: [] })).toEqual(['no_rooms']);
+    const rooms = plan.rooms.map((r) =>
+      r.id === 'r1' ? { ...r, boundary: r.boundary.map((p) => ({ x: p.x + 1, y: p.y })) } : r,
+    );
+    expect(codes({ ...plan, rooms })).toEqual(['rooms_overlap']);
+    const stub = { id: 'w10', a: { x: 1, y: 1 }, b: { x: 1.05, y: 1 }, thickness: 0.12 };
+    const walls = [...plan.walls, stub];
+    expect(codes({ ...plan, walls })).toEqual(['wall_too_short']);
+  });
+
+  it('lets rooms share edges and corners', () => {
+    expect(codes(plan)).toEqual([]);
+  });
+});
+
+describe('planStatus', () => {
+  it('is ready once it has a scale and rooms and no problems', () => {
+    expect(planStatus(plan)).toBe('ready');
+    expect(planStatus({ ...plan, scale: null })).toBe('needs_calibration');
+    expect(planStatus({ ...plan, rooms: [] })).toBe('uploaded');
   });
 });

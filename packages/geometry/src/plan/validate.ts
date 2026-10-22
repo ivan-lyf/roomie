@@ -1,5 +1,6 @@
-import type { Floorplan } from '@roomie/schema';
-import { area } from './polygon';
+import type { Floorplan, FloorplanStatus, Vec2 } from '@roomie/schema';
+import { area, centroid, contains } from './polygon';
+import { closestOnSegment, distance } from './snap';
 import { wallHeight } from './rooms';
 import { wallLength } from './walls';
 
@@ -7,11 +8,18 @@ import { wallLength } from './walls';
 const TOLERANCE = 0.01;
 /** Smaller than a closet: the outline is almost certainly wrong. */
 const MIN_ROOM_AREA = 0.5;
+/** Shorter than this, a wall is a slip of the mouse. */
+const MIN_WALL = 0.05;
+/** Rooms may share edges, and miss each other by a little where they're traced by hand. */
+const OVERLAP_TOLERANCE = 0.05;
 
 export type PlanProblem = {
   code:
     | 'no_scale'
+    | 'no_rooms'
     | 'room_too_small'
+    | 'rooms_overlap'
+    | 'wall_too_short'
     | 'unknown_wall'
     | 'opening_off_wall'
     | 'openings_overlap'
@@ -34,6 +42,33 @@ export function validateFloorplan(plan: Floorplan): PlanProblem[] {
       ids: [],
     });
   }
+  if (plan.rooms.length === 0) {
+    problems.push({
+      code: 'no_rooms',
+      message: 'No rooms yet: outline at least one.',
+      ids: [],
+    });
+  }
+  for (const wall of plan.walls) {
+    if (wallLength(wall) < Math.max(wall.thickness, MIN_WALL)) {
+      problems.push({
+        code: 'wall_too_short',
+        message: 'A wall is shorter than it is thick: delete it or drag its end.',
+        ids: [wall.id],
+      });
+    }
+  }
+  plan.rooms.forEach((room, i) => {
+    for (const other of plan.rooms.slice(i + 1)) {
+      if (overlap(room.boundary, other.boundary)) {
+        problems.push({
+          code: 'rooms_overlap',
+          message: `${room.name} and ${other.name} overlap.`,
+          ids: [room.id, other.id],
+        });
+      }
+    }
+  });
   for (const room of plan.rooms) {
     if (area(room.boundary) < MIN_ROOM_AREA) {
       problems.push({
@@ -89,4 +124,50 @@ export function validateFloorplan(plan: Floorplan): PlanProblem[] {
     }
   }
   return problems;
+}
+
+/** How far a point is from a polygon's outline. */
+function toOutline(points: readonly Vec2[], p: Vec2): number {
+  return Math.min(
+    ...points.map((a, i) => {
+      const b = points[(i + 1) % points.length]!;
+      return distance(p, closestOnSegment(p, { a, b }).point);
+    }),
+  );
+}
+
+/** Whether a point is inside a polygon, and not just on (or near) its outline. */
+const deepInside = (points: readonly Vec2[], p: Vec2) =>
+  contains(points, p) && toOutline(points, p) > OVERLAP_TOLERANCE;
+
+/** Whether two edges cross each other in the middle, well away from their ends. */
+function edgesCross(p: Vec2, q: Vec2, a: Vec2, b: Vec2): boolean {
+  const side = (u: Vec2, v: Vec2, w: Vec2) =>
+    (v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x);
+  const [d1, d2] = [side(a, b, p), side(a, b, q)];
+  const [d3, d4] = [side(p, q, a), side(p, q, b)];
+  if (!(d1 * d2 < 0 && d3 * d4 < 0)) return false;
+  // A crossing within the tolerance of an end is two rooms meeting at a corner.
+  const ends = [p, q, a, b];
+  const t = d1 / (d1 - d2);
+  const at = { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t };
+  return ends.every((e) => distance(e, at) > OVERLAP_TOLERANCE);
+}
+
+/** Whether two room outlines overlap by more than sharing an edge. */
+function overlap(a: readonly Vec2[], b: readonly Vec2[]): boolean {
+  if ([...a, centroid(a)].some((p) => deepInside(b, p))) return true;
+  if ([...b, centroid(b)].some((p) => deepInside(a, p))) return true;
+  return a.some((p, i) =>
+    b.some((u, j) => edgesCross(p, a[(i + 1) % a.length]!, u, b[(j + 1) % b.length]!)),
+  );
+}
+
+/**
+ * Where a plan stands: `needs_calibration` without a scale, `ready` once it has rooms and passes
+ * every check, else still being traced (`uploaded`).
+ */
+export function planStatus(plan: Floorplan): FloorplanStatus {
+  if (!plan.scale) return 'needs_calibration';
+  return validateFloorplan(plan).length === 0 ? 'ready' : 'uploaded';
 }

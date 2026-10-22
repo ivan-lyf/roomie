@@ -59,3 +59,134 @@ export function bounds(points: readonly Vec2[]): { min: Vec2; max: Vec2 } {
     max: { x: Math.max(...points.map((p) => p.x)), y: Math.max(...points.map((p) => p.y)) },
   };
 }
+
+const near = (a: Vec2, b: Vec2, tolerance: number) =>
+  Math.hypot(a.x - b.x, a.y - b.y) <= tolerance;
+
+/** Where segments `p→q` and `a→b` cross, as fractions along each, if they do. */
+function crossing(p: Vec2, q: Vec2, a: Vec2, b: Vec2): { t: number; u: number } | undefined {
+  const r = { x: q.x - p.x, y: q.y - p.y };
+  const s = { x: b.x - a.x, y: b.y - a.y };
+  const denom = r.x * s.y - r.y * s.x;
+  if (Math.abs(denom) < 1e-12) return undefined;
+  const t = ((a.x - p.x) * s.y - (a.y - p.y) * s.x) / denom;
+  const u = ((a.x - p.x) * r.y - (a.y - p.y) * r.x) / denom;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? { t, u } : undefined;
+}
+
+/** Drops repeated points and points in the middle of a straight run. */
+export function simplify(points: readonly Vec2[], tolerance = 1e-6): Vec2[] {
+  let out = points.filter((p, i) => !near(p, points[(i + 1) % points.length]!, tolerance));
+  let changed = true;
+  while (changed && out.length > 3) {
+    changed = false;
+    for (let i = 0; i < out.length; i++) {
+      const a = out[(i + out.length - 1) % out.length]!;
+      const b = out[i]!;
+      const c = out[(i + 1) % out.length]!;
+      const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+      if (Math.abs(cross) <= tolerance * Math.max(Math.hypot(c.x - a.x, c.y - a.y), 1)) {
+        out = out.filter((_, j) => j !== i);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Cuts a polygon in two along the segment `a→b`, which has to cross its outline exactly twice
+ * (draw the line from outside to outside). Undefined when it doesn't.
+ */
+export function splitPolygon(
+  points: readonly Vec2[],
+  a: Vec2,
+  b: Vec2,
+): [Vec2[], Vec2[]] | undefined {
+  const hits: { edge: number; t: number; point: Vec2 }[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i]!;
+    const q = points[(i + 1) % points.length]!;
+    const hit = crossing(a, b, p, q);
+    if (!hit || hit.u === 1) continue; // A corner belongs to the edge it starts.
+    const point = { x: p.x + (q.x - p.x) * hit.u, y: p.y + (q.y - p.y) * hit.u };
+    if (hits.some((h) => near(h.point, point, 1e-9))) continue;
+    hits.push({ edge: i, t: hit.t, point });
+  }
+  if (hits.length !== 2) return undefined;
+  const [first, second] = hits as [(typeof hits)[0], (typeof hits)[0]];
+  const run = (from: (typeof hits)[0], to: (typeof hits)[0]) => {
+    const out = [from.point];
+    for (let i = (from.edge + 1) % points.length; ; i = (i + 1) % points.length) {
+      out.push(points[i]!);
+      if (i === to.edge) break;
+    }
+    out.push(to.point);
+    return simplify(out);
+  };
+  const one = run(first, second);
+  const two = run(second, first);
+  if (one.length < 3 || two.length < 3 || area(one) < 1e-9 || area(two) < 1e-9) return undefined;
+  return [one, two];
+}
+
+/** Adds the points of `others` that lie on the polygon's edges, so shared edges match up. */
+function withPointsOnEdges(points: readonly Vec2[], others: readonly Vec2[], tolerance: number) {
+  const out: Vec2[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i]!;
+    const q = points[(i + 1) % points.length]!;
+    out.push(p);
+    const len = Math.hypot(q.x - p.x, q.y - p.y);
+    if (len === 0) continue;
+    const d = { x: (q.x - p.x) / len, y: (q.y - p.y) / len };
+    const inner = others
+      .map((o) => ({ o, t: (o.x - p.x) * d.x + (o.y - p.y) * d.y }))
+      .filter(({ o, t }) => {
+        const across = Math.abs((o.x - p.x) * d.y - (o.y - p.y) * d.x);
+        return across <= tolerance && t > tolerance && t < len - tolerance;
+      })
+      .sort((u, v) => u.t - v.t);
+    for (const { o } of inner) out.push({ ...o });
+  }
+  return out;
+}
+
+/**
+ * Joins two polygons that share part of their outline into one. Undefined when they don't
+ * touch along an edge, or joining them would leave a hole.
+ */
+export function mergePolygons(
+  p: readonly Vec2[],
+  q: readonly Vec2[],
+  tolerance = 0.02,
+): Vec2[] | undefined {
+  // Same winding for both, and q's points snapped onto p's where they're the same corner.
+  const wind = (pts: readonly Vec2[]) => (signedArea(pts) < 0 ? pts.toReversed() : [...pts]);
+  const pw = wind(p);
+  const qw = wind(q).map((v) => pw.find((u) => near(u, v, tolerance)) ?? v);
+  const pAll = withPointsOnEdges(pw, qw, tolerance);
+  const qAll = withPointsOnEdges(qw, pw, tolerance).map(
+    (v) => pAll.find((u) => near(u, v, tolerance)) ?? v,
+  );
+  const key = (v: Vec2) => `${v.x.toFixed(6)},${v.y.toFixed(6)}`;
+  const edges = (pts: Vec2[]) => pts.map((v, i) => [v, pts[(i + 1) % pts.length]!] as const);
+  const all = [...edges(pAll), ...edges(qAll)];
+  const ids = new Set(all.map(([u, v]) => `${key(u)}>${key(v)}`));
+  const kept = all.filter(([u, v]) => !ids.has(`${key(v)}>${key(u)}`));
+  if (kept.length === all.length) return undefined;
+
+  const next = new Map<string, Vec2[]>();
+  for (const [u, v] of kept) next.set(key(u), [...(next.get(key(u)) ?? []), v]);
+  if ([...next.values()].some((vs) => vs.length > 1)) return undefined;
+  const start = kept[0]![0];
+  const loop = [start];
+  for (let v = next.get(key(start))?.[0]; v && key(v) !== key(start); ) {
+    loop.push(v);
+    if (loop.length > kept.length) return undefined;
+    v = next.get(key(v))?.[0];
+  }
+  if (loop.length !== kept.length) return undefined;
+  return simplify(loop);
+}
