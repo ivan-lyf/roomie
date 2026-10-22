@@ -1,9 +1,12 @@
 import { area } from '@roomie/geometry';
 import type { Floorplan } from '@roomie/schema';
+import { Link } from 'wouter';
 import { ROOM_TYPES, squareMeters } from '../format';
 import { LookControls } from './LookControls';
 
 type Props = {
+  /** The plan's id in the URL ('demo' for the demo). */
+  id: string;
   plan: Floorplan;
   roomId: string | undefined;
   onRoom: (roomId: string | undefined) => void;
@@ -20,6 +23,14 @@ export function HomePanel(props: Props) {
     `w-full px-3 py-2 text-left ${selected ? 'bg-stone-100' : 'hover:bg-stone-50'}`;
   return (
     <aside className="m-4 flex w-80 shrink-0 flex-col gap-3 overflow-y-auto rounded-xl bg-white p-4 text-sm text-stone-800 shadow-lg">
+      <div className="flex items-center justify-between text-xs">
+        <Link href="/" className="text-stone-500 hover:text-stone-800">
+          ← Plans
+        </Link>
+        <Link href={`/plans/${props.id}/edit`} className="underline">
+          Edit the plan
+        </Link>
+      </div>
       <h1 className="text-base font-semibold">{plan.name}</h1>
 
       <ul className="divide-y divide-stone-200 rounded-md border border-stone-200">
@@ -69,8 +80,7 @@ export function HomePanel(props: Props) {
       </fieldset>
 
       <p className="text-xs text-stone-500">
-        Click a room to look into it; Esc goes back to the whole home. Drag to turn, scroll to
-        zoom.
+        Click a room to look into it; Esc goes back to the whole home. Drag to turn, scroll to zoom.
       </p>
     </aside>
   );

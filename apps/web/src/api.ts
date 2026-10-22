@@ -1,4 +1,4 @@
-import { type Category, Floorplan, FloorplanSummary, Product } from '@roomie/schema';
+import { type Category, Floorplan, FloorplanEdit, FloorplanSummary, Product } from '@roomie/schema';
 import { z } from 'zod';
 
 const ProductList = z.array(Product);
@@ -38,3 +38,16 @@ export async function uploadFloorplan(image: Blob, name: string): Promise<Floorp
 }
 
 export const floorplanImageUrl = (id: string) => `/api/floorplans/${encodeURIComponent(id)}/image`;
+
+/** Saves the editable parts of a floorplan; the server sets its status. */
+export async function saveFloorplan(plan: Floorplan, signal?: AbortSignal): Promise<Floorplan> {
+  const edit: FloorplanEdit = FloorplanEdit.parse(plan);
+  const res = await fetch(`/api/floorplans/${encodeURIComponent(plan.id)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(edit),
+    signal,
+  });
+  if (!res.ok) throw await failure(res, 'PUT /api/floorplans/:id');
+  return Floorplan.parse(await res.json());
+}

@@ -5,7 +5,7 @@ import { fetchFloorplans, uploadFloorplan } from '../api';
 import { ACCEPTED, preparePlan } from '../upload';
 
 const STATUS: Record<FloorplanStatus, string> = {
-  uploaded: 'Not traced yet',
+  uploaded: 'Not finished',
   needs_calibration: 'Needs its scale',
   ready: 'Ready',
 };
@@ -43,7 +43,7 @@ export function PlansPage() {
       const { image, name } = await preparePlan(file);
       setUpload({ state: 'busy', step: 'Uploading…' });
       const plan = await uploadFloorplan(image, name);
-      navigate(`/plans/${plan.id}/3d`);
+      navigate(`/plans/${plan.id}/edit`);
     } catch (e) {
       setUpload({ state: 'failed', error: e instanceof Error ? e.message : String(e) });
     }
@@ -100,11 +100,17 @@ export function PlansPage() {
         <h2 className="font-medium">Your plans</h2>
         {listError && <p className="text-red-700">{listError}</p>}
         <ul className="divide-y divide-stone-200 rounded-md border border-stone-200 bg-white">
-          <PlanLink id="demo" name="Demo one-bedroom" detail="A sample plan to try things on" />
+          <PlanLink
+            id="demo"
+            ready
+            name="Demo one-bedroom"
+            detail="A sample plan to try things on"
+          />
           {plans?.map((p) => (
             <PlanLink
               key={p.id}
               id={p.id}
+              ready={p.status === 'ready'}
               name={p.name}
               detail={`${STATUS[p.status]} · ${when.format(p.updatedAt)}`}
             />
@@ -119,13 +125,21 @@ export function PlansPage() {
   );
 }
 
-function PlanLink({ id, name, detail }: { id: string; name: string; detail: string }) {
+/** A plan: ready ones open in 3D, the rest in the editor, with a link to the other. */
+function PlanLink(props: { id: string; name: string; detail: string; ready: boolean }) {
+  const { id, ready } = props;
+  const [main, other] = ready ? ['3d', 'edit'] : ['edit', '3d'];
   return (
-    <li>
-      <Link href={`/plans/${id}/3d`} className="block px-3 py-2 hover:bg-stone-50">
-        <span className="block font-medium">{name}</span>
-        <span className="block text-xs text-stone-500">{detail}</span>
+    <li className="flex items-center hover:bg-stone-50">
+      <Link href={`/plans/${id}/${main}`} className="block flex-1 px-3 py-2">
+        <span className="block font-medium">{props.name}</span>
+        <span className="block text-xs text-stone-500">{props.detail}</span>
       </Link>
+      {ready && (
+        <Link href={`/plans/${id}/${other}`} className="px-3 py-2 text-xs text-stone-500 underline">
+          Edit
+        </Link>
+      )}
     </li>
   );
 }
