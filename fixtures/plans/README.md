@@ -57,6 +57,15 @@ Aim for a mix:
 - doors in awkward spots, several windows
 - different drawing styles (agency plans, hand drawings, 3D-style renders)
 
+## Plans drawn for Roomie
+
+`00-demo-1br` and `01-demo-studio-metric` are drawn by us, so their images can be committed and
+sent to the plan reader. Each `plan.png` is drawn from its `floorplan.json`:
+
+```bash
+pnpm --filter @roomie/models plan:draw fixtures/plans/01-demo-studio-metric
+```
+
 ## Image rights
 
 This repo is public, so only commit images you're allowed to share. For listing images that

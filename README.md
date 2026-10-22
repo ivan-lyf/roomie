@@ -4,7 +4,7 @@
 
 Roomie takes the floor plan of a room, a studio, or a whole apartment and turns it into 3D. It then fills the rooms with real furniture from IKEA.ca. You can walk around the result, swap or delete pieces, and click any item to open it on IKEA's site. Every product has a real price, so you can see what each room, and the whole home, would cost.
 
-> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the catalog, is done too: 2,937 IKEA.ca products in Postgres, each with a true-to-size 3D model (IKEA's own or a stand-in) in Supabase Storage, browsable in a catalog viewer. M2, turning a floor plan into a 3D home, is under way: plans can be uploaded, scaled and traced in a 2D editor, and seen in 3D; the AI plan reader is next. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the catalog, is done too: 2,937 IKEA.ca products in Postgres, each with a true-to-size 3D model (IKEA's own or a stand-in) in Supabase Storage, browsable in a catalog viewer. M2, turning a floor plan into a 3D home, is under way: Gemini reads uploaded plans (walls, doors, windows, rooms and their labels, and the scale from the labels), a 2D editor corrects them, and the home shows in 3D. What's left is checking it against 10–15 real floor plans. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## How it works
 
@@ -46,7 +46,8 @@ You'll need:
 
 - Node 24+ and pnpm
 - Python with [uv](https://docs.astral.sh/uv/) (for the scraper and the `ml/` folder)
-- A Supabase project: Postgres for the catalog, and Storage for the 3D models; later a Claude API key
+- A Supabase project: Postgres for the catalog, and Storage for the 3D models and plan images
+- A Gemini API key from Google AI Studio, to read uploaded plans (without one, plans are traced by hand); later a Claude API key
 
 Copy `.env.example` to `.env` and fill in your own values. `.env` is gitignored and must never be committed. The API reads the catalog from Postgres, so set `DATABASE_URL` and run `pnpm db:migrate` once.
 
@@ -61,7 +62,9 @@ pnpm catalog:publish                    # write the products to the database
 pnpm dev                                # then open http://localhost:5173
 ```
 
-At http://localhost:5173 you can upload a floor plan (an image or a PDF), set its scale and trace it in the 2D editor, then see it in 3D; the demo home is there to try both. `/catalog` browses the products.
+At http://localhost:5173 you can upload a floor plan (an image or a PDF). Gemini reads it, you correct it in the 2D editor (or trace it there by hand), then see it in 3D; the demo home is there to try both. `/catalog` browses the products.
+
+`pnpm plans:eval` reads every test plan in `fixtures/plans` (and `data/plans/eval`) and reports how close the readings are: walls, openings, door swings, room types and scale. Readings are cached, so re-runs are free. On Gemini's free tier, Google may use what's sent to improve its products, so only evaluate plans you own.
 
 For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes), `pnpm models:process` and `pnpm catalog:publish`. `pnpm catalog:check` then confirms every product has sound data and a true-to-size model.
 
