@@ -84,6 +84,14 @@ describe('GET /api/models/:file', () => {
     expect(await res.text()).toBe('glTF');
   });
 
+  it('redirects to a signed link when the models are in storage', async () => {
+    const storage = { signedUrl: async (key: string) => `https://files.example/models/${key}?sig=1` };
+    const res = await createApp({ dataDir, db, storage }).request('/api/models/11111111.glb');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('https://files.example/models/11111111.glb?sig=1');
+    expect(res.headers.get('cache-control')).toBe('private, max-age=3000');
+  });
+
   it('404s for missing models and other file names', async () => {
     for (const file of ['22222222.glb', '..%2Fcatalog%2Fproducts.json', 'abc.glb']) {
       expect((await get(`/api/models/${file}`)).status).toBe(404);

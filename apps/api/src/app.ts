@@ -6,16 +6,19 @@ import { z } from 'zod';
 import { modelPath } from './catalog/store';
 import type { Db } from './db/client';
 import { products } from './db/schema';
+import type { Storage } from './storage';
 
 export type AppOptions = {
   dataDir: string;
   /** The catalog's database; without one, /api/products answers 503. */
   db?: Db;
+  /** Where the models are; without it, they're served from data/models. */
+  storage?: Pick<Storage, 'signedUrl'>;
 };
 
 const ProductList = z.array(Product);
 
-export function createApp({ dataDir, db }: AppOptions) {
+export function createApp({ dataDir, db, storage }: AppOptions) {
   const app = new Hono().basePath('/api');
 
   app.get('/health', (c) => c.json({ ok: true }));
@@ -42,6 +45,12 @@ export function createApp({ dataDir, db }: AppOptions) {
   app.get('/models/:file', async (c) => {
     const match = /^(\d{8})\.glb$/.exec(c.req.param('file'));
     if (!match?.[1]) return c.notFound();
+    if (storage) {
+      // The bucket is private, so send a signed link. It stays the same for the hour, which
+      // lets the browser cache the model; this redirect is cached for less than the link lasts.
+      c.header('cache-control', 'private, max-age=3000');
+      return c.redirect(await storage.signedUrl(`${match[1]}.glb`), 302);
+    }
     let body: Buffer;
     try {
       body = await readFile(modelPath(dataDir, match[1]));

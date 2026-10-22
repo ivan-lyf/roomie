@@ -55,7 +55,7 @@ apps/web (React + R3F) ──► apps/api (Node/Hono) ──► Claude API (visi
      │                          │
      └── packages/geometry ◄────┘   (collision, scorer, solver, shared)
                                 │
-                          Postgres + R2 storage
+                          Postgres + Supabase Storage
                                 ▲
      tools/scraper, tools/models (offline: catalog + 3D models)
      ml/ (Python: ratings → reward model → scorer weights)
@@ -75,7 +75,7 @@ apps/web (React + R3F) ──► apps/api (Node/Hono) ──► Claude API (visi
 | API | Node, Hono, Anthropic SDK, Drizzle ORM |
 | Database | Postgres (Supabase or Neon) |
 | Auth | Supabase Auth (M6) |
-| Storage | Cloudflare R2 (GLBs, plan images, screenshots) |
+| Storage | Supabase Storage over its S3 API (GLBs, plan images, screenshots); Cloudflare R2 if downloads outgrow the free plan |
 | Scraper | Python (httpx, uv), weekly GitHub Actions cron |
 | 3D pipeline | gltf-transform (normalize, decimate, meshopt) |
 | ML | Python, pandas, scikit-learn / LightGBM, Jupyter |
@@ -162,7 +162,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] Procedural fallback model per category, at the listed size and tinted with the product's color
 - [x] Products in Postgres; the API reads them from the database (`pnpm catalog:publish`; products gone from IKEA are marked discontinued, never deleted)
 - [x] Catalog viewer (category tabs, families with color and size pickers, 3D preview, IKEA model or stand-in badge) and `pnpm catalog:check`
-- [ ] Upload the models to a private R2 bucket, served through presigned redirects; until then the API serves them from disk
+- [ ] Models in a private Supabase Storage bucket, uploaded by `pnpm catalog:publish` and served through signed links; without storage settings the API serves them from disk
 - Dropped: taking the height from the model when the listing has none. It would recover about 25 products, whose models aren't downloaded because they aren't in the catalog.
 - Deferred until after M4: a weekly GitHub Actions refresh of the MVP categories. It needs model caching between runs and secrets in GitHub, and a public repo must never store IKEA data as workflow artifacts.
 
@@ -220,7 +220,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 **Done when:** you can save a furnished home, sign in on another device, and reopen it unchanged.
 
 ### M7 — Feedback loop (1 week)
-- [ ] Capture canvas screenshots (3 angles per furnished room, plus a top-down view of the home) after generation, upload to R2
+- [ ] Capture canvas screenshots (3 angles per furnished room, plus a top-down view of the home) after generation, upload to Supabase Storage
 - [ ] Internal `/admin/rate` page: two layouts of the same room side by side, pick the winner, optional note (rating per room keeps comparisons small and gives more pairs per home)
 - [ ] Rate 100+ pairs
 - [ ] Few-shot loop: inject top-rated layouts into the intent prompt

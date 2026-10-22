@@ -4,7 +4,7 @@
 
 Roomie takes the floor plan of a room, a studio, or a whole apartment and turns it into 3D. It then fills the rooms with real furniture from IKEA.ca. You can walk around the result, swap or delete pieces, and click any item to open it on IKEA's site. Every product has a real price, so you can see what each room, and the whole home, would cost.
 
-> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the catalog, is nearly done: 2,937 IKEA.ca products are in Postgres, each with a true-to-size 3D model or a stand-in, browsable in a catalog viewer. Moving the models to Cloudflare R2 is what's left. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the catalog, is nearly done: 2,937 IKEA.ca products are in Postgres, each with a true-to-size 3D model or a stand-in, browsable in a catalog viewer. Moving the models into Supabase Storage is what's left. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## How it works
 
@@ -36,7 +36,7 @@ Multi-storey homes, furnishing kitchens and bathrooms, wall-mounted items, L-sha
 |---|---|
 | Web app | React, Vite, TypeScript, React Three Fiber (3D), Tailwind |
 | API | Node, Hono, Claude API, Drizzle ORM |
-| Database, sign-in and storage | Postgres and Auth on Supabase, Cloudflare R2 |
+| Database, sign-in and storage | Postgres, Auth and Storage on Supabase |
 | Product catalog | Python scraper for IKEA.ca (public pages, no credentials) |
 | Layout learning | Python, pandas, scikit-learn / LightGBM |
 
@@ -46,7 +46,7 @@ You'll need:
 
 - Node 24+ and pnpm
 - Python with [uv](https://docs.astral.sh/uv/) (for the scraper and the `ml/` folder)
-- A Postgres database (we use Supabase); later a Claude API key and a Cloudflare R2 bucket
+- A Supabase project: Postgres for the catalog, and Storage for the 3D models; later a Claude API key
 
 Copy `.env.example` to `.env` and fill in your own values. `.env` is gitignored and must never be committed. The API reads the catalog from Postgres, so set `DATABASE_URL` and run `pnpm db:migrate` once.
 

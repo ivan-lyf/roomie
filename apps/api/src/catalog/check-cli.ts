@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { loadConfig } from '../config';
 import { createDb } from '../db/client';
+import { createStorage } from '../storage';
 import { products } from '../db/schema';
 import { productProblems } from './check';
 import { itemNoOf } from './ikea';
@@ -17,12 +18,16 @@ const exists = (file: string) =>
     () => false,
   );
 
-const { dataDir, databaseUrl } = loadConfig();
+const { dataDir, databaseUrl, storage } = loadConfig();
 const db = createDb(databaseUrl);
 try {
   const rows = await db.select().from(products).where(eq(products.status, 'active'));
   const active = z.array(Product).parse(rows);
   const models = await readModels(dataDir);
+  // The models the API serves: in the bucket, or on this machine without storage settings.
+  const stored = storage ? await createStorage(storage).list() : undefined;
+  const hasFile = async (itemNo: string) =>
+    stored ? stored.has(`${itemNo}.glb`) : exists(modelPath(dataDir, itemNo));
 
   type Row = { products: number; 'IKEA model': number; 'stand-in': number; failed: number };
   const table = Object.fromEntries(
@@ -36,8 +41,8 @@ try {
     const itemNo = itemNoOf(product);
     const model = models.get(itemNo);
     const problems = productProblems(product, model);
-    if (model?.source && !(await exists(modelPath(dataDir, itemNo)))) {
-      problems.push('model file missing');
+    if (model?.source && !(await hasFile(itemNo))) {
+      problems.push(storage ? 'model not in the storage bucket' : 'model file missing');
     }
     const row = table[product.category]!;
     row.products++;
