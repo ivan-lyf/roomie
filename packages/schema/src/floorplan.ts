@@ -160,6 +160,10 @@ export const Materials = z.object({
 });
 export type Materials = z.infer<typeof Materials>;
 
+/** A room's own materials: each one set here overrides the home's. */
+export const MaterialsOverride = Materials.partial();
+export type MaterialsOverride = z.infer<typeof MaterialsOverride>;
+
 /** A room is a polygon over the floorplan; its walls are the ones along its boundary. */
 export const Room = z.object({
   id: z.string().min(1),
@@ -172,8 +176,8 @@ export const Room = z.object({
   furnishable: z.boolean(),
   /** Overrides the floorplan's ceiling height (lofts, dropped ceilings). */
   ceilingHeight: PositiveMeters.optional(),
-  /** Overrides the floorplan's materials. */
-  materials: Materials.optional(),
+  /** Overrides some or all of the floorplan's materials. */
+  materials: MaterialsOverride.optional(),
 });
 export type Room = z.infer<typeof Room>;
 

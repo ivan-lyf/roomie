@@ -326,7 +326,10 @@
       "labelTextIds": [
         "t7"
       ],
-      "furnishable": false
+      "furnishable": false,
+      "materials": {
+        "floor": "tile"
+      }
     },
     {
       "id": "r5",
