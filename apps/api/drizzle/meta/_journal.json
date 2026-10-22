@@ -29,6 +29,13 @@
       "when": 1792633772708,
       "tag": "0003_product_families",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792637071542,
+      "tag": "0004_product_status_color_material",
+      "breakpoints": true
     }
   ]
 }

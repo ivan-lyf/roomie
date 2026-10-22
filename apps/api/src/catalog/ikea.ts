@@ -25,6 +25,8 @@ export const IkeaItem = z.object({
   /** The other variants those pickers link to. */
   variantItemNos: z.array(z.string()).default([]),
   imageUrl: z.string().nullable(),
+  color: z.string().nullable().default(null),
+  material: z.string().nullable().default(null),
   modelUrl: z.string().nullable(),
   scrapedAt: z.string(),
 });
@@ -337,9 +339,12 @@ export function toProduct(item: IkeaItem, hasModel: boolean): ImportResult | und
     options: item.options,
     name: item.name,
     category,
+    status: 'active',
     priceCad: item.priceCad,
     url: item.url,
     imageUrl: item.imageUrl,
+    color: item.color,
+    material: item.material,
     ...size,
     modelUrl: null,
     modelSource: hasModel ? 'ikea' : 'procedural',

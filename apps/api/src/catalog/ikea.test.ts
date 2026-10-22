@@ -29,6 +29,8 @@ const sofa: IkeaItem = {
   options: [{ name: 'Cover', value: 'Kilanda light beige' }],
   variantItemNos: ['39384115'],
   imageUrl: null,
+  color: 'beige',
+  material: 'Fabric',
   modelUrl: null,
   scrapedAt: '2026-10-21T15:55:24+00:00',
 };
@@ -67,6 +69,9 @@ describe('toProduct', () => {
         familyId: '594.424.83',
         options: [{ name: 'Cover', value: 'Kilanda light beige' }],
         category: 'sofa',
+        status: 'active',
+        color: 'beige',
+        material: 'Fabric',
         priceCad: 749,
         dims: { w: 2.24, d: 0.92, h: 0.92 },
         shape: 'rect',

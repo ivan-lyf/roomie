@@ -38,6 +38,10 @@ export type ProductShape = z.infer<typeof ProductShape>;
 export const ModelSource = z.enum(['ikea', 'procedural']);
 export type ModelSource = z.infer<typeof ModelSource>;
 
+/** Products are never deleted, so layouts keep resolving them; gone from IKEA is discontinued. */
+export const ProductStatus = z.enum(['active', 'discontinued']);
+export type ProductStatus = z.infer<typeof ProductStatus>;
+
 /** One option a variant is picked by, e.g. { name: 'Color', value: 'White' }. */
 export const ProductOption = z.object({ name: z.string().min(1), value: z.string().min(1) });
 export type ProductOption = z.infer<typeof ProductOption>;
@@ -50,9 +54,13 @@ export const Product = z.object({
   options: z.array(ProductOption),
   name: z.string().min(1),
   category: Category,
+  status: ProductStatus,
   priceCad: z.number().nonnegative(),
   url: z.url(),
   imageUrl: z.url().nullable(),
+  /** IKEA's own words, e.g. "beige, brown" and "Solid wood", for matching a style across rooms. */
+  color: z.string().nullable(),
+  material: z.string().nullable(),
   dims: Dims,
   shape: ProductShape,
   /** Width when fully extended (extendable tables); dims hold the everyday size. */
