@@ -1,4 +1,4 @@
-import { planStatus } from '@roomie/geometry';
+import { isTraced, planStatus } from '@roomie/geometry';
 import { useEffect } from 'react';
 import { Link } from 'wouter';
 import demoImage from '../../../../fixtures/plans/00-demo-1br/plan.png';
@@ -44,7 +44,9 @@ export function EditorPage({ id }: { id: string }) {
       editor.set({ imperial: scale.sourceUnit === 'imperial' });
   }, [plan?.id]);
 
+  // Shortcuts are off while the plan is being read: the reading replaces what they'd change.
   useEffect(() => {
+    if (reading) return;
     const onKey = (e: KeyboardEvent) => {
       if (typing(e)) return;
       const editor = useEditor.getState();
@@ -90,7 +92,7 @@ export function EditorPage({ id }: { id: string }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [reading]);
 
   if (error) {
     return (
@@ -104,12 +106,12 @@ export function EditorPage({ id }: { id: string }) {
   }
   if (!plan) return null;
   const status = planStatus(plan);
-  const traced = plan.walls.length > 0 || plan.rooms.length > 0;
+  // Asked for, a reading replaces whatever the server has traced, which may be more than shows.
   const readAgain = () => {
     const sure =
-      !traced ||
+      !isTraced(plan) ||
       confirm("Reading the plan again replaces what's traced. You can undo it afterwards.");
-    if (sure) void reader.run(traced);
+    if (sure) void reader.run(true);
   };
 
   return (
@@ -127,6 +129,7 @@ export function EditorPage({ id }: { id: string }) {
             if (name && name !== plan.name) useFloorplan.getState().rename(name);
           }}
           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          disabled={reading}
           className="w-64 rounded border border-transparent px-2 py-1 font-semibold hover:border-stone-300"
         />
         <span className={`text-xs ${save.state === 'failed' ? 'text-red-700' : 'text-stone-500'}`}>
@@ -165,7 +168,7 @@ export function EditorPage({ id }: { id: string }) {
           View in 3D
         </Link>
       </header>
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <Toolbar calibrated={calibrated} />
         <div className="relative min-w-0 flex-1">
           <PlanCanvas
@@ -175,14 +178,6 @@ export function EditorPage({ id }: { id: string }) {
               id === DEMO_ID ? demoImage : plan.image ? floorplanImageUrl(plan.id) : undefined
             }
           />
-          {reading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/60">
-              <p className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg">
-                <span className="size-4 animate-spin rounded-full border-2 border-stone-300 border-t-stone-800" />
-                Reading the plan with Gemini… this can take a few minutes.
-              </p>
-            </div>
-          )}
           {reader.read.state === 'failed' && (
             <div className="absolute inset-x-4 top-4 flex items-start gap-3 rounded-lg bg-amber-50 px-4 py-3 text-amber-900 shadow">
               <p className="flex-1">
@@ -225,6 +220,15 @@ export function EditorPage({ id }: { id: string }) {
             </>
           )}
         </aside>
+        {reading && (
+          // Over the whole editor: nothing can change while the reading would replace it.
+          <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+            <p className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg">
+              <span className="size-4 animate-spin rounded-full border-2 border-stone-300 border-t-stone-800" />
+              Reading the plan with Gemini… this can take a few minutes.
+            </p>
+          </div>
+        )}
       </div>
     </main>
   );

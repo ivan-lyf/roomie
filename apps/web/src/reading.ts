@@ -1,3 +1,4 @@
+import { isTraced } from '@roomie/geometry';
 import type { Floorplan } from '@roomie/schema';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, readFloorplan } from './api';
@@ -26,6 +27,8 @@ export function usePlanReader(id: string, plan: Floorplan | undefined) {
       try {
         const result = await readFloorplan(id, replace);
         const store = useFloorplan.getState();
+        // A reading takes minutes: if another plan is open by now, this one is saved and done.
+        if (store.plan?.id !== result.id) return;
         if (replace) store.replace(result);
         else store.load(result);
         const editor = useEditor.getState();
@@ -45,16 +48,15 @@ export function usePlanReader(id: string, plan: Floorplan | undefined) {
   );
 
   const fresh =
-    plan !== undefined &&
-    plan.image !== null &&
-    plan.reading === null &&
-    plan.walls.length === 0 &&
-    plan.rooms.length === 0;
+    plan !== undefined && plan.image !== null && plan.reading === null && !isTraced(plan);
   useEffect(() => {
     if (id === DEMO_ID || !fresh || started.has(id)) return;
-    started.add(id);
-    // The first state change waits a tick: an effect shouldn't set state as it runs.
-    const t = setTimeout(() => void run(false));
+    // A tick later, so state isn't set while the effect runs, and only then marked started: a
+    // development double run (StrictMode) clears the first timer before it fires.
+    const t = setTimeout(() => {
+      started.add(id);
+      void run(false);
+    });
     return () => clearTimeout(t);
   }, [id, fresh, run]);
 

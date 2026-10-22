@@ -5,6 +5,7 @@ import {
   convertDraft,
   defaultOpeningHeight,
   deleteWall,
+  isTraced,
   labelsIn,
   mergePolygons,
   movePoint,
@@ -336,8 +337,7 @@ export const useFloorplan = create<FloorplanState>()(
         calibrate: (scale) =>
           edit((plan) => {
             const draft = plan.reading?.draft;
-            const untraced = plan.walls.length === 0 && plan.rooms.length === 0;
-            if (!plan.scale && draft && untraced) {
+            if (!plan.scale && draft && !isTraced(plan)) {
               const sourceUnit =
                 scale.sourceUnit === 'none'
                   ? labelUnit(plan, scale.metersPerPixel)

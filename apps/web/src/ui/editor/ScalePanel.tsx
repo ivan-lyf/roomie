@@ -2,6 +2,7 @@ import {
   area,
   checkRoomLabels,
   distance,
+  isTraced,
   scaleFromArea,
   scaleFromAreaAndSide,
   scaleFromWallLength,
@@ -126,7 +127,7 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
   }
 
   // A plan the reader read but couldn't scale: setting the scale converts what it read.
-  const waiting = !scale && plan.reading !== null && plan.walls.length === 0;
+  const waiting = !scale && plan.reading !== null && !isTraced(plan);
   const apply = () => {
     if (!result) return;
     calibrate(result.scale);

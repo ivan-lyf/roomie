@@ -17,6 +17,18 @@ export type SaveState = 'saved' | 'unsaved' | 'saving' | 'failed' | 'local';
  */
 const savedSeconds = new Map<string, number>();
 
+type StoreState = { plan: Floorplan | undefined; loaded: Floorplan | undefined };
+
+/**
+ * What a change to the floorplan store means for saving: a plan loaded from the server (already
+ * saved), or an edit. An undo back to the loaded plan is an edit too: the server may have moved
+ * on since.
+ */
+export function storeChange(s: StoreState, prev: StoreState): 'loaded' | 'edited' | undefined {
+  if (s.plan === prev.plan || !s.plan) return undefined;
+  return s.loaded !== prev.loaded && s.plan === s.loaded ? 'loaded' : 'edited';
+}
+
 /** Saves one plan's changes from the store, one request at a time. */
 class Saver {
   saved: Floorplan | undefined;
@@ -81,10 +93,9 @@ export function useAutosave(id: string): { state: SaveState; retry: () => void }
     retry.current = () => void saver.save();
     saver.saved = useFloorplan.getState().plan;
     const unsubscribe = useFloorplan.subscribe((s, prev) => {
-      if (s.plan === prev.plan || !s.plan || s.plan.id !== id) return;
-      // A plan just loaded from the server is what's saved.
-      if (s.plan === s.loaded) saver.saved = s.plan;
-      else if (s.plan !== saver.saved) saver.schedule();
+      const what = storeChange(s, prev);
+      if (what === 'loaded') saver.saved = s.plan;
+      else if (what === 'edited' && s.plan?.id === id && s.plan !== saver.saved) saver.schedule();
     });
     const flush = () => {
       if (document.visibilityState === 'hidden') void saver.save();
