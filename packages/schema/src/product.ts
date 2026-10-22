@@ -13,6 +13,8 @@ export const Category = z.enum([
   'shelving',
   'wardrobe',
   'dresser',
+  'nightstand',
+  'tv_unit',
   'rug',
   'floor_lamp',
 ]);

@@ -193,6 +193,27 @@ describe('category rules', () => {
     expect(imported(round)).toMatchObject({ shape: 'round', dims: { w: 1.2, d: 1.2, h: 0.008 } });
   });
 
+  it('keeps TV benches and leaves out TV storage combinations', () => {
+    const bench = item('12153', 'TV bench with doors, white', {
+      Width: 1.8,
+      Depth: 0.42,
+      Height: 0.48,
+    });
+    expect(imported(bench)).toMatchObject({
+      category: 'tv_unit',
+      dims: { w: 1.8, d: 0.42, h: 0.48 },
+    });
+    expect(rejection(item('10475', 'TV storage combination, white', {}))).toBe(PART);
+  });
+
+  it('sizes round nightstands by their diameter and skips wall-mounted ones', () => {
+    const square = item('20656', 'Nightstand, white', { Width: 0.45, Depth: 0.35, Height: 0.55 });
+    expect(imported(square)).toMatchObject({ category: 'nightstand', shape: 'rect' });
+    const roundOne = item('20656', 'Nightstand, handmade', { Diameter: 0.52, Height: 0.7 });
+    expect(imported(roundOne)).toMatchObject({ shape: 'round', dims: { w: 0.52, d: 0.52 } });
+    expect(rejection(item('20656', 'Wall-mounted bedside table, white', {}))).toBe(PART);
+  });
+
   it('makes floor lamps round and as wide as their shade or base', () => {
     const lamp = item('10731', 'Floor lamp, white', {
       Height: 1.5,

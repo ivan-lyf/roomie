@@ -23,8 +23,8 @@ Every generated layout is logged and rated internally, so layouts get better ove
 
 - Single-floor homes: single rooms, studios and multi-room apartments
 - Living rooms, bedrooms, studios, dining areas and dens get furnished; kitchens, bathrooms, hallways and the like are shown in 3D but left empty
-- Beds, sofas, armchairs, coffee tables, dining sets, desks, shelving, wardrobes, dressers, rugs and floor lamps
-- About 2,700 IKEA.ca products: every valid one in these categories
+- Beds, nightstands, sofas, armchairs, coffee tables, TV units, dining sets, desks, shelving, wardrobes, dressers, rugs and floor lamps
+- About 2,900 IKEA.ca products: every valid one in these categories
 - Wall color, floor material and lighting controls
 - Sign in to save your homes
 
@@ -60,7 +60,7 @@ pnpm models:process                     # fit each model to its listed size
 pnpm dev                                # then open http://localhost:5173
 ```
 
-For the whole catalog (about 2,700 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes) and `pnpm models:process`.
+For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes) and `pnpm models:process`.
 
 Scraped data and models stay in `data/`, which is gitignored.
 

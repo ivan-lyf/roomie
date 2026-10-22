@@ -214,6 +214,27 @@ const CATEGORY_RULES: [Category, CategoryRule][] = [
     { ikeaCategories: ['10451'], skip: /^glass top$/i, size: (l) => box(l, 'Height') },
   ],
   [
+    'nightstand',
+    {
+      ikeaCategories: ['20656'],
+      skip: /wall-mounted/i,
+      size: (l) =>
+        l.has('Diameter') && !l.has('Width')
+          ? round(l.first('Diameter'), l.first('Height'))
+          : box(l, 'Height'),
+    },
+  ],
+  [
+    'tv_unit',
+    {
+      // TV stands & media furniture, and BESTÅ TV benches. TV storage combinations are left
+      // out: they include wall-mounted cabinets.
+      ikeaCategories: ['10475', '12153'],
+      only: /^(tv bench|tv unit|gaming tv stand)/i,
+      size: (l) => box(l, 'Height'),
+    },
+  ],
+  [
     'rug',
     {
       ikeaCategories: ['10653'],

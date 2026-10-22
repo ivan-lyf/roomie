@@ -30,8 +30,8 @@ Measured against a fixed test set of 10–15 real floor plans (e.g. Vancouver re
 - Scale from the plan's dimension labels, with the units detected automatically, or from user calibration when the plan has no labels (§5.1)
 - Furnishable room types: living room, bedroom, studio, dining area, den/office
 - Other room types, rendered empty: kitchen, bathroom, hallway, closet, laundry, balcony, other
-- Categories: bed, sofa, armchair, coffee table, dining table + chairs, desk + desk chair, shelving, wardrobe/dresser, rugs, floor lamps
-- Every valid IKEA.ca product variant in these categories: about 2,700, not a hand-picked 300–500
+- Categories: bed, nightstand, sofa, armchair, coffee table, TV unit, dining table + chairs, desk + desk chair, shelving, wardrobe/dresser, rugs, floor lamps
+- Every valid IKEA.ca product variant in these categories: about 2,900, not a hand-picked 300–500
 - Generation inputs: which rooms to furnish (default: every furnishable room), one budget for the whole home, style preset (2–3) shared across rooms, must-haves per room
 - Real 3D rendering for both the room and the products
 - Wall color, floor material, and lighting controls
@@ -148,7 +148,7 @@ Each milestone ends with something demoable. Estimates assume about 10 hours a w
 **Done when:** one sofa renders in a blank R3F scene at its correct real-world size.
 
 ### M1 — Catalog (2 weeks)
-The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 3,062 candidates; after the category rules, **2,711 products** remain, 1,642 of them with an IKEA model. L-shaped, T-shaped and corner pieces stay out until the geometry supports them (§8).
+The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 4,146 candidates; after the category rules, **2,937 products** remain, 1,783 of them with an IKEA model. L-shaped, T-shaped and corner pieces stay out until the geometry supports them (§8).
 
 - [x] Scraper for every category: IKEA.ca sitemap, each page's JSON-LD and embedded JSON (`tools/scraper`)
 - [x] Rate limiting, caching, `scrapedAt` timestamps
@@ -156,7 +156,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] Category rules: IKEA category IDs for each MVP category; skip parts, add-ons, and L-shaped pieces
 - [x] Dimension normalizer per category: diameter for round tables, rugs, and lamps; bed length as depth; the everyday size of extendable tables, with the extended length stored
 - [x] Product fields: footprint shape, extended width, image URL
-- [x] Product → variant modeling: colors, sizes, and options grouped into 1,041 families, from each page's pickers
+- [x] Product → variant modeling: colors, sizes, and options grouped into 1,106 families, from each page's pickers
 - [ ] GLB capture for the MVP categories (about 2,000 models)
 - [ ] Model pipeline: rescale to listed dims, origin at bottom center, front facing +Z (checked per category), height from the model when the listing has none, decimate, compress, textures ≤ 1024 px, < 1 MB per model, upload to R2
 - [ ] Procedural fallback model per category, at the listed size
