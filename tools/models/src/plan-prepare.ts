@@ -1,6 +1,6 @@
 // Prepares a plan image for the reader's eval the way the upload page does
-// (apps/web/src/upload.ts): on white, at most 3,000 px on its longer side. Prints how much it was scaled, to convert a
-// known scale to the prepared image's pixels.
+// (apps/web/src/upload.ts): on white, at most 3,000 px on its longer side. Prints how much it
+// was scaled, to convert a known scale to the prepared image's pixels.
 //
 // Usage: pnpm --filter @roomie/models plan:prepare <image> <plan folder>
 
