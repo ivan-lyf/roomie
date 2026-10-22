@@ -4,7 +4,7 @@
 import { access, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NodeIO } from '@gltf-transform/core';
+import { Logger, NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, KHRDracoMeshCompression } from '@gltf-transform/extensions';
 import {
   Category,
@@ -14,17 +14,21 @@ import {
   Product,
 } from '@roomie/schema';
 import draco3d from 'draco3dgltf';
+import { MeshoptEncoder } from 'meshoptimizer';
 import { z } from 'zod';
 import { BACKED, chooseYaw, scaleChange } from './fit';
 import { facesBackwards, normalizeModel, sourceSize } from './normalize';
+import { optimizeModel } from './optimize';
 
 /** Bump when the processing changes, so every model is redone. */
-const PIPELINE_VERSION = 2;
+const PIPELINE_VERSION = 4;
 /** IKEA models already face +Z (checked on 116 sofa models, 2026-10-21). */
 const IKEA_YAW = 0;
 /** Scale changes above this get a warning, and above the hard limit the model is skipped. */
 const WARN_SCALE_CHANGE = 0.1;
 const MAX_SCALE_CHANGE = 0.25;
+/** Models bigger than this get a note: they slow down a furnished home. */
+const SIZE_BUDGET_BYTES = 1024 * 1024;
 
 const dataDir = process.env.DATA_DIR || fileURLToPath(new URL('../../../data', import.meta.url));
 const productsPath = path.join(dataDir, 'catalog', 'products.json');
@@ -39,7 +43,12 @@ const exists = (file: string) =>
 
 const io = new NodeIO()
   .registerExtensions(ALL_EXTENSIONS)
-  .registerDependencies({ 'draco3d.decoder': await draco3d.createDecoderModule() });
+  .registerDependencies({
+    'draco3d.decoder': await draco3d.createDecoderModule(),
+    'meshopt.encoder': MeshoptEncoder,
+  })
+  // Per-model details go in the manifest instead.
+  .setLogger(new Logger(Logger.Verbosity.ERROR));
 
 const products = z.array(Product).parse(JSON.parse(await readFile(productsPath, 'utf8')));
 await mkdir(outDir, { recursive: true });
@@ -117,14 +126,18 @@ async function processModel(
   if (BACKED.has(product.category) && facesBackwards(doc, product.dims.d)) {
     notes.push('check facing: its tallest part is not at the back');
   }
-  // Write plain geometry so the browser needs no Draco decoder.
+  // Meshopt replaces Draco: three.js decodes it without fetching a decoder.
   doc
     .getRoot()
     .listExtensionsUsed()
     .find((e) => e.extensionName === KHRDracoMeshCompression.EXTENSION_NAME)
     ?.dispose();
+  await optimizeModel(doc);
   const glb = await io.writeBinary(doc);
   await writeFile(out, glb);
+  if (glb.byteLength > SIZE_BUDGET_BYTES) {
+    notes.push(`over 1 MB (${(glb.byteLength / SIZE_BUDGET_BYTES).toFixed(1)} MB)`);
+  }
   return {
     ...fields,
     outcome: change > WARN_SCALE_CHANGE ? 'rescaled' : 'fitted',
@@ -164,8 +177,12 @@ function report(all: ModelManifestEntry[], reusedCount: number) {
   const flagged = all.filter((e) => e.notes.some((n) => n.startsWith('check facing')));
   for (const e of flagged.slice(0, 20)) console.log(`check facing: ${e.itemNo} (${e.category})`);
   if (flagged.length > 20) console.log(`... and ${flagged.length - 20} more facing flags`);
-  const written = all.filter((e) => e.source).length;
+  const written = all.filter((e) => e.source);
+  const bytes = written.reduce((sum, e) => sum + (e.bytes ?? 0), 0);
+  const big = written.filter((e) => (e.bytes ?? 0) > SIZE_BUDGET_BYTES).length;
   console.log(
-    `${written} models in ${outDir} (${reusedCount} unchanged), manifest: ${manifestPath}`,
+    `${written.length} models, ${(bytes / 2 ** 20).toFixed(0)} MB in all, ` +
+      `${(bytes / 2 ** 10 / Math.max(written.length, 1)).toFixed(0)} KB on average, ${big} over 1 MB`,
   );
+  console.log(`${reusedCount} unchanged; manifest: ${manifestPath}`);
 }
