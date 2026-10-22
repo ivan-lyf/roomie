@@ -25,6 +25,7 @@ const sofa: IkeaItem = {
     measure('Backrest height', 0.76),
     measure('Height including back cushions', 0.92),
   ],
+  imageUrl: null,
   modelUrl: null,
   scrapedAt: '2026-10-21T15:55:24+00:00',
 };

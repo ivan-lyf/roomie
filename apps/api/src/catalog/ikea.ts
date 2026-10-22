@@ -18,6 +18,7 @@ export const IkeaItem = z.object({
       maxM: z.number().nullable(),
     }),
   ),
+  imageUrl: z.string().nullable(),
   modelUrl: z.string().nullable(),
   scrapedAt: z.string(),
 });
@@ -78,7 +79,10 @@ export function toProduct(item: IkeaItem, hasModel: boolean): ImportResult | und
     category,
     priceCad: item.priceCad,
     url: item.url,
+    imageUrl: item.imageUrl,
     dims,
+    shape: 'rect',
+    extendedW: null,
     modelUrl: null,
     modelSource: hasModel ? 'ikea' : 'procedural',
     styleTags: [],

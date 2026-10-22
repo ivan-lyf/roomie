@@ -82,7 +82,7 @@ All lengths in **meters**. See `CLAUDE.md` for the coordinate conventions.
 Room      { id, name, roomType, walls: Wall[], openings: Opening[], materials, sourceImageUrl }
 Wall      { id, a: Vec2, b: Vec2, thickness, height }
 Opening   { id, wallId, kind: 'door' | 'window', offset, width, height, sillHeight?, swing? }
-Product   { articleNo, name, category, priceCad, url, dims: { w, d, h }, modelUrl, modelSource: 'ikea' | 'procedural', styleTags, scrapedAt }
+Product   { articleNo, name, category, priceCad, url, imageUrl, dims: { w, d, h }, shape: 'rect' | 'round', extendedW, modelUrl, modelSource: 'ikea' | 'procedural', styleTags, scrapedAt }
 Layout    { id, roomId, inputs, placements: Placement[], score, scoreBreakdown, llmIntent, screenshotUrls, createdAt }
 Placement { articleNo, x, y, rotation }
 Rating    { id, layoutA, layoutB, winner, note, createdAt }

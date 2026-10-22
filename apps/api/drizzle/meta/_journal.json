@@ -15,6 +15,13 @@
       "when": 1792630336335,
       "tag": "0001_enable_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792631095007,
+      "tag": "0002_product_shape_and_image",
+      "breakpoints": true
     }
   ]
 }

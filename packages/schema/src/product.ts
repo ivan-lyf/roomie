@@ -29,6 +29,10 @@ export const Dims = z.object({
 });
 export type Dims = z.infer<typeof Dims>;
 
+/** Footprint outline. Round products have w = d = their diameter. */
+export const ProductShape = z.enum(['rect', 'round']);
+export type ProductShape = z.infer<typeof ProductShape>;
+
 export const ModelSource = z.enum(['ikea', 'procedural']);
 export type ModelSource = z.infer<typeof ModelSource>;
 
@@ -38,7 +42,11 @@ export const Product = z.object({
   category: Category,
   priceCad: z.number().nonnegative(),
   url: z.url(),
+  imageUrl: z.url().nullable(),
   dims: Dims,
+  shape: ProductShape,
+  /** Width when fully extended (extendable tables); dims hold the everyday size. */
+  extendedW: PositiveMeters.nullable(),
   modelUrl: z.url().nullable(),
   modelSource: ModelSource,
   styleTags: z.array(z.string()),
