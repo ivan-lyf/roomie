@@ -80,7 +80,7 @@ describe('toRawPlan', () => {
 describe('geminiReader', () => {
   it('sends the image, the prompt and the schema, and reads the answer', async () => {
     const gemini = fakeGemini(JSON.stringify(plan));
-    const reader = geminiReader({ apiKey: 'key', model: 'gemini-test', fetch: gemini.fetch });
+    const reader = geminiReader({ apiKey: 'key', models: ['gemini-test'], fetch: gemini.fetch });
     const result = await reader.read(image);
     const [request] = gemini.requests;
     expect(request!.url).toMatch(/models\/gemini-test:generateContent$/);
@@ -109,7 +109,7 @@ describe('geminiReader', () => {
 
   it('asks once more when the answer is malformed, saying what was wrong', async () => {
     const gemini = fakeGemini('{"walls": "none"}', JSON.stringify(plan));
-    const reader = geminiReader({ apiKey: 'key', model: 'm', fetch: gemini.fetch });
+    const reader = geminiReader({ apiKey: 'key', models: ['m'], fetch: gemini.fetch });
     const result = await reader.read(image);
     expect(result.plan.rooms).toHaveLength(1);
     const retry = gemini.requests[1]!.body['contents'] as {
@@ -123,15 +123,15 @@ describe('geminiReader', () => {
 
   it('gives up cleanly after a second malformed answer', async () => {
     const gemini = fakeGemini('not json', 'still not json');
-    const reader = geminiReader({ apiKey: 'key', model: 'm', fetch: gemini.fetch });
+    const reader = geminiReader({ apiKey: 'key', models: ['m'], fetch: gemini.fetch });
     const error = await reader.read(image).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ReaderError);
     expect(error).toMatchObject({ status: 502, message: expect.stringMatching(/twice: not JSON/) });
   });
 
-  it('says when Gemini is over its rate limit', async () => {
+  it('says when a model is over its rate limit', async () => {
     const limited = Response.json({ error: { message: 'Quota exceeded' } }, { status: 429 });
-    const reader = geminiReader({ apiKey: 'key', model: 'm', fetch: fakeGemini(limited).fetch });
+    const reader = geminiReader({ apiKey: 'key', models: ['m'], fetch: fakeGemini(limited).fetch });
     await expect(reader.read(image)).rejects.toMatchObject({ status: 429 });
   });
 
@@ -140,7 +140,7 @@ describe('geminiReader', () => {
     const once = fakeGemini(busy(), JSON.stringify(plan));
     const reader = geminiReader({
       apiKey: 'k',
-      model: 'm',
+      models: ['m'],
       fetch: once.fetch,
       busyRetryMs: [0, 0],
     });
@@ -150,7 +150,7 @@ describe('geminiReader', () => {
     const always = fakeGemini(busy(), busy(), busy());
     const stuck = geminiReader({
       apiKey: 'k',
-      model: 'm',
+      models: ['m'],
       fetch: always.fetch,
       busyRetryMs: [0, 0],
     });
@@ -161,8 +161,80 @@ describe('geminiReader', () => {
     expect(always.requests).toHaveLength(3);
   });
 
+  it("says when a model's daily quota is used up, and when it resets", async () => {
+    const daily = Response.json(
+      {
+        error: {
+          message: 'You exceeded your current quota',
+          details: [
+            {
+              '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+              violations: [
+                { quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '20' },
+              ],
+            },
+            { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '48326s' },
+          ],
+        },
+      },
+      { status: 429 },
+    );
+    const reader = geminiReader({
+      apiKey: 'k',
+      models: ['gemini-a'],
+      fetch: fakeGemini(daily).fetch,
+    });
+    await expect(reader.read(image)).rejects.toMatchObject({
+      status: 429,
+      message:
+        "gemini-a's daily limit (20 reads on the free tier) is used up; it resets in about 14 h.",
+    });
+  });
+
+  it('hands over to the next model when one is busy or out of quota', async () => {
+    const busy = () => Response.json({ error: { message: 'high demand' } }, { status: 503 });
+    const gemini = fakeGemini(busy(), busy(), busy(), JSON.stringify(plan));
+    const reader = geminiReader({
+      apiKey: 'k',
+      models: ['gemini-a', 'gemini-b'],
+      fetch: gemini.fetch,
+      busyRetryMs: [0, 0],
+    });
+    expect(reader.model).toBe('gemini-a');
+    const result = await reader.read(image);
+    expect(result.model).toBe('gemini-b');
+    expect(gemini.requests.map((r) => r.url.match(/models\/([^:]+)/)![1])).toEqual([
+      'gemini-a',
+      'gemini-a',
+      'gemini-a',
+      'gemini-b',
+    ]);
+  });
+
+  it('gives every reason when no model can read the plan', async () => {
+    const limited = () => Response.json({ error: { message: 'slow down' } }, { status: 429 });
+    const reader = geminiReader({
+      apiKey: 'k',
+      models: ['gemini-a', 'gemini-b'],
+      fetch: fakeGemini(limited(), limited()).fetch,
+    });
+    await expect(reader.read(image)).rejects.toMatchObject({
+      status: 429,
+      message:
+        'No Gemini model could read the plan: gemini-a is over its rate limit; try again in a ' +
+        'minute. gemini-b is over its rate limit; try again in a minute.',
+    });
+  });
+
+  it("doesn't hand over a malformed answer: that's the model's own retry", async () => {
+    const gemini = fakeGemini('nope', 'still nope', JSON.stringify(plan));
+    const reader = geminiReader({ apiKey: 'k', models: ['a', 'b'], fetch: gemini.fetch });
+    await expect(reader.read(image)).rejects.toMatchObject({ status: 502 });
+    expect(gemini.requests).toHaveLength(2);
+  });
+
   it('reads a cached answer back into pixels', () => {
-    const reader = geminiReader({ apiKey: 'key', model: 'm', fetch: fakeGemini().fetch });
+    const reader = geminiReader({ apiKey: 'key', models: ['m'], fetch: fakeGemini().fetch });
     expect(reader.planFromRaw(plan, image)).toEqual(toRawPlan(plan, image));
   });
 });

@@ -18,7 +18,7 @@ export function applyReading(
   const analysis = analyzeDraft(draft);
   const reading: PlanReading = {
     provider: reader.provider,
-    model: reader.model,
+    model: result.model ?? reader.model,
     promptVersion: reader.promptVersion,
     durationMs: result.durationMs,
     ...(result.usage && { usage: result.usage }),

@@ -30,7 +30,8 @@ if (!config.reader) {
   console.error('Set GEMINI_API_KEY in .env to read plans (see .env.example).');
   process.exit(1);
 }
-const reader = geminiReader({ ...config.reader, ...(model && { model }) });
+// One model at a time, so each reading is that model's.
+const reader = geminiReader({ ...config.reader, models: [model ?? config.reader.models[0]!] });
 const cache = new ReadingCache(path.join(config.dataDir, 'cache', 'plan-reader'));
 
 /** The folders under each parent, for the default set of test plans. */

@@ -119,9 +119,11 @@ const pct = (n: number) => `${(n * 100).toFixed(0)}%`;
 export function formatReport(results: readonly EvalResult[]): string {
   const rows = results.map((r) => {
     const g = r.geometry;
+    // A unit other than the plan's meta.json says is marked with "!".
+    const wrongUnit = r.scale.expectedUnit && r.scale.unit !== r.scale.expectedUnit ? '!' : '';
     const scale =
       r.scale.status === 'found'
-        ? `${r.scale.unit}${r.scale.unit === r.scale.expectedUnit || !r.scale.expectedUnit ? '' : '!'} ` +
+        ? `${r.scale.unit}${wrongUnit} ` +
           `${r.scale.error! >= 0 ? '+' : ''}${(r.scale.error! * 100).toFixed(1)}%`
         : r.scale.status;
     return [

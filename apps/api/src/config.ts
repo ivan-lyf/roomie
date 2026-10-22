@@ -5,10 +5,11 @@ import type { StorageConfig } from './storage';
 const defaultDataDir = fileURLToPath(new URL('../../../data', import.meta.url));
 
 /**
- * Google's current Flash model: the free tier has no Pro ones. `pnpm plans:eval --model` compares
- * others.
+ * The Gemini models that read plans, in order: Google's current Flash model (the free tier has no
+ * Pro ones), then an older Flash model, as accurate on the test plans and faster, for when the
+ * first is busy or out of its daily quota. `pnpm plans:eval --model` compares others.
  */
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
+export const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash'];
 
 /** Treat empty values in .env as unset. */
 const unsetIfEmpty = <T extends z.ZodType>(schema: T) =>
@@ -33,11 +34,12 @@ const Env = z.object({
   // The vision model that reads uploaded plans: Gemini when there's a key, unless set to none.
   PLAN_READER: unsetIfEmpty(z.enum(['gemini', 'none']).optional()),
   GEMINI_API_KEY: optional(),
-  GEMINI_MODEL: unsetIfEmpty(z.string().default(DEFAULT_GEMINI_MODEL)),
+  /** One model, or several separated by commas, tried in order. */
+  GEMINI_MODEL: optional(),
 });
 
 /** Which vision model reads plans, and how to reach it. */
-export type ReaderConfig = { provider: 'gemini'; apiKey: string; model: string };
+export type ReaderConfig = { provider: 'gemini'; apiKey: string; models: string[] };
 
 export type Config = {
   port: number;
@@ -76,7 +78,15 @@ function readerConfig(e: z.infer<typeof Env>): ReaderConfig | undefined {
     }
     return undefined;
   }
-  return { provider: 'gemini', apiKey: e.GEMINI_API_KEY, model: e.GEMINI_MODEL };
+  const models = (e.GEMINI_MODEL ?? '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter((m) => m !== '');
+  return {
+    provider: 'gemini',
+    apiKey: e.GEMINI_API_KEY,
+    models: models.length > 0 ? models : DEFAULT_GEMINI_MODELS,
+  };
 }
 
 /** All five STORAGE_* settings, or none: a partial set is almost always a typo. */

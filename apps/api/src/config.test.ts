@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_GEMINI_MODEL, loadConfig } from './config';
+import { DEFAULT_GEMINI_MODELS, loadConfig } from './config';
 
 describe('loadConfig', () => {
   it('uses defaults and treats empty values as unset', () => {
@@ -26,11 +26,12 @@ describe('loadConfig', () => {
     expect(loadConfig({ GEMINI_API_KEY: 'key' }).reader).toEqual({
       provider: 'gemini',
       apiKey: 'key',
-      model: DEFAULT_GEMINI_MODEL,
+      models: DEFAULT_GEMINI_MODELS,
     });
-    expect(loadConfig({ GEMINI_API_KEY: 'key', GEMINI_MODEL: 'gemini-x' }).reader?.model).toBe(
-      'gemini-x',
-    );
+    const models = (GEMINI_MODEL: string) =>
+      loadConfig({ GEMINI_API_KEY: 'key', GEMINI_MODEL }).reader?.models;
+    expect(models('gemini-x')).toEqual(['gemini-x']);
+    expect(models(' gemini-x, gemini-y ,')).toEqual(['gemini-x', 'gemini-y']);
     expect(loadConfig({ GEMINI_API_KEY: 'key', PLAN_READER: 'none' }).reader).toBeUndefined();
     expect(() => loadConfig({ PLAN_READER: 'gemini' })).toThrow(/needs GEMINI_API_KEY/);
   });

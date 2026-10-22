@@ -13,6 +13,8 @@ export type PlanImage = ImageSize & { bytes: Uint8Array; mimeType: 'image/png' |
 export type ReaderUsage = { inputTokens: number; outputTokens: number };
 
 export type ReaderResult = {
+  /** The model that answered, when the reader can try more than one. */
+  model?: string;
   /** The model's answer as it came, for the record and for the eval's cache. */
   raw: unknown;
   /** The same, in image pixels. */
@@ -27,6 +29,7 @@ export type ReaderResult = {
  */
 export interface PlanReader {
   provider: string;
+  /** The model it reads with first. */
   model: string;
   promptVersion: string;
   /** Throws a `ReaderError` when it can't read the plan. */
@@ -35,11 +38,15 @@ export interface PlanReader {
   planFromRaw(raw: unknown, size: ImageSize): RawPlan;
 }
 
-/** Why a plan couldn't be read, with the HTTP status the API answers with. */
+/**
+ * Why a plan couldn't be read, with the HTTP status the API answers with. `unavailable` is a
+ * model too busy or out of its quota, which another model might not be.
+ */
 export class ReaderError extends Error {
   constructor(
     message: string,
     readonly status: 429 | 502 | 504,
+    readonly unavailable = false,
   ) {
     super(message);
     this.name = 'ReaderError';

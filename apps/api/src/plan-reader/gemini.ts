@@ -136,24 +136,55 @@ function parseAnswer(text: string): GeminiPlan {
 
 export type GeminiOptions = {
   apiKey: string;
-  model: string;
+  /**
+   * Tried in order: the next one reads when one is too busy or out of its quota (on the free
+   * tier, a model allows 20 reads a day).
+   */
+  models: readonly string[];
   fetch?: typeof fetch;
   timeoutMs?: number;
   /** How long to wait before asking a busy Gemini again, once per entry. */
   busyRetryMs?: readonly number[];
 };
 
-/** A plan reader on the Gemini API: one request, and one retry when the answer is malformed. */
+type ErrorBody = {
+  error?: {
+    message?: string;
+    details?: { violations?: { quotaId?: string; quotaValue?: string }[]; retryDelay?: string }[];
+  };
+};
+
+/** What a 429 means: a used-up daily quota (and when it resets), or a brief rate limit. */
+function limitMessage(model: string, body: ErrorBody | undefined): string {
+  const details = body?.error?.details ?? [];
+  const daily = details
+    .flatMap((d) => d.violations ?? [])
+    .find((v) => /PerDay/i.test(v.quotaId ?? ''));
+  if (!daily) return `${model} is over its rate limit; try again in a minute.`;
+  const delay = details.find((d) => d.retryDelay)?.retryDelay;
+  const hours = delay ? Math.ceil(Number.parseFloat(delay) / 3600) : undefined;
+  return (
+    `${model}'s daily limit (${daily.quotaValue ?? 'a few'} reads on the free tier) is used up` +
+    `${hours ? `; it resets in about ${hours} h` : ''}.`
+  );
+}
+
+/**
+ * A plan reader on the Gemini API: one request per plan, and one more when the answer is
+ * malformed. A model that's busy or out of its quota hands over to the next.
+ */
 export function geminiReader(options: GeminiOptions): PlanReader {
   const send = options.fetch ?? fetch;
+  const [primary] = options.models;
+  if (!primary) throw new Error('The Gemini reader needs a model.');
 
   /** One request; a busy Gemini (500, 503) is asked again after a pause, twice. */
-  async function post(contents: Content[], signal: AbortSignal): Promise<Response> {
+  async function post(model: string, contents: Content[], signal: AbortSignal) {
     const pauses = options.busyRetryMs ?? BUSY_RETRY_MS;
     for (let attempt = 0; ; attempt++) {
       let res: Response;
       try {
-        res = await send(`${API}/models/${encodeURIComponent(options.model)}:generateContent`, {
+        res = await send(`${API}/models/${encodeURIComponent(model)}:generateContent`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-goog-api-key': options.apiKey },
           body: JSON.stringify({
@@ -177,23 +208,16 @@ export function geminiReader(options: GeminiOptions): PlanReader {
     }
   }
 
-  async function generate(contents: Content[], signal: AbortSignal) {
-    const res = await post(contents, signal);
+  async function generate(model: string, contents: Content[], signal: AbortSignal) {
+    const res = await post(model, contents, signal);
     if (!res.ok) {
-      const body = (await res.json().catch(() => undefined)) as
-        | { error?: { message?: string } }
-        | undefined;
-      const message = body?.error?.message ?? `HTTP ${res.status}`;
-      if (res.status === 429) {
-        throw new ReaderError(
-          `Gemini is over its rate limit; try again in a minute. (${message})`,
-          429,
-        );
+      const body = (await res.json().catch(() => undefined)) as ErrorBody | undefined;
+      if (res.status === 429) throw new ReaderError(limitMessage(model, body), 429, true);
+      if (res.status === 503 || res.status === 500) {
+        const busy = `${model} is too busy right now; try again in a few minutes.`;
+        throw new ReaderError(busy, 502, true);
       }
-      if (res.status === 503) {
-        throw new ReaderError('Gemini is too busy right now; try again in a few minutes.', 502);
-      }
-      throw new ReaderError(`Gemini: ${message}`, 502);
+      throw new ReaderError(`Gemini: ${body?.error?.message ?? `HTTP ${res.status}`}`, 502);
     }
     const body = GeminiResponse.parse(await res.json());
     const candidate = body.candidates[0];
@@ -217,9 +241,53 @@ export function geminiReader(options: GeminiOptions): PlanReader {
     };
   }
 
+  /** Reads the plan with one model, asking again once if its answer is malformed. */
+  async function readWith(model: string, image: PlanImage, signal: AbortSignal) {
+    const contents: Content[] = [
+      {
+        role: 'user',
+        parts: [
+          {
+            inline_data: {
+              mime_type: image.mimeType,
+              data: Buffer.from(image.bytes).toString('base64'),
+            },
+          },
+          { text: PLAN_READ_PROMPT.text },
+        ],
+      },
+    ];
+    const usage: ReaderUsage = { inputTokens: 0, outputTokens: 0 };
+    let problem = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const answer = await generate(model, contents, signal);
+      usage.inputTokens += answer.usage.inputTokens;
+      usage.outputTokens += answer.usage.outputTokens;
+      try {
+        if (answer.finishReason === 'MAX_TOKENS') throw new Error('the answer was cut off');
+        const plan = parseAnswer(answer.text);
+        return { raw: plan, plan: toRawPlan(plan, image), usage };
+      } catch (e) {
+        problem = e instanceof Error ? e.message : String(e);
+        // Once more, with the answer and what was wrong with it.
+        contents.push(answer.content, {
+          role: 'user',
+          parts: [
+            {
+              text:
+                `That answer doesn't match the response schema: ${problem}\n` +
+                'Answer again with the complete plan as JSON that matches it.',
+            },
+          ],
+        });
+      }
+    }
+    throw new ReaderError(`Gemini's answer wasn't a usable plan, twice: ${problem}`, 502);
+  }
+
   return {
     provider: 'gemini',
-    model: options.model,
+    model: primary,
     promptVersion: PLAN_READ_PROMPT.version,
     planFromRaw: (raw, size) => toRawPlan(GeminiPlan.parse(raw), size),
 
@@ -227,51 +295,19 @@ export function geminiReader(options: GeminiOptions): PlanReader {
       const started = Date.now();
       const timeout = AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS);
       const both = signal ? AbortSignal.any([signal, timeout]) : timeout;
-      const contents: Content[] = [
-        {
-          role: 'user',
-          parts: [
-            {
-              inline_data: {
-                mime_type: image.mimeType,
-                data: Buffer.from(image.bytes).toString('base64'),
-              },
-            },
-            { text: PLAN_READ_PROMPT.text },
-          ],
-        },
-      ];
-      const usage: ReaderUsage = { inputTokens: 0, outputTokens: 0 };
-      let problem = '';
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const answer = await generate(contents, both);
-        usage.inputTokens += answer.usage.inputTokens;
-        usage.outputTokens += answer.usage.outputTokens;
+      const unavailable: ReaderError[] = [];
+      for (const model of options.models) {
         try {
-          if (answer.finishReason === 'MAX_TOKENS') throw new Error('the answer was cut off');
-          const plan = parseAnswer(answer.text);
-          return {
-            raw: plan,
-            plan: toRawPlan(plan, image),
-            usage,
-            durationMs: Date.now() - started,
-          };
+          const result = await readWith(model, image, both);
+          return { ...result, model, durationMs: Date.now() - started };
         } catch (e) {
-          problem = e instanceof Error ? e.message : String(e);
-          // Once more, with the answer and what was wrong with it.
-          contents.push(answer.content, {
-            role: 'user',
-            parts: [
-              {
-                text:
-                  `That answer doesn't match the response schema: ${problem}\n` +
-                  'Answer again with the complete plan as JSON that matches it.',
-              },
-            ],
-          });
+          if (!(e instanceof ReaderError) || !e.unavailable) throw e;
+          unavailable.push(e);
         }
       }
-      throw new ReaderError(`Gemini's answer wasn't a usable plan, twice: ${problem}`, 502);
+      if (unavailable.length === 1) throw unavailable[0]!;
+      const reasons = unavailable.map((e) => e.message).join(' ');
+      throw new ReaderError(`No Gemini model could read the plan: ${reasons}`, 429, true);
     },
   };
 }
