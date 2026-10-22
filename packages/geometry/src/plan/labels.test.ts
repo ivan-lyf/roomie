@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dimensionsIn,
+  labelTokens,
   parseArea,
   parseCeiling,
   parseDimension,
@@ -223,6 +224,14 @@ describe('parseCeiling', () => {
   it('needs a ceiling word and a ceiling-like height', () => {
     expect(parseCeiling("9' x 10'")).toBeUndefined();
     expect(parseCeiling('CLG 30 m')).toBeUndefined();
+  });
+});
+
+describe('labelTokens', () => {
+  it('splits a label into normalized words and numbers', () => {
+    expect(labelTokens('C.H. 1')).toEqual(['CH', '1']);
+    expect(labelTokens('Hall + Dégt.')).toEqual(['HALL', 'DEGT']);
+    expect(labelTokens('CHAMBRE 1 12,56 m²')).toEqual(['CHAMBRE', '1', '12', '56', 'M']);
   });
 });
 

@@ -84,6 +84,13 @@ function matchRoomWord(norm: string, dictionary: [RoomType, string][]) {
   return best?.type;
 }
 
+/** A label's words and numbers, normalized: "C.H. 1" and "CH 1" are both CH and 1. */
+export function labelTokens(text: string): string[] {
+  return normalize(text)
+    .split(/[^A-Z0-9]+/)
+    .filter((t) => t !== '');
+}
+
 /**
  * The room type a label names, if any: "BR2", "Primary Bedroom", "Chambre 2", "W/D". Phrases
  * win over single words, and the first room word in the text wins ("LIVING/DINING" is a
