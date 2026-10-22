@@ -7,7 +7,8 @@
     "process": "tsx src/cli.ts",
     "typecheck": "tsc",
     "test": "vitest run",
-    "plan:draw": "tsx src/plan-image.ts"
+    "plan:draw": "tsx src/plan-image.ts",
+    "plan:prepare": "tsx src/plan-prepare.ts"
   },
   "dependencies": {
     "@gltf-transform/core": "^4.5.1",
