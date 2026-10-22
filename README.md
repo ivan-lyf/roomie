@@ -4,7 +4,7 @@
 
 Roomie takes the floor plan of a room, a studio, or a whole apartment and turns it into 3D. It then fills the rooms with real furniture from IKEA.ca. You can walk around the result, swap or delete pieces, and click any item to open it on IKEA's site. Every product has a real price, so you can see what each room, and the whole home, would cost.
 
-> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the catalog, is done too: 2,937 IKEA.ca products in Postgres, each with a true-to-size 3D model (IKEA's own or a stand-in) in Supabase Storage, browsable in a catalog viewer. Next is M2, turning a floor plan into a 3D home. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the catalog, is done too: 2,937 IKEA.ca products in Postgres, each with a true-to-size 3D model (IKEA's own or a stand-in) in Supabase Storage, browsable in a catalog viewer. M2, turning a floor plan into a 3D home, is under way: plans can be uploaded, scaled and traced in a 2D editor, and seen in 3D; the AI plan reader is next. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## How it works
 
@@ -61,7 +61,7 @@ pnpm catalog:publish                    # write the products to the database
 pnpm dev                                # then open http://localhost:5173
 ```
 
-At http://localhost:5173 you can upload a floor plan (an image or a PDF) and open the demo home in 3D; `/catalog` browses the products.
+At http://localhost:5173 you can upload a floor plan (an image or a PDF), set its scale and trace it in the 2D editor, then see it in 3D; the demo home is there to try both. `/catalog` browses the products.
 
 For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes), `pnpm models:process` and `pnpm catalog:publish`. `pnpm catalog:check` then confirms every product has sound data and a true-to-size model.
 
