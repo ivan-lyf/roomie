@@ -142,8 +142,9 @@ export function analyzeDraft(draft: PlanDraft): DraftAnalysis {
 }
 
 /**
- * The scale the labels give. Each room's dimension labels are paired with its width and depth
- * (longer with longer), and its area label with its area. Every unit the labels could be in is a
+ * The scale the labels give. Each room's dimension label is paired with its width and depth
+ * (longer with longer), and its area label with its area; a room with more than one of either
+ * is left out. Every unit the labels could be in is a
  * hypothesis; for each, sizes measured center to center and inside the walls are both tried,
  * and the convention the labels agree with best is kept. `detectScale` then checks doors and
  * room sizes to choose the unit, or to ask.
@@ -166,9 +167,13 @@ function draftScale(
     const sides = [max.x - min.x, max.y - min.y].sort((a, b) => b - a) as [number, number];
     const walls = roomWalls({ boundary: room.polygon }, draft.walls, tolerance);
     const inset = walls.length > 0 ? walls.reduce((s, w) => s + w.thickness, 0) / walls.length : 0;
-    for (const id of rooms.get(room.id)!.textIds) {
+    // A room holding two rooms' sizes (an open plan read as one) can't say which is its own.
+    const ids = rooms.get(room.id)!.textIds;
+    const sized = ids.filter((id) => texts.get(id)!.dimensions?.some((d) => d.meters.length === 2));
+    const areaIds = ids.filter((id) => texts.get(id)!.area);
+    for (const id of ids) {
       const reading = texts.get(id)!;
-      for (const d of reading.dimensions ?? []) {
+      for (const d of sized.length === 1 ? (reading.dimensions ?? []) : []) {
         if (d.meters.length !== 2) continue;
         const meters = d.meters.toSorted((a, b) => b - a);
         const samples = byUnit.get(d.unit) ?? empty();
@@ -179,7 +184,7 @@ function draftScale(
         });
         samples.labelIds.add(id);
       }
-      if (reading.area) {
+      if (reading.area && areaIds.length === 1) {
         const pixels = area(room.polygon);
         const inner = pixels - (perimeter(room.polygon) * inset) / 2 + inset * inset;
         const side = Math.sqrt(reading.area.squareMeters);

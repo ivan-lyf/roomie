@@ -152,6 +152,24 @@ describe('reading a metric studio labelled in French, sized inside its walls', (
   });
 });
 
+describe('an open plan read as one room', () => {
+  it("leaves out the room's two sizes, and scales from the others", () => {
+    // The living room and kitchen as one polygon, holding both their labels.
+    const raw = readPlan(truth);
+    const [living, kitchen] = [raw.rooms[1]!, raw.rooms[2]!];
+    raw.rooms.splice(1, 2, {
+      polygon: [living.polygon[0]!, living.polygon[1]!, kitchen.polygon[2]!, kitchen.polygon[3]!],
+    });
+    const analysis = analyzeDraft(tidyDraft(raw, SIZE));
+    if (analysis.scale.status !== 'found') throw new Error(`scale: ${analysis.scale.status}`);
+    expect(analysis.scale.scale.inputs).toMatchObject({ labelIds: ['t2'] });
+    // One square room can't tell sizes to the walls' centers from sizes inside them, so the
+    // scale is only good to a wall's thickness.
+    expect(Math.abs(analysis.scale.scale.metersPerPixel / MPP - 1)).toBeLessThan(0.05);
+    expect([...analysis.rooms.values()][1]).toMatchObject({ name: 'Living', type: 'living_room' });
+  });
+});
+
 describe('reading under other noise', () => {
   it.each(Array.from({ length: 12 }, (_, i) => i + 1))('holds up with seed %i', (seed) => {
     for (const [plan, size] of [
