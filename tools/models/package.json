@@ -6,12 +6,14 @@
   "scripts": {
     "process": "tsx src/cli.ts",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "plan:draw": "tsx src/plan-image.ts"
   },
   "dependencies": {
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
+    "@roomie/geometry": "workspace:*",
     "@roomie/schema": "workspace:*",
     "draco3dgltf": "^1.5.9",
     "meshoptimizer": "^1.1.1",

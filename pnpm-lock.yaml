@@ -324,6 +324,9 @@ importers:
       '@gltf-transform/functions':
         specifier: ^4.5.1
         version: 4.5.1(@types/node@26.6.5)
+      '@roomie/geometry':
+        specifier: workspace:*
+        version: link:../../packages/geometry
       '@roomie/schema':
         specifier: workspace:*
         version: link:../../packages/schema
