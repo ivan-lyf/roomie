@@ -114,11 +114,12 @@ export function analyzeDraft(draft: PlanDraft): DraftAnalysis {
     const textIds = roomTexts.get(r.id)!;
     const labels = draft.texts
       .filter((t) => textIds.includes(t.id) && texts.get(t.id)!.roomType)
-      .toSorted(
-        (a, b) =>
-          TYPE_PRIORITY.indexOf(texts.get(a.id)!.roomType!) -
-          TYPE_PRIORITY.indexOf(texts.get(b.id)!.roomType!),
-      );
+      .toSorted((a, b) => {
+        const [ra, rb] = [texts.get(a.id)!, texts.get(b.id)!];
+        // "MASTER" over "BATH" is a master bath: a weak label loses to any other.
+        const weak = Number(ra.weakRoomType ?? false) - Number(rb.weakRoomType ?? false);
+        return weak || TYPE_PRIORITY.indexOf(ra.roomType!) - TYPE_PRIORITY.indexOf(rb.roomType!);
+      });
     const named = labels[0];
     const fromReader = r.label ? roomTypeFromLabel(r.label) : undefined;
     const type = (named && texts.get(named.id)!.roomType) ?? r.type ?? fromReader ?? 'other';

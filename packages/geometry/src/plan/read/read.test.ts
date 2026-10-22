@@ -152,6 +152,23 @@ describe('reading a metric studio labelled in French, sized inside its walls', (
   });
 });
 
+describe('room labels on two lines', () => {
+  it('reads "MASTER" over "BATH" as a bathroom', () => {
+    const P = (x: number, y: number) => ({ x, y });
+    const analysis = analyzeDraft({
+      walls: [],
+      openings: [],
+      rooms: [{ id: 'r1', polygon: [P(0, 0), P(300, 0), P(300, 200), P(0, 200)] }],
+      obstacles: [],
+      texts: [
+        { id: 't1', text: 'MASTER', bbox: { x: 100, y: 80, w: 80, h: 16 } },
+        { id: 't2', text: 'BATH', bbox: { x: 110, y: 100, w: 60, h: 16 } },
+      ],
+    });
+    expect(analysis.rooms.get('r1')).toMatchObject({ type: 'bathroom', name: 'Bathroom' });
+  });
+});
+
 describe('an open plan read as one room', () => {
   it("leaves out the room's two sizes, and scales from the others", () => {
     // The living room and kitchen as one polygon, holding both their labels.

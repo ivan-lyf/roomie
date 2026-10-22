@@ -5,6 +5,7 @@ import {
   parseCeiling,
   parseDimension,
   readPlanText,
+  readRoomLabel,
   roomNameFromLabel,
   roomTypeFromLabel,
   uniqueRoomName,
@@ -64,8 +65,28 @@ describe('roomTypeFromLabel', () => {
     ['BUANDERIE', 'laundry'],
     ['TERRASSE', 'balcony'],
     ['GARAGE', 'other'],
+    ['GARAGES', 'other'],
+    ['REPAS', 'dining_area'],
+    ['DOUCHE 5,88 m²', 'bathroom'],
+    ['CELLIER', 'closet'],
+    ['DRESS.', 'closet'],
+    ['C.H. 1', 'bedroom'],
+    ['CH.3', 'bedroom'],
+    ['HALL + DEGT.', 'hallway'],
+    ['PALIER', 'hallway'],
+    ['ATELIER', 'other'],
+    ['MASTER BEDROOM', 'bedroom'],
+    ['MASTER BATH', 'bathroom'],
+    ['MASTER', 'bedroom'],
   ])('reads %j as %s', (text, type) => {
     expect(roomTypeFromLabel(text)).toBe(type);
+  });
+
+  it('knows "MASTER" alone is only a weak hint', () => {
+    expect(readRoomLabel('MASTER')).toEqual({ type: 'bedroom', weak: true });
+    expect(readRoomLabel('MASTER BEDROOM')).toEqual({ type: 'bedroom', weak: false });
+    expect(readPlanText('MASTER')).toMatchObject({ roomType: 'bedroom', weakRoomType: true });
+    expect(readPlanText('BATH')).not.toHaveProperty('weakRoomType');
   });
 
   it.each(["12'4\" x 10'", 'N', 'UP', 'DW', 'REF', 'VUE EN PLAN', '7.70'])(

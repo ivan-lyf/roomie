@@ -12,34 +12,46 @@ export const SQUARE_FOOT = FOOT * FOOT;
  * separated by `|`.
  */
 const ROOM_WORDS: [RoomType, string][] = [
-  ['dining_area', 'SALLE A MANGER|DINING ROOM|DINING|DINETTE|DIN|DR|SAM|NOOK'],
+  ['dining_area', 'SALLE A MANGER|DINING ROOM|DINING|DINETTE|REPAS|DIN|DR|SAM|NOOK'],
   [
     'bathroom',
-    "SALLE DE BAINS|SALLE DE BAIN|SALLE D'EAU|SALLE D EAU|POWDER ROOM|EN SUITE|BATHROOM|" +
-      'WASHROOM|ENSUITE|POWDER|TOILET|BAINS|BATH|ENS|PDR|SDB|SDE|BA|WC',
+    "SALLE DE BAINS|SALLE DE BAIN|SALLE D'EAU|SALLE D EAU|SALLE DE DOUCHE|POWDER ROOM|" +
+      'MASTER BATH|PRIMARY BATH|MASTER ENSUITE|PRIMARY ENSUITE|EN SUITE|BATHROOM|WASHROOM|' +
+      'ENSUITE|POWDER|TOILET|DOUCHE|BAINS|BATH|ENS|PDR|SDB|SDE|BA|WC',
   ],
   [
     'living_room',
     'PIECE A VIVRE|LIVING ROOM|FAMILY ROOM|GREAT ROOM|GREAT RM|SEJOUR|LIVING|FAMILY|LOUNGE|' +
       'SALON|LIV|LR',
   ],
-  ['bedroom', 'PRIMARY BEDROOM|MASTER BEDROOM|BEDROOM|CHAMBRE|PRIMARY|MASTER|BDRM|MBR|BR|CH'],
+  ['bedroom', 'PRIMARY BEDROOM|MASTER BEDROOM|BEDROOM|CHAMBRE|BDRM|MBR|BR|CH'],
   ['studio', 'STUDIO'],
   ['den_office', 'OFFICE|BUREAU|STUDY|FLEX|DEN|DN'],
-  ['kitchen', 'KITCHEN|CUISINE|KITCH|CUIS|KIT'],
+  ['kitchen', 'KITCHENETTE|CUISINETTE|KITCHEN|CUISINE|KITCH|CUIS|KIT'],
   [
     'hallway',
-    'DEGAGEMENT|CIRCULATION|VESTIBULE|CORRIDOR|ENTRANCE|COULOIR|HALLWAY|ENTREE|FOYER|ENTRY|' +
-      'HALL|DEGT|DGT|FOY|ENT',
+    'DEGAGEMENT|CIRCULATION|VESTIBULE|CORRIDOR|ENTRANCE|COULOIR|HALLWAY|PALIER|ENTREE|FOYER|' +
+      'ENTRY|HALL|DEGT|DGT|FOY|ENT',
   ],
   [
     'closet',
-    'WALK IN|RANGEMENT|PLACARD|DRESSING|STORAGE|CLOSET|PANTRY|LINEN|STOR|WIC|CLO|CL|PL',
+    'WALK IN|RANGEMENT|VESTIAIRE|PLACARD|DRESSING|CELLIER|STORAGE|RESERVE|CLOSET|PANTRY|LINEN|' +
+      'DRESS|STOR|WIC|CLO|CL|PL',
   ],
   ['laundry', 'BUANDERIE|LINGERIE|LAUNDRY|UTILITY|LAUN|W/D'],
   ['balcony', 'TERRASSE|BALCONY|TERRACE|BALCON|LOGGIA|PATIO|PORCH|DECK|BALC'],
-  ['other', 'ABRI VOITURE|MECHANICAL|GARAGE|CARPORT|MECH'],
+  [
+    'other',
+    'LOCAL TECHNIQUE|ABRI VOITURE|MECHANICAL|CHAUFFERIE|GARAGES|CARPORT|ATELIER|GARAGE|CAVE|' +
+      'MECH|ABRI',
+  ],
 ];
+
+/**
+ * Words that name a room only on their own: "MASTER" is the master bedroom, but next to "BATH"
+ * it says whose bathroom.
+ */
+const WEAK_WORDS: [RoomType, string][] = [['bedroom', 'MASTER|PRIMARY']];
 
 /** Upper case, no accents, dotted abbreviations closed up ("W.C." → "WC", "S.D.B." → "SDB"). */
 function normalize(text: string): string {
@@ -55,15 +67,10 @@ function normalize(text: string): string {
     .trim();
 }
 
-/**
- * The room type a label names, if any: "BR2", "Primary Bedroom", "Chambre 2", "W/D". Phrases
- * win over single words, and the first room word in the text wins ("LIVING/DINING" is a
- * living room).
- */
-export function roomTypeFromLabel(text: string): RoomType | undefined {
-  const norm = normalize(text);
+/** The room word in normalized text that names it: the first one, the longer at a tie. */
+function matchRoomWord(norm: string, dictionary: [RoomType, string][]) {
   let best: { type: RoomType; at: number; length: number } | undefined;
-  for (const [type, words] of ROOM_WORDS) {
+  for (const [type, words] of dictionary) {
     for (const word of words.split('|')) {
       // A word on its own, or followed by a room number ("BR2", "CHAMBRE 2").
       const escaped = word.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
@@ -75,6 +82,25 @@ export function roomTypeFromLabel(text: string): RoomType | undefined {
     }
   }
   return best?.type;
+}
+
+/**
+ * The room type a label names, if any: "BR2", "Primary Bedroom", "Chambre 2", "W/D". Phrases
+ * win over single words, and the first room word in the text wins ("LIVING/DINING" is a
+ * living room). `weak` is a label that only says "MASTER" or "PRIMARY", which any other room
+ * word in the same room overrules.
+ */
+export function readRoomLabel(text: string): { type: RoomType; weak: boolean } | undefined {
+  const norm = normalize(text);
+  const strong = matchRoomWord(norm, ROOM_WORDS);
+  if (strong) return { type: strong, weak: false };
+  const weak = matchRoomWord(norm, WEAK_WORDS);
+  return weak && { type: weak, weak: true };
+}
+
+/** The room type a label names, if any (see `readRoomLabel`). */
+export function roomTypeFromLabel(text: string): RoomType | undefined {
+  return readRoomLabel(text)?.type;
 }
 
 /** A dimension read in one unit: one length, or two for "12' x 10'", in meters. */
@@ -208,6 +234,8 @@ export function parseCeiling(text: string): number | undefined {
 export type PlanTextReading = {
   kind: PlanTextKind;
   roomType?: RoomType;
+  /** The room type comes from a word like "MASTER" alone, which other room words overrule. */
+  weakRoomType?: true;
   area?: { squareMeters: number; unit: 'imperial' | 'metric' };
   dimensions?: DimensionReading[];
   /** A ceiling height, in meters. */
@@ -220,7 +248,8 @@ export type PlanTextReading = {
  * its ceiling.
  */
 export function readPlanText(text: string): PlanTextReading {
-  const roomType = roomTypeFromLabel(text);
+  const room = readRoomLabel(text);
+  const roomType = room?.type;
   const found = findCeiling(text);
   const ceiling = found?.meters;
   // Sizes and areas are read from what's left once a ceiling height is taken out.
@@ -239,6 +268,7 @@ export function readPlanText(text: string): PlanTextReading {
   return {
     kind,
     ...(roomType && { roomType }),
+    ...(room?.weak && { weakRoomType: true }),
     ...(area && { area }),
     ...(dimensions.length > 0 && { dimensions }),
     ...(ceiling && { ceiling }),
