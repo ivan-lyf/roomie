@@ -153,6 +153,40 @@ describe('category rules', () => {
     expect(imported(bed)).toMatchObject({ category: 'bed', dims: { w: 1.6, d: 2.06, h: 1.0 } });
   });
 
+  it('sizes daybeds like sofas, with the length across the front', () => {
+    const daybed = item('bm003', 'Daybed frame with 2 drawers, white', {
+      Length: 1.95,
+      Width: 1.04,
+      Height: 0.58,
+    });
+    expect(imported(daybed)).toMatchObject({ dims: { w: 1.95, d: 1.04, h: 0.58 } });
+  });
+
+  it('takes adjustable chairs and coffee tables at their lowest setting', () => {
+    const chair = item('20652', 'Swivel chair, black', {
+      Width: 0.65,
+      Depth: 0.65,
+      'Min. height': 0.85,
+      'Max. height': 0.95,
+    });
+    expect(imported(chair)).toMatchObject({ category: 'desk_chair', dims: { h: 0.85 } });
+    const onlyMax = item('20652', 'Swivel chair, black', {
+      Width: 0.7,
+      Depth: 0.7,
+      'Max. height': 1.23,
+      'Max. seat height': 0.56,
+      'Min. seat height': 0.43,
+    });
+    expect(imported(onlyMax).dims.h).toBeCloseTo(1.1);
+    const table = item('10716', 'Adjustable coffee table, white', {
+      Length: 0.9,
+      'Max. width': 0.63,
+      'Min. height': 0.48,
+      'Max. height': 0.63,
+    });
+    expect(imported(table)).toMatchObject({ dims: { w: 0.9, d: 0.63, h: 0.48 } });
+  });
+
   it('reads round tables from their diameter', () => {
     const table = item('21825', 'Table, white', { Diameter: 1.1, Height: 0.75 });
     expect(imported(table)).toMatchObject({ shape: 'round', dims: { w: 1.1, d: 1.1, h: 0.75 } });
@@ -183,7 +217,8 @@ describe('category rules', () => {
       'Min. height': 0.65,
       'Max. height': 1.25,
     });
-    expect(imported(sitStand)).toMatchObject({ dims: { w: 1.4, d: 0.7, h: 0.65 } });
+    // At a standard desk height, within its range.
+    expect(imported(sitStand)).toMatchObject({ dims: { w: 1.4, d: 0.7, h: 0.74 } });
   });
 
   it('gives rugs without a listed thickness a default one', () => {

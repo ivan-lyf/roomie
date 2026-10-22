@@ -103,7 +103,8 @@ type CategoryRule = {
   skip?: RegExp;
   /** Product types to keep, for IKEA categories that mix in many other things. */
   only?: RegExp;
-  size: (l: Lengths) => Size;
+  /** `type` is the product type, e.g. "Daybed frame with 2 drawers". */
+  size: (l: Lengths, type: string) => Size;
 };
 
 /**
@@ -116,6 +117,9 @@ const L_SHAPED_MEASUREMENTS = ['Width left', 'Width right', 'Depth chaise'];
 /** Most rugs list no thickness, and it only matters for rendering. */
 const RUG_THICKNESS = 0.01;
 
+/** Sit/stand desks at a standard desk height within their range, as IKEA models them. */
+const DESK_HEIGHT = 0.74;
+
 // Category ids and product types come from the full crawl of 2026-10-21.
 const CATEGORY_RULES: [Category, CategoryRule][] = [
   [
@@ -123,13 +127,19 @@ const CATEGORY_RULES: [Category, CategoryRule][] = [
     {
       ikeaCategories: ['bm003'],
       skip: /^(back cushion|trundle bed)$/i,
-      // The foot end is the front, so the length is the depth.
-      size: (l) =>
-        rect(
-          l.first('Width', 'Bed width'),
-          l.first('Length', 'Bed length'),
-          l.largest('Height', 'Headboard height', 'Max. headboard height', 'Footboard height'),
-        ),
+      size: (l, type) => {
+        const h = l.largest(
+          'Height',
+          'Headboard height',
+          'Max. headboard height',
+          'Footboard height',
+        );
+        // Daybeds are sat on along their long side, like a sofa. Other beds face their foot
+        // end, so their length is the depth.
+        return /^day-?bed/i.test(type)
+          ? rect(l.first('Length', 'Bed length'), l.first('Width'), h)
+          : rect(l.first('Width', 'Bed width'), l.first('Length', 'Bed length'), h);
+      },
     },
   ],
   [
@@ -153,7 +163,11 @@ const CATEGORY_RULES: [Category, CategoryRule][] = [
   ],
   [
     'coffee_table',
-    { ikeaCategories: ['10716'], size: (l) => table(l, l.largest('Height', 'Max. height')) },
+    {
+      ikeaCategories: ['10716'],
+      // Adjustable ones lowered, as IKEA models them.
+      size: (l) => table(l, l.first('Height', 'Min. height', 'Max. height')),
+    },
   ],
   [
     'dining_table',
@@ -173,8 +187,11 @@ const CATEGORY_RULES: [Category, CategoryRule][] = [
       // Desk systems also sell tabletops, legs, screens and cabinets.
       ikeaCategories: ['20649'],
       only: /^(gaming )?desk\b|^table$/i,
-      // Sit/stand desks at their lowest (sitting) height.
-      size: (l) => table(l, l.first('Total height', 'Height', 'Min. height')),
+      size: (l) => {
+        const fixed = l.optional('Total height') ?? l.optional('Height');
+        const max = l.optional('Max. height') ?? Infinity;
+        return table(l, fixed ?? Math.min(Math.max(DESK_HEIGHT, l.first('Min. height')), max));
+      },
     },
   ],
   [
@@ -182,7 +199,21 @@ const CATEGORY_RULES: [Category, CategoryRule][] = [
     {
       ikeaCategories: ['20652'],
       skip: /^(headrest|seat pad|sit\/stand support)$/i,
-      size: (l) => box(l, 'Height', 'Max. height', 'Min. height'),
+      // At their lowest setting, as IKEA models them. The whole chair moves with its seat,
+      // so without a listed minimum, the lowest height is the highest less the seat's range.
+      size: (l) => {
+        const max = l.optional('Max. height');
+        const seatMax = l.optional('Max. seat height');
+        const seatMin = l.optional('Min. seat height');
+        const lowest =
+          max != null && seatMax != null && seatMin != null ? max - (seatMax - seatMin) : max;
+        const h =
+          l.optional('Height') ??
+          l.optional('Min. height') ??
+          lowest ??
+          l.first('Height', 'Min. height', 'Max. height');
+        return rect(l.first('Width'), l.first('Depth'), h);
+      },
     },
   ],
   [
@@ -293,7 +324,7 @@ export function toProduct(item: IkeaItem, hasModel: boolean): ImportResult | und
 
   let size: Size;
   try {
-    size = rule.size(lengths(item));
+    size = rule.size(lengths(item), type);
   } catch (e) {
     if (e instanceof MissingMeasurement) return reject(e.message);
     throw e;
