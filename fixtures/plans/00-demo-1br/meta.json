@@ -1,0 +1,18 @@
+{
+  "source": "Drawn for Roomie as a demo and test fixture",
+  "collectedAt": "2026-10-22",
+  "kind": "multi_room",
+  "rooms": [
+    "bedroom",
+    "living_room",
+    "kitchen",
+    "bathroom",
+    "closet",
+    "hallway"
+  ],
+  "units": "imperial",
+  "listedAreaSqft": 560,
+  "listedAreaIncludes": "with_walls",
+  "calibration": null,
+  "notes": "Open living room and kitchen, a closet off the foyer, a counter and fridge in the kitchen. 1 px = 1 cm."
+}

@@ -1,0 +1,598 @@
+{
+  "id": "00000000-0000-4000-8000-000000000001",
+  "name": "Demo one-bedroom",
+  "status": "ready",
+  "image": null,
+  "walls": [
+    {
+      "id": "w1",
+      "a": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "b": {
+        "x": 8.5,
+        "y": 0.5
+      },
+      "thickness": 0.2
+    },
+    {
+      "id": "w2",
+      "a": {
+        "x": 8.5,
+        "y": 0.5
+      },
+      "b": {
+        "x": 8.5,
+        "y": 7.0
+      },
+      "thickness": 0.2
+    },
+    {
+      "id": "w3",
+      "a": {
+        "x": 8.5,
+        "y": 7.0
+      },
+      "b": {
+        "x": 0.5,
+        "y": 7.0
+      },
+      "thickness": 0.2
+    },
+    {
+      "id": "w4",
+      "a": {
+        "x": 0.5,
+        "y": 7.0
+      },
+      "b": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "thickness": 0.2
+    },
+    {
+      "id": "w5",
+      "a": {
+        "x": 4.0,
+        "y": 0.5
+      },
+      "b": {
+        "x": 4.0,
+        "y": 4.0
+      },
+      "thickness": 0.12
+    },
+    {
+      "id": "w6",
+      "a": {
+        "x": 0.5,
+        "y": 4.0
+      },
+      "b": {
+        "x": 4.0,
+        "y": 4.0
+      },
+      "thickness": 0.12
+    },
+    {
+      "id": "w7",
+      "a": {
+        "x": 2.5,
+        "y": 4.0
+      },
+      "b": {
+        "x": 2.5,
+        "y": 7.0
+      },
+      "thickness": 0.12
+    },
+    {
+      "id": "w8",
+      "a": {
+        "x": 2.5,
+        "y": 5.2
+      },
+      "b": {
+        "x": 4.0,
+        "y": 5.2
+      },
+      "thickness": 0.12
+    },
+    {
+      "id": "w9",
+      "a": {
+        "x": 4.0,
+        "y": 4.0
+      },
+      "b": {
+        "x": 4.0,
+        "y": 7.0
+      },
+      "thickness": 0.12
+    }
+  ],
+  "openings": [
+    {
+      "id": "o1",
+      "wallId": "w3",
+      "kind": "door",
+      "offset": 4.6,
+      "width": 0.9,
+      "height": 2.03,
+      "swing": {
+        "hinge": "end",
+        "side": "right"
+      }
+    },
+    {
+      "id": "o2",
+      "wallId": "w5",
+      "kind": "door",
+      "offset": 2.5,
+      "width": 0.8,
+      "height": 2.03,
+      "swing": {
+        "hinge": "end",
+        "side": "right"
+      }
+    },
+    {
+      "id": "o3",
+      "wallId": "w7",
+      "kind": "door",
+      "offset": 1.6,
+      "width": 0.8,
+      "height": 2.03,
+      "swing": {
+        "hinge": "start",
+        "side": "right"
+      }
+    },
+    {
+      "id": "o4",
+      "wallId": "w8",
+      "kind": "door",
+      "offset": 0.4,
+      "width": 0.8,
+      "height": 2.03,
+      "swing": {
+        "hinge": "start",
+        "side": "right"
+      }
+    },
+    {
+      "id": "o5",
+      "wallId": "w9",
+      "kind": "passage",
+      "offset": 0.4,
+      "width": 1.4,
+      "height": 2.03
+    },
+    {
+      "id": "o6",
+      "wallId": "w1",
+      "kind": "window",
+      "offset": 1.0,
+      "width": 1.5,
+      "height": 1.24,
+      "sillHeight": 0.9
+    },
+    {
+      "id": "o7",
+      "wallId": "w1",
+      "kind": "window",
+      "offset": 4.5,
+      "width": 2.5,
+      "height": 1.24,
+      "sillHeight": 0.9
+    },
+    {
+      "id": "o8",
+      "wallId": "w2",
+      "kind": "window",
+      "offset": 1.0,
+      "width": 1.5,
+      "height": 1.24,
+      "sillHeight": 0.9
+    },
+    {
+      "id": "o9",
+      "wallId": "w4",
+      "kind": "window",
+      "offset": 1.2,
+      "width": 0.8,
+      "height": 0.94,
+      "sillHeight": 1.2
+    },
+    {
+      "id": "o10",
+      "wallId": "w2",
+      "kind": "window",
+      "offset": 4.5,
+      "width": 1.0,
+      "height": 1.09,
+      "sillHeight": 1.05
+    }
+  ],
+  "rooms": [
+    {
+      "id": "r1",
+      "name": "Bedroom",
+      "roomType": "bedroom",
+      "boundary": [
+        {
+          "x": 0.5,
+          "y": 0.5
+        },
+        {
+          "x": 4.0,
+          "y": 0.5
+        },
+        {
+          "x": 4.0,
+          "y": 4.0
+        },
+        {
+          "x": 0.5,
+          "y": 4.0
+        }
+      ],
+      "labelTextIds": [
+        "t1",
+        "t2"
+      ],
+      "furnishable": true
+    },
+    {
+      "id": "r2",
+      "name": "Living",
+      "roomType": "living_room",
+      "boundary": [
+        {
+          "x": 4.0,
+          "y": 0.5
+        },
+        {
+          "x": 8.5,
+          "y": 0.5
+        },
+        {
+          "x": 8.5,
+          "y": 4.6
+        },
+        {
+          "x": 4.0,
+          "y": 4.6
+        }
+      ],
+      "labelTextIds": [
+        "t3",
+        "t4"
+      ],
+      "furnishable": true
+    },
+    {
+      "id": "r3",
+      "name": "Kitchen",
+      "roomType": "kitchen",
+      "boundary": [
+        {
+          "x": 4.0,
+          "y": 4.6
+        },
+        {
+          "x": 8.5,
+          "y": 4.6
+        },
+        {
+          "x": 8.5,
+          "y": 7.0
+        },
+        {
+          "x": 4.0,
+          "y": 7.0
+        }
+      ],
+      "labelTextIds": [
+        "t5",
+        "t6"
+      ],
+      "furnishable": false
+    },
+    {
+      "id": "r4",
+      "name": "Bath",
+      "roomType": "bathroom",
+      "boundary": [
+        {
+          "x": 0.5,
+          "y": 4.0
+        },
+        {
+          "x": 2.5,
+          "y": 4.0
+        },
+        {
+          "x": 2.5,
+          "y": 7.0
+        },
+        {
+          "x": 0.5,
+          "y": 7.0
+        }
+      ],
+      "labelTextIds": [
+        "t7"
+      ],
+      "furnishable": false
+    },
+    {
+      "id": "r5",
+      "name": "Closet",
+      "roomType": "closet",
+      "boundary": [
+        {
+          "x": 2.5,
+          "y": 4.0
+        },
+        {
+          "x": 4.0,
+          "y": 4.0
+        },
+        {
+          "x": 4.0,
+          "y": 5.2
+        },
+        {
+          "x": 2.5,
+          "y": 5.2
+        }
+      ],
+      "labelTextIds": [
+        "t8"
+      ],
+      "furnishable": false
+    },
+    {
+      "id": "r6",
+      "name": "Foyer",
+      "roomType": "hallway",
+      "boundary": [
+        {
+          "x": 2.5,
+          "y": 5.2
+        },
+        {
+          "x": 4.0,
+          "y": 5.2
+        },
+        {
+          "x": 4.0,
+          "y": 7.0
+        },
+        {
+          "x": 2.5,
+          "y": 7.0
+        }
+      ],
+      "labelTextIds": [
+        "t9"
+      ],
+      "furnishable": false
+    }
+  ],
+  "obstacles": [
+    {
+      "id": "k1",
+      "kind": "counter",
+      "polygon": [
+        {
+          "x": 5.2,
+          "y": 6.3
+        },
+        {
+          "x": 8.4,
+          "y": 6.3
+        },
+        {
+          "x": 8.4,
+          "y": 6.9
+        },
+        {
+          "x": 5.2,
+          "y": 6.9
+        }
+      ],
+      "height": 0.9
+    },
+    {
+      "id": "k2",
+      "kind": "appliance",
+      "polygon": [
+        {
+          "x": 4.5,
+          "y": 6.2
+        },
+        {
+          "x": 5.2,
+          "y": 6.2
+        },
+        {
+          "x": 5.2,
+          "y": 6.9
+        },
+        {
+          "x": 4.5,
+          "y": 6.9
+        }
+      ],
+      "height": 1.8
+    }
+  ],
+  "labels": [
+    {
+      "id": "t1",
+      "text": "BEDROOM",
+      "bbox": {
+        "x": 183,
+        "y": 191,
+        "w": 84,
+        "h": 18
+      },
+      "kind": "room_label",
+      "parsed": {
+        "roomType": "bedroom"
+      }
+    },
+    {
+      "id": "t2",
+      "text": "11'6\" x 11'6\"",
+      "bbox": {
+        "x": 177,
+        "y": 216,
+        "w": 96,
+        "h": 18
+      },
+      "kind": "dimension",
+      "parsed": {
+        "meters": [
+          3.5052,
+          3.5052
+        ]
+      }
+    },
+    {
+      "id": "t3",
+      "text": "LIVING",
+      "bbox": {
+        "x": 593,
+        "y": 221,
+        "w": 64,
+        "h": 18
+      },
+      "kind": "room_label",
+      "parsed": {
+        "roomType": "living_room"
+      }
+    },
+    {
+      "id": "t4",
+      "text": "14'9\" x 13'5\"",
+      "bbox": {
+        "x": 577,
+        "y": 246,
+        "w": 96,
+        "h": 18
+      },
+      "kind": "dimension",
+      "parsed": {
+        "meters": [
+          4.4958,
+          4.0894
+        ]
+      }
+    },
+    {
+      "id": "t5",
+      "text": "KITCHEN",
+      "bbox": {
+        "x": 587,
+        "y": 521,
+        "w": 76,
+        "h": 18
+      },
+      "kind": "room_label",
+      "parsed": {
+        "roomType": "kitchen"
+      }
+    },
+    {
+      "id": "t6",
+      "text": "14'9\" x 7'10\"",
+      "bbox": {
+        "x": 577,
+        "y": 546,
+        "w": 96,
+        "h": 18
+      },
+      "kind": "dimension",
+      "parsed": {
+        "meters": [
+          4.4958,
+          2.3876
+        ]
+      }
+    },
+    {
+      "id": "t7",
+      "text": "BATH",
+      "bbox": {
+        "x": 128,
+        "y": 531,
+        "w": 44,
+        "h": 18
+      },
+      "kind": "room_label",
+      "parsed": {
+        "roomType": "bathroom"
+      }
+    },
+    {
+      "id": "t8",
+      "text": "CL",
+      "bbox": {
+        "x": 314,
+        "y": 451,
+        "w": 22,
+        "h": 18
+      },
+      "kind": "room_label",
+      "parsed": {
+        "roomType": "closet"
+      }
+    },
+    {
+      "id": "t9",
+      "text": "FOYER",
+      "bbox": {
+        "x": 298,
+        "y": 611,
+        "w": 54,
+        "h": 18
+      },
+      "kind": "room_label",
+      "parsed": {
+        "roomType": "hallway"
+      }
+    }
+  ],
+  "scale": {
+    "metersPerPixel": 0.01,
+    "sourceUnit": "imperial",
+    "method": "labels",
+    "inputs": {
+      "labelIds": [
+        "t2",
+        "t4",
+        "t6"
+      ]
+    },
+    "residual": 0.005
+  },
+  "ceilingHeight": 2.44,
+  "ceilingHeightSource": "default",
+  "materials": {
+    "wallColor": "#f3efe7",
+    "floor": "light_oak",
+    "light": {
+      "warmthK": 3000,
+      "intensity": 0.7
+    }
+  },
+  "reading": null,
+  "editSeconds": 0,
+  "createdAt": "2026-10-22T00:00:00.000Z",
+  "updatedAt": "2026-10-22T00:00:00.000Z"
+}
