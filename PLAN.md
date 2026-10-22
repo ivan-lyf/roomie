@@ -25,7 +25,7 @@ Measured against a fixed test set of 10–15 real floor plans (e.g. Vancouver re
 - Single-room or studio floor plans
 - Room types: living room, bedroom, studio
 - Categories: bed, sofa, armchair, coffee table, dining table + chairs, desk + desk chair, shelving, wardrobe/dresser, rugs, floor lamps
-- Every valid IKEA.ca product variant in these categories: about 3,000, not a hand-picked 300–500
+- Every valid IKEA.ca product variant in these categories: about 2,700, not a hand-picked 300–500
 - Generation inputs: room type, budget, style preset (2–3), must-haves
 - Real 3D rendering for both the room and the products
 - Wall color, floor material, and lighting controls
@@ -34,7 +34,7 @@ Measured against a fixed test set of 10–15 real floor plans (e.g. Vancouver re
 
 **Out of scope**
 - Multi-room apartments
-- L-shaped and corner furniture: corner and chaise sofas, L-shaped desks, corner wardrobes and bookcases (future goal, §8)
+- L-shaped, T-shaped and corner furniture: corner and chaise sofas, L-shaped desks, KALLAX desk combinations, corner wardrobes and bookcases (future goal, §8)
 - User accounts and sharing (saving rooms to an account is under consideration, §8)
 - Live price sync (weekly scrape only)
 - Mobile layout
@@ -101,14 +101,14 @@ Each milestone ends with something demoable. Estimates assume about 10 hours a w
 **Done when:** one sofa renders in a blank R3F scene at its correct real-world size.
 
 ### M1 — Catalog (2 weeks)
-The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 3,062 candidates, 2,022 of them with an IKEA model. L-shaped and corner pieces stay out until the geometry supports them (§8).
+The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 3,062 candidates; after the category rules, **2,711 products** remain, 1,642 of them with an IKEA model. L-shaped, T-shaped and corner pieces stay out until the geometry supports them (§8).
 
 - [x] Scraper for every category: IKEA.ca sitemap, each page's JSON-LD and embedded JSON (`tools/scraper`)
 - [x] Rate limiting, caching, `scrapedAt` timestamps
 - [x] Full crawl: 25,530 products, 0 failures
-- [ ] Category rules: IKEA category IDs for each MVP category; skip parts, add-ons, and L-shaped pieces
-- [ ] Dimension normalizer per category: diameter for round tables, rugs, and lamps; bed length as depth; the everyday size of extendable tables, with the extended length stored
-- [ ] Product fields: footprint shape, extended width, image URL
+- [x] Category rules: IKEA category IDs for each MVP category; skip parts, add-ons, and L-shaped pieces
+- [x] Dimension normalizer per category: diameter for round tables, rugs, and lamps; bed length as depth; the everyday size of extendable tables, with the extended length stored
+- [x] Product fields: footprint shape, extended width, image URL
 - [ ] Product → variant modeling: group colors and sizes into families, from each page's style picker
 - [ ] GLB capture for the MVP categories (about 2,000 models)
 - [ ] Model pipeline: rescale to listed dims, origin at bottom center, front facing +Z (checked per category), height from the model when the listing has none, decimate, compress, textures ≤ 1024 px, < 1 MB per model, upload to R2
@@ -173,7 +173,7 @@ Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holod
 
 ## 8. Future goals (post-MVP)
 
-- **L-shaped and corner furniture.** Corner and chaise sofas (about half of IKEA's sofas), L-shaped desks, corner wardrobes and bookcases. They need L-shaped footprints in `packages/schema` and `packages/geometry`, left- and right-hand variants, and models to match. Revisit once M4 meets the quality bar with rectangular footprints.
+- **L-shaped, T-shaped and corner furniture.** Corner and chaise sofas (about half of IKEA's sofas), L-shaped desks, KALLAX desk combinations, corner wardrobes and bookcases. They need non-rectangular footprints in `packages/schema` and `packages/geometry`, left- and right-hand variants, and models to match. Revisit once M4 meets the quality bar with rectangular footprints.
 - **Accounts to save rooms** (under consideration). Sign in to save rooms and layouts and come back to them. Supabase Auth fits the stack: the web app signs in with Supabase, the API verifies the session token, and rooms and layouts get an owner. The browser still talks only to our API, so the tables stay closed to Supabase's public Data API.
 
 ## 9. Risks

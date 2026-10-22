@@ -22,7 +22,7 @@ Every generated layout is saved and rated internally, so layouts get better over
 
 - Single rooms and studios only (no multi-room apartments yet)
 - Beds, sofas, armchairs, coffee tables, dining sets, desks, shelving, wardrobes, dressers, rugs and floor lamps
-- About 3,000 IKEA.ca products: every valid one in these categories
+- About 2,700 IKEA.ca products: every valid one in these categories
 - Wall color, floor material and lighting controls
 
 Kitchens, bathrooms, wall-mounted items, L-shaped and corner furniture, user accounts and mobile layouts are out of scope for now. L-shaped furniture and saving rooms to an account are possible later additions (see [PLAN.md](PLAN.md)).
