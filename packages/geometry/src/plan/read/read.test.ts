@@ -189,12 +189,14 @@ describe('reading under other noise', () => {
 
 describe('comparePlans', () => {
   it('scores a plan against itself as perfect', () => {
-    expect(comparePlans(truth, truth)).toMatchObject({
+    const result = comparePlans(truth, truth);
+    expect(result).toMatchObject({
       walls: { recall: 1, precision: 1 },
       openings: { recall: 1, precision: 1 },
       doors: { matched: 4, swingRight: 4 },
-      rooms: { truth: 6, matched: 6, typed: 6, meanOverlap: 1 },
+      rooms: { truth: 6, matched: 6, typed: 6 },
     });
+    expect(result.rooms.meanOverlap).toBeCloseTo(1, 9);
   });
 
   it('misses walls moved too far, and rooms of the wrong type', () => {
@@ -222,5 +224,6 @@ describe('comparePlans', () => {
     expect(overlap(square(0), square(0))).toBe(1);
     expect(overlap(square(0), square(0.5))).toBeCloseTo(1 / 3, 2);
     expect(overlap(square(0), square(2))).toBe(0);
+    expect(overlap(square(0), square(1))).toBe(0);
   });
 });

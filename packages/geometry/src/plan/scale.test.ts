@@ -141,6 +141,21 @@ describe('checkRoomLabels', () => {
     expect(bad[0]!.error).toBeGreaterThan(0.03);
   });
 
+  it('leaves ceiling labels out: their length is a height', () => {
+    const ceiling = {
+      id: 'c1',
+      text: "8' CLG",
+      bbox: { x: 180, y: 240, w: 60, h: 16 },
+      kind: 'ceiling' as const,
+      parsed: { meters: [2.4384] },
+    };
+    const rooms = plan.rooms.map((r) =>
+      r.id === 'r1' ? { ...r, labelTextIds: [...r.labelTextIds, 'c1'] } : r,
+    );
+    const checks = checkRoomLabels({ ...plan, rooms, labels: [...plan.labels, ceiling] });
+    expect(checks.map((c) => c.labelId)).toEqual(['t2', 't4', 't6']);
+  });
+
   it('flags labels once the scale is 7% off', () => {
     const checks = checkRoomLabels(rescalePlan(plan, 1.07));
     expect(checks.some((c) => !c.agrees)).toBe(true);

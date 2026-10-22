@@ -4,6 +4,7 @@ import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import {
   centeredOffset,
   deleteWall,
+  isTraced,
   movePoint,
   moveWall,
   nearestWall,
@@ -17,6 +18,14 @@ const plan = Floorplan.parse(demo);
 const wall = (p: Floorplan, id: string) => p.walls.find((w) => w.id === id)!;
 const room = (p: Floorplan, id: string) => p.rooms.find((r) => r.id === id)!;
 const opening = (p: Floorplan, id: string) => p.openings.find((o) => o.id === id)!;
+
+describe('isTraced', () => {
+  it('is traced once it has walls or rooms', () => {
+    expect(isTraced(plan)).toBe(true);
+    expect(isTraced({ walls: [], rooms: plan.rooms })).toBe(true);
+    expect(isTraced({ walls: [], rooms: [] })).toBe(false);
+  });
+});
 
 describe('nextId', () => {
   it('takes the next free number', () => {

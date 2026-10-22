@@ -162,7 +162,8 @@ export function checkRoomLabels(
     return room.labelTextIds.flatMap((id) => {
       const label = labels.get(id);
       const stated = label?.parsed?.meters;
-      if (!label || !stated) return [];
+      // A ceiling label's length is a height, not a side of the room.
+      if (!label || !stated || label.kind === 'ceiling') return [];
       /** The best pairing of stated lengths with the room's sides, less `inset` each. */
       const fit = (inset: number) => {
         const options =
@@ -190,7 +191,8 @@ export function checkRoomLabels(
   }));
 }
 
-function median(values: readonly number[]): number {
+/** The middle value, or the mean of the middle two. */
+export function median(values: readonly number[]): number {
   const sorted = values.toSorted((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;

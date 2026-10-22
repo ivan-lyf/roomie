@@ -1,6 +1,6 @@
 import type { OpeningKind, Vec2, Wall } from '@roomie/schema';
 import type { PlanShapes } from '../edit';
-import { bounds, contains } from '../polygon';
+import { area, bounds, contains } from '../polygon';
 import { closestOnSegment, distance } from '../snap';
 import { doorSwing, pointAlong, wallDirection, wallLength } from '../walls';
 
@@ -117,20 +117,30 @@ function sameSwing(truth: PlanShapes, found: PlanShapes, ids: [string, string]):
   return opens && distance(a.hinge, b.hinge) <= Math.max(a.radius, b.radius) / 2;
 }
 
-/** How much two polygons overlap: intersection over union, sampled on a 5 cm grid. */
+/**
+ * How much two polygons overlap: intersection over union. Their areas are exact; the
+ * intersection is sampled on a 5 cm grid, over only where their bounding boxes meet.
+ */
 export function overlap(p: readonly Vec2[], q: readonly Vec2[], step = 0.05): number {
-  const box = bounds([...p, ...q]);
-  let both = 0;
-  let either = 0;
-  for (let y = box.min.y + step / 2; y < box.max.y; y += step) {
-    for (let x = box.min.x + step / 2; x < box.max.x; x += step) {
-      const inP = contains(p, { x, y });
-      const inQ = contains(q, { x, y });
-      if (inP && inQ) both++;
-      if (inP || inQ) either++;
+  const a = bounds(p);
+  const b = bounds(q);
+  const min = { x: Math.max(a.min.x, b.min.x), y: Math.max(a.min.y, b.min.y) };
+  const max = { x: Math.min(a.max.x, b.max.x), y: Math.min(a.max.y, b.max.y) };
+  if (min.x >= max.x || min.y >= max.y) return 0;
+  // About `step` apart, spaced to tile the box exactly.
+  const nx = Math.max(1, Math.round((max.x - min.x) / step));
+  const ny = Math.max(1, Math.round((max.y - min.y) / step));
+  const [dx, dy] = [(max.x - min.x) / nx, (max.y - min.y) / ny];
+  let cells = 0;
+  for (let j = 0; j < ny; j++) {
+    for (let i = 0; i < nx; i++) {
+      const point = { x: min.x + (i + 0.5) * dx, y: min.y + (j + 0.5) * dy };
+      if (contains(p, point) && contains(q, point)) cells++;
     }
   }
-  return either === 0 ? 0 : both / either;
+  const both = cells * dx * dy;
+  const either = area(p) + area(q) - both;
+  return either <= 0 ? 0 : Math.min(1, both / either);
 }
 
 /** Compares a plan read off an image with the plan as it should be, both in meters. */

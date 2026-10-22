@@ -10,6 +10,11 @@ export type PlanShapes = Pick<Floorplan, 'walls' | 'openings' | 'rooms' | 'obsta
 /** Points this close are the same point: a wall end on a room corner, two walls meeting. */
 export const SAME_POINT = 0.01;
 
+/** Whether anything is traced yet: walls or rooms. A reading replaces what's traced. */
+export function isTraced(plan: Pick<Floorplan, 'walls' | 'rooms'>): boolean {
+  return plan.walls.length > 0 || plan.rooms.length > 0;
+}
+
 /** The first `prefix` + number not taken, e.g. `w10` after `w1`…`w9`. */
 export function nextId(taken: Iterable<string>, prefix: string): string {
   let max = 0;

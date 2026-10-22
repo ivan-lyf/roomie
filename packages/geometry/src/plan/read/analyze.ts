@@ -9,7 +9,13 @@ import {
 } from '../labels';
 import { area, bounds, contains } from '../polygon';
 import { roomWalls } from '../rooms';
-import { detectScale, type LengthSample, scaleFromSamples, type UnitHypothesis } from '../scale';
+import {
+  detectScale,
+  type LengthSample,
+  median,
+  scaleFromSamples,
+  type UnitHypothesis,
+} from '../scale';
 
 // What code reads off a tidied draft (PLAN.md §5.1): which text belongs to which room, what each
 // room is, its ceiling, and the scale the dimension and area labels give. The model's own guesses
@@ -66,12 +72,6 @@ const center = (box: { x: number; y: number; w: number; h: number }): Vec2 => ({
 
 const sameText = (a: string, b: string) =>
   a.replace(/\s+/g, ' ').trim().toLowerCase() === b.replace(/\s+/g, ' ').trim().toLowerCase();
-
-function median(values: readonly number[]): number {
-  const sorted = values.toSorted((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
-}
 
 function perimeter(points: readonly Vec2[]): number {
   return points.reduce((sum, p, i) => {

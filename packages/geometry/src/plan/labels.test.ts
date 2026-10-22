@@ -190,6 +190,15 @@ describe('parseCeiling', () => {
     expect(parseCeiling(text)).toBeCloseTo(meters, 6);
   });
 
+  it('takes the height next to the ceiling word, leaving the room its size', () => {
+    expect(parseCeiling("LIVING 12' x 10' 9' CLG")).toBeCloseTo(9 * 0.3048, 9);
+    const living = readPlanText("LIVING 12' x 10' 9' CLG");
+    expect(living).toMatchObject({ kind: 'room_label', roomType: 'living_room' });
+    expect(living.ceiling).toBeCloseTo(9 * 0.3048, 9);
+    expect(living.dimensions?.[0]?.meters).toEqual([12 * 0.3048, 10 * 0.3048]);
+    expect(parseCeiling('Ceiling height 2.6 m')).toBe(2.6);
+  });
+
   it('needs a ceiling word and a ceiling-like height', () => {
     expect(parseCeiling("9' x 10'")).toBeUndefined();
     expect(parseCeiling('CLG 30 m')).toBeUndefined();

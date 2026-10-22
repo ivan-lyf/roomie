@@ -1,5 +1,6 @@
 import type { DoorSwing, PlanDraft, RawPlan, Vec2 } from '@roomie/schema';
 import { area, simplify } from '../polygon';
+import { median } from '../scale';
 import { distance } from '../snap';
 
 // Tidies what a plan reader returned, in image pixels: a vision model's walls are roughly placed,
@@ -37,12 +38,6 @@ const at = (a: Vec2, d: Vec2, t: number, o = 0): Vec2 => ({
 });
 /** The angle between two lines, whichever way they point: 0 to 90°. */
 const angleBetween = (d: Vec2, e: Vec2) => Math.acos(Math.min(1, Math.abs(d.x * e.x + d.y * e.y)));
-
-function median(values: readonly number[]): number {
-  const sorted = values.toSorted((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
-}
 
 /** Where two lines cross, if they aren't parallel. */
 function intersect(a: Vec2, d: Vec2, b: Vec2, e: Vec2): Vec2 | undefined {

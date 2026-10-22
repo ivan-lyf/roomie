@@ -160,8 +160,8 @@ export function dimensionsIn(text: string): DimensionReading[] {
   return [];
 }
 
-/** Ceiling words: "9' CLG", "CEILING 2.7 m", and French "HSP 2,50" (hauteur sous plafond). */
-const CEILING = /\b(?:CLG|CEILING|CEIL|HAUTEUR SOUS PLAFOND|PLAFOND|HSP)\b/;
+/** Ceiling words: "9' CLG", "Ceiling 2.7 m", and French "HSP 2,50" (hauteur sous plafond). */
+const CEILING = /\b(?:CLG|CEILING|CEIL|HAUTEUR SOUS PLAFOND|PLAFOND|H\.?\s?S\.?\s?P\b\.?)/i;
 /** A length anywhere in text: feet and inches, or a number with or without a metric unit. */
 const LENGTH = new RegExp(
   String.raw`${FEET}\s*-?\s*(?:${INCHES})?|\d+(?:[.,]\d+)?\s*(?:"|″|in\.?|mm|cm|m(?![a-z]))?`,
@@ -170,17 +170,39 @@ const LENGTH = new RegExp(
 /** Ceilings are this high, which also tells a bare "2,50" is meters. */
 const CEILING_RANGE: [number, number] = [2, 6];
 
-/** The ceiling height a label gives, in meters: "9' CLG" is 2.74. */
-export function parseCeiling(text: string): number | undefined {
-  if (!CEILING.test(normalize(text))) return undefined;
-  for (const [length] of text.matchAll(LENGTH)) {
-    const heights = parseDimension(length.trim())
+/**
+ * The ceiling height a label gives, and the label without it: the ceiling-like length nearest
+ * the ceiling word, so "LIVING 12' x 10' 9' CLG" is a 9' ceiling over a 12' x 10' room.
+ */
+function findCeiling(text: string): { meters: number; rest: string } | undefined {
+  const word = CEILING.exec(text);
+  if (!word) return undefined;
+  const [wordStart, wordEnd] = [word.index, word.index + word[0].length];
+  let best: { meters: number; start: number; end: number; gap: number } | undefined;
+  for (const match of text.matchAll(LENGTH)) {
+    const heights = parseDimension(match[0].trim())
       .filter((r) => r.meters.length === 1)
       .map((r) => r.meters[0]!)
       .filter((m) => m >= CEILING_RANGE[0] && m <= CEILING_RANGE[1]);
-    if (heights.length === 1) return heights[0];
+    if (heights.length !== 1) continue;
+    const [start, end] = [match.index, match.index + match[0].length];
+    const gap = end <= wordStart ? wordStart - end : Math.max(0, start - wordEnd);
+    if (!best || gap < best.gap) best = { meters: heights[0]!, start, end, gap };
   }
-  return undefined;
+  if (!best) return undefined;
+  // Cut out the height and the word, the later one first so the earlier one's place holds.
+  const cuts = [
+    [best.start, best.end],
+    [wordStart, wordEnd],
+  ].sort((a, b) => b[0]! - a[0]!);
+  let rest = text;
+  for (const [from, to] of cuts) rest = `${rest.slice(0, from)} ${rest.slice(to)}`;
+  return { meters: best.meters, rest: rest.replace(/\s+/g, ' ').trim() };
+}
+
+/** The ceiling height a label gives, in meters: "9' CLG" is 2.74. */
+export function parseCeiling(text: string): number | undefined {
+  return findCeiling(text)?.meters;
 }
 
 export type PlanTextReading = {
@@ -194,13 +216,17 @@ export type PlanTextReading = {
 
 /**
  * What a piece of plan text says. A room name wins the kind, so "CHAMBRE 2 10.20 m²" is a room
- * label that also carries its area, and "BEDROOM 11'6" x 11'6"" one with its size.
+ * label that also carries its area, and "BEDROOM 11'6" x 11'6" 9' CLG" one with its size and
+ * its ceiling.
  */
 export function readPlanText(text: string): PlanTextReading {
   const roomType = roomTypeFromLabel(text);
-  const ceiling = parseCeiling(text);
-  const area = parseArea(text);
-  const dimensions = area || ceiling ? [] : roomType ? dimensionsIn(text) : parseDimension(text);
+  const found = findCeiling(text);
+  const ceiling = found?.meters;
+  // Sizes and areas are read from what's left once a ceiling height is taken out.
+  const rest = found?.rest ?? text;
+  const area = parseArea(rest);
+  const dimensions = area ? [] : roomType ? dimensionsIn(rest) : found ? [] : parseDimension(rest);
   const kind: PlanTextKind = roomType
     ? 'room_label'
     : ceiling

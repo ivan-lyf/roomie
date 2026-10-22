@@ -28,7 +28,10 @@ function planText(
   const inUnit =
     dimensions.find((d) => d.unit === unit) ??
     (dimensions.length === 1 ? dimensions[0] : undefined);
-  const meters = reading.ceiling !== undefined ? [reading.ceiling] : inUnit?.meters;
+  const meters =
+    reading.kind === 'ceiling' && reading.ceiling !== undefined
+      ? [reading.ceiling]
+      : inUnit?.meters;
   const parsed = {
     ...(meters && { meters }),
     ...(reading.area && { squareMeters: reading.area.squareMeters }),
