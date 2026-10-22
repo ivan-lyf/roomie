@@ -1,5 +1,6 @@
 import type { Floorplan, RoomType, SourceUnit } from '@roomie/schema';
 import { bounds } from './polygon';
+import { roomWalls } from './rooms';
 
 // One meters-per-pixel scale for the whole image, from the plan's labels or the user's
 // measurements (PLAN.md §5.1). Everything is converted to meters with it, once.
@@ -135,7 +136,7 @@ export type LabelCheck = {
   text: string;
   /** What the label says, in meters. */
   stated: number[];
-  /** The room's width and depth on the plan, paired with `stated`. */
+  /** The room's width and depth as drawn, paired with `stated`: inside or center to center. */
   measured: number[];
   /** The worst side, as a fraction off. */
   error: number;
@@ -144,46 +145,49 @@ export type LabelCheck = {
 
 /**
  * Checks every room's dimension labels against the room as drawn at the current scale. Rooms are
- * outlined at the walls' center lines while labels usually give the inside, so a label up to a
- * wall's thickness short still agrees.
+ * outlined at the walls' center lines, while a plan's labels give either those or the inside
+ * (a wall's thickness less): whichever fits the labels best overall is taken for all of them.
  */
 export function checkRoomLabels(
-  plan: Pick<Floorplan, 'rooms' | 'labels'>,
+  plan: Pick<Floorplan, 'rooms' | 'labels' | 'walls'>,
   tolerance = 0.03,
-  wall = 0.2,
 ): LabelCheck[] {
   const labels = new Map(plan.labels.map((l) => [l.id, l]));
-  return plan.rooms.flatMap((room) => {
+  const pairs = plan.rooms.flatMap((room) => {
     const { min, max } = bounds(room.boundary);
     const sides = [max.x - min.x, max.y - min.y];
-    return room.labelTextIds.flatMap((id): LabelCheck[] => {
+    const walls = roomWalls(room, plan.walls);
+    const thickness =
+      walls.length > 0 ? walls.reduce((s, w) => s + w.thickness, 0) / walls.length : 0.15;
+    return room.labelTextIds.flatMap((id) => {
       const label = labels.get(id);
       const stated = label?.parsed?.meters;
       if (!label || !stated) return [];
-      const off = (meters: number, side: number) => {
-        if (meters > side) return meters / side - 1;
-        if (meters < side - wall) return 1 - meters / (side - wall);
-        return 0;
+      /** The best pairing of stated lengths with the room's sides, less `inset` each. */
+      const fit = (inset: number) => {
+        const options =
+          stated.length === 1 ? [[sides[0]!], [sides[1]!]] : [sides, sides.toReversed()];
+        return options
+          .map((order) => {
+            const measured = stated.map((_, i) => order[i]! - inset);
+            const error = Math.max(...stated.map((m, i) => Math.abs(m / measured[i]! - 1)));
+            return { measured, error };
+          })
+          .toSorted((a, b) => a.error - b.error)[0]!;
       };
-      const pair = (order: number[]) => ({
-        measured: stated.map((_, i) => order[i]!),
-        error: Math.max(...stated.map((m, i) => off(m, order[i]!))),
-      });
-      const options =
-        stated.length === 1 ? [[sides[0]!], [sides[1]!]] : [sides, sides.toReversed()];
-      const best = options.map(pair).toSorted((a, b) => a.error - b.error)[0]!;
-      return [
-        {
-          labelId: id,
-          roomId: room.id,
-          text: label.text,
-          stated,
-          ...best,
-          agrees: best.error <= tolerance,
-        },
-      ];
+      return [{ room, label, stated, center: fit(0), inside: fit(thickness) }];
     });
   });
+  const total = (key: 'center' | 'inside') => pairs.reduce((s, p) => s + p[key].error, 0);
+  const key = total('inside') < total('center') ? 'inside' : 'center';
+  return pairs.map(({ room, label, stated, ...fits }) => ({
+    labelId: label.id,
+    roomId: room.id,
+    text: label.text,
+    stated,
+    ...fits[key],
+    agrees: fits[key].error <= tolerance,
+  }));
 }
 
 function median(values: readonly number[]): number {

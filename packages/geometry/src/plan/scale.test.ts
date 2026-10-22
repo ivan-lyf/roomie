@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Floorplan } from '@roomie/schema';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
+import { rescalePlan } from './edit';
 import {
   checkRoomLabels,
   detectScale,
@@ -138,5 +139,11 @@ describe('checkRoomLabels', () => {
     const bad = checkRoomLabels({ ...plan, rooms }).filter((c) => !c.agrees);
     expect(bad.map((c) => c.labelId)).toEqual(['t2']);
     expect(bad[0]!.error).toBeGreaterThan(0.03);
+  });
+
+  it('flags labels once the scale is 7% off', () => {
+    const checks = checkRoomLabels(rescalePlan(plan, 1.07));
+    expect(checks.some((c) => !c.agrees)).toBe(true);
+    expect(Math.min(...checks.map((c) => c.error))).toBeGreaterThan(0.015);
   });
 });
