@@ -17,6 +17,8 @@ import { index, jsonb, numeric, pgTable, real, text, timestamp, uuid } from 'dri
 
 // Tables mirror the zod schemas in @roomie/schema (schema.test.ts checks they match).
 // JSONB columns are typed here, but still validate them with zod on read and write.
+// Every table enables RLS with no policies, so Supabase's public Data API can't touch it.
+// The API connects as the table owner, which RLS doesn't apply to.
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const emptyTextArray = sql`'{}'::text[]`;
@@ -30,7 +32,7 @@ export const rooms = pgTable('rooms', {
   materials: jsonb('materials').$type<Materials>().notNull(),
   sourceImageUrl: text('source_image_url'),
   createdAt: createdAt(),
-});
+}).enableRLS();
 
 export const products = pgTable(
   'products',
@@ -47,7 +49,7 @@ export const products = pgTable(
     scrapedAt: timestamp('scraped_at', { withTimezone: true }).notNull(),
   },
   (t) => [index('products_category_idx').on(t.category)],
-);
+).enableRLS();
 
 export const layouts = pgTable(
   'layouts',
@@ -71,7 +73,7 @@ export const layouts = pgTable(
     index('layouts_room_id_idx').on(t.roomId),
     index('layouts_generation_id_idx').on(t.generationId),
   ],
-);
+).enableRLS();
 
 export const ratings = pgTable('ratings', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -85,4 +87,4 @@ export const ratings = pgTable('ratings', {
   note: text('note'),
   status: text('status').$type<RatingStatus>().notNull().default('active'),
   createdAt: createdAt(),
-});
+}).enableRLS();
