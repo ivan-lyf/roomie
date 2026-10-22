@@ -64,7 +64,7 @@ pnpm dev                                # then open http://localhost:5173
 
 At http://localhost:5173 you can upload a floor plan (an image or a PDF). Gemini reads it, you correct it in the 2D editor (or trace it there by hand), then see it in 3D; the demo home is there to try both. `/catalog` browses the products.
 
-`pnpm plans:eval` reads every test plan in `fixtures/plans` (and `data/plans/eval`) and reports how close the readings are: walls, openings, door swings, room types and scale. Readings are cached, so re-runs are free. On Gemini's free tier, Google may use what's sent to improve its products, so only evaluate plans you own.
+`pnpm plans:eval` reads every test plan in `fixtures/plans` (and `data/plans/eval`) and reports how close the readings are: walls, openings, door swings, room types and scale. Readings are cached, so re-runs are free. On Gemini's free tier, Google may use what's sent to improve its products, so only evaluate plans you're happy to share. Plans from elsewhere go in `data/plans/eval/<name>/` (gitignored) with a `truth.json`: their true scale and the rooms their labels name; `pnpm --filter @roomie/models plan:prepare` sizes their images the way uploads are.
 
 For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes), `pnpm models:process` and `pnpm catalog:publish`. `pnpm catalog:check` then confirms every product has sound data and a true-to-size model.
 

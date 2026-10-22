@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { demoPlan, demoRawPlan } from '../test/fixtures';
-import { type EvalPlan, evalPlan, formatReport, ReadingCache } from './eval';
+import { type EvalPlan, evalPlan, formatReport, LabelTruth, ReadingCache } from './eval';
 import type { PlanReader } from './reader';
 
 let dir: string;
@@ -14,11 +14,32 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-const plan: EvalPlan = {
-  name: '00-demo-1br',
-  image: { bytes: new Uint8Array([1, 2, 3]), mimeType: 'image/png', width: 900, height: 750 },
-  truth: demoPlan,
+const image = {
+  bytes: new Uint8Array([1, 2, 3]),
+  mimeType: 'image/png' as const,
+  width: 900,
+  height: 750,
+};
+const plan: EvalPlan = { name: '00-demo-1br', image, floorplan: demoPlan, units: 'imperial' };
+
+/** The demo as a plan from elsewhere would be known: its scale, and its rooms by label. */
+const labelled: EvalPlan = {
+  name: 'demo-by-label',
+  image,
   units: 'imperial',
+  labels: LabelTruth.parse({
+    metersPerPixel: 0.01,
+    scaleSource: 'drawn at 1 px = 1 cm',
+    rooms: [
+      { label: 'BEDROOM', type: 'bedroom', squareMeters: 3.4 * 3.4 },
+      { label: 'LIVING', type: 'living_room' },
+      { label: 'KITCHEN', type: 'kitchen' },
+      { label: 'BATH', type: 'bathroom', squareMeters: 40 },
+      { label: 'CL', type: 'closet' },
+      { label: 'FOYER', type: 'hallway' },
+      { label: 'PANTRY', type: 'closet' },
+    ],
+  }),
 };
 
 /** A reader that reads the demo perfectly, counting its reads. */
@@ -66,10 +87,31 @@ describe('evalPlan', () => {
   });
 });
 
+describe('evalPlan, for a plan known by its labels', () => {
+  it('finds rooms by their labels, checks their types and printed areas', async () => {
+    const result = await evalPlan(labelled, perfectReader());
+    expect(result.geometry).toBeUndefined();
+    // Every room but the pantry the truth made up; the bath's 40 m² is wrong on purpose.
+    expect(result.rooms).toEqual({
+      named: 7,
+      found: 6,
+      typed: 6,
+      areas: { checked: 2, within: 1 },
+    });
+    expect(Math.abs(result.scale.error!)).toBeLessThan(0.01);
+    expect(result.problems).toEqual([]);
+  });
+});
+
 describe('formatReport', () => {
   it('reports each plan, with totals against the goals', async () => {
-    const report = formatReport([await evalPlan(plan, perfectReader())]);
+    const report = formatReport([
+      await evalPlan(plan, perfectReader()),
+      await evalPlan(labelled, perfectReader()),
+    ]);
     expect(report).toMatch(/00-demo-1br\s+2 s\s+imperial [+-]0\.\d%\s+100%\/100%/);
-    expect(report).toMatch(/Room types right: 6\/6 \(goal ≥ 90%\)\. Scale within 3%: 1\/1 plans/);
+    expect(report).toMatch(/demo-by-label .*–\s+–\s+–\s+6\/7\s+6\/7\s+1\/2/);
+    expect(report).toMatch(/Room types right: 12\/13 \(92%, goal ≥ 90%\)/);
+    expect(report).toMatch(/Scale within 3%: 2\/2/);
   });
 });

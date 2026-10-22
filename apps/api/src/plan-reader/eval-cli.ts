@@ -1,9 +1,10 @@
 // pnpm plans:eval [--model <gemini model>] [--fresh] [plan folders...]
 //
-// Reads every test plan with a checked floorplan.json (fixtures/plans, and data/plans/eval for
-// plans that can't be committed) and reports how close the readings are. Readings are cached by
-// image, model and prompt version; --fresh reads again. Sends the images to the plan reader: on
-// Gemini's free tier, only plans we own (see the README).
+// Reads every test plan (fixtures/plans, and data/plans/eval for plans that can't be
+// committed) that has a checked floorplan.json or a truth.json, and reports how close the
+// readings are. Readings are cached by image, model and prompt version; --fresh reads again.
+// This sends the images to Gemini: on its free tier Google may use them, so only plans you're
+// happy to share (see the README).
 
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -12,7 +13,14 @@ import { Floorplan, SourceUnit } from '@roomie/schema';
 import { z } from 'zod';
 import { loadConfig } from '../config';
 import { readImageInfo } from '../floorplans/image';
-import { type EvalPlan, type EvalResult, evalPlan, formatReport, ReadingCache } from './eval';
+import {
+  type EvalPlan,
+  type EvalResult,
+  evalPlan,
+  formatReport,
+  LabelTruth,
+  ReadingCache,
+} from './eval';
 import { geminiReader } from './gemini';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -40,18 +48,22 @@ async function children(parent: string): Promise<string[]> {
   return entries.filter((e) => e.isDirectory()).map((e) => path.join(parent, e.name));
 }
 
-/** A test plan from its folder, if it has an image and a checked floorplan.json. */
+/**
+ * A test plan from its folder: its image, and a checked floorplan.json or a truth.json (its true
+ * scale and the rooms its labels name).
+ */
 async function loadPlan(dir: string): Promise<EvalPlan | undefined> {
-  const truthText = await readFile(path.join(dir, 'floorplan.json'), 'utf8').catch(() => undefined);
-  if (!truthText) return undefined;
+  const read = (file: string) => readFile(path.join(dir, file), 'utf8').catch(() => undefined);
+  const floorplan = await read('floorplan.json');
+  const labels = floorplan ? undefined : await read('truth.json');
+  if (!floorplan && !labels) return undefined;
   for (const file of ['plan.png', 'plan.jpg', 'plan.jpeg']) {
     const bytes = await readFile(path.join(dir, file)).catch(() => undefined);
     if (!bytes) continue;
     const info = readImageInfo(new Uint8Array(bytes));
     if (!info) throw new Error(`${dir}/${file} isn't a PNG or JPEG image`);
-    const meta = await readFile(path.join(dir, 'meta.json'), 'utf8').then(
-      (t) => z.object({ units: SourceUnit.optional() }).parse(JSON.parse(t)),
-      () => ({ units: undefined }),
+    const meta = await read('meta.json').then((t) =>
+      t ? z.object({ units: SourceUnit.optional() }).parse(JSON.parse(t)) : { units: undefined },
     );
     return {
       name: path.basename(dir),
@@ -61,7 +73,9 @@ async function loadPlan(dir: string): Promise<EvalPlan | undefined> {
         width: info.width,
         height: info.height,
       },
-      truth: Floorplan.parse(JSON.parse(truthText)),
+      ...(floorplan
+        ? { floorplan: Floorplan.parse(JSON.parse(floorplan)) }
+        : { labels: LabelTruth.parse(JSON.parse(labels!)) }),
       ...(meta.units && { units: meta.units }),
     };
   }
@@ -91,7 +105,7 @@ for (const dir of dirs) {
   }
 }
 if (results.length === 0) {
-  console.error('No test plans with a plan image and a floorplan.json.');
+  console.error('No test plans with a plan image and a floorplan.json or truth.json.');
   process.exit(1);
 }
 console.log(`\n${formatReport(results)}`);
