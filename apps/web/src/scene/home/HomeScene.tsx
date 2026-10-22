@@ -1,14 +1,18 @@
-import { CameraControls } from '@react-three/drei';
+import { CameraControls, Environment } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { bounds } from '@roomie/geometry';
 import type { Floorplan, Vec2 } from '@roomie/schema';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { EffectComposer, N8AO, ToneMapping } from '@react-three/postprocessing';
+import { ToneMappingMode } from 'postprocessing';
 import { Object3D, Vector3 } from 'three';
 import { Ceilings } from './Ceilings';
 import { CUTAWAY_HEIGHT } from './cutaway';
 import { Floors } from './Floors';
+import { preloadFloors } from './floorTextures';
 import { Obstacles } from './Obstacles';
 import { Openings, placedOpenings } from './Openings';
+import { RoomLights } from './RoomLights';
 import { useCutaway } from './useCutaway';
 import { Walls, wallBoxes } from './Walls';
 
@@ -18,6 +22,8 @@ const AZIMUTH = 0.6;
 const POLAR = 0.95;
 /** Where the sun comes from: south-east, high up. */
 const SUN = new Vector3(0.45, 1, 0.65).normalize();
+/** A small CC0 indoor HDRI (see `apps/web/ASSETS.md`): soft daylight from every side. */
+const ENVIRONMENT = '/env/lebombo-512.hdr';
 
 /** What the camera frames: a point on the plan, and how far around it to show. */
 type Extent = { center: Vec2; radius: number };
@@ -38,6 +44,7 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
   const home = useMemo(() => extentOf(plan.walls.flatMap((w) => [w.a, w.b])), [plan]);
   const room = plan.rooms.find((r) => r.id === roomId);
   const focus = useMemo(() => (room ? extentOf(room.boundary) : home), [room, home]);
+  useEffect(preloadFloors, []);
   return (
     <Canvas
       shadows="percentage"
@@ -47,7 +54,11 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
       onPointerMissed={() => onRoom(undefined)}
     >
       <color attach="background" args={[BACKGROUND]} />
+      <Suspense fallback={null}>
+        <Environment files={ENVIRONMENT} environmentIntensity={0.75} />
+      </Suspense>
       <Daylight home={home} />
+      <RoomLights plan={plan} />
       <Floors plan={plan} onRoom={onRoom} />
       <CutAway
         plan={plan}
@@ -60,6 +71,10 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
       {ceilings && <Ceilings plan={plan} />}
       <Ground home={home} />
       <Framing extent={focus} />
+      <EffectComposer multisampling={4}>
+        <N8AO aoRadius={0.5} distanceFalloff={0.5} intensity={2.5} halfRes />
+        <ToneMapping mode={ToneMappingMode.NEUTRAL} />
+      </EffectComposer>
     </Canvas>
   );
 }
@@ -104,7 +119,7 @@ function extentOf(points: readonly Vec2[]): Extent {
   };
 }
 
-/** A sky light and a sun, whose shadow covers the whole home. */
+/** A sun, whose shadow covers the whole home; the environment fills in the rest. */
 function Daylight({ home }: { home: Extent }) {
   const [target] = useState(() => new Object3D());
   const { center, radius } = home;
@@ -112,7 +127,6 @@ function Daylight({ home }: { home: Extent }) {
   const distance = reach + 20;
   return (
     <>
-      <hemisphereLight args={['#ffffff', '#d6d3d1', 1.2]} />
       <primitive object={target} position={[center.x, 0, center.y]} />
       <directionalLight
         target={target}
@@ -121,7 +135,8 @@ function Daylight({ home }: { home: Extent }) {
           SUN.y * distance,
           center.y + SUN.z * distance,
         ]}
-        intensity={2}
+        color="#fff4e6"
+        intensity={1.6}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0004}

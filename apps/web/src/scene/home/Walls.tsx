@@ -13,7 +13,7 @@ import { Color } from 'three';
 import { MeshBuilder } from './meshBuilder';
 
 /** The cut top of a wall, which draws the plan when seen from above. */
-const TOP = '#8c857b';
+const TOP = '#a8a198';
 /** Window sills, the underside of lintels, and the edges of openings. */
 const TRIM = '#f4f1ea';
 /** The outside of the home. */
@@ -84,7 +84,8 @@ export function Walls({ plan, boxes, lowered = FULL_HEIGHT }: Props) {
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   return (
-    <mesh geometry={geometry} castShadow receiveShadow>
+    // Walls catch clicks, so clicking one doesn't pick the room whose floor is behind it.
+    <mesh geometry={geometry} castShadow receiveShadow onClick={(e) => e.stopPropagation()}>
       <meshStandardMaterial vertexColors roughness={0.9} />
     </mesh>
   );

@@ -1,5 +1,6 @@
 import { area } from '@roomie/geometry';
 import type { Floorplan, RoomType } from '@roomie/schema';
+import { LookControls } from './LookControls';
 
 const ROOM_TYPES: Record<RoomType, string> = {
   living_room: 'Living room',
@@ -36,7 +37,7 @@ export function HomePanel(props: Props) {
   const item = (selected: boolean) =>
     `w-full px-3 py-2 text-left ${selected ? 'bg-stone-100' : 'hover:bg-stone-50'}`;
   return (
-    <aside className="m-4 flex w-80 shrink-0 flex-col gap-3 rounded-xl bg-white p-4 text-sm text-stone-800 shadow-lg">
+    <aside className="m-4 flex w-80 shrink-0 flex-col gap-3 overflow-y-auto rounded-xl bg-white p-4 text-sm text-stone-800 shadow-lg">
       <h1 className="text-base font-semibold">{plan.name}</h1>
 
       <ul className="divide-y divide-stone-200 rounded-md border border-stone-200">
@@ -63,6 +64,8 @@ export function HomePanel(props: Props) {
           </li>
         ))}
       </ul>
+
+      <LookControls plan={plan} roomId={roomId} />
 
       <fieldset className="space-y-1">
         <label className="flex items-center gap-2">
