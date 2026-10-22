@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { parseArea, parseDimension, readPlanText, roomTypeFromLabel } from './labels';
+import {
+  dimensionsIn,
+  parseArea,
+  parseCeiling,
+  parseDimension,
+  readPlanText,
+  roomNameFromLabel,
+  roomTypeFromLabel,
+  uniqueRoomName,
+} from './labels';
 
 const FT = 0.3048;
 const IN = 0.0254;
@@ -59,7 +68,7 @@ describe('roomTypeFromLabel', () => {
     expect(roomTypeFromLabel(text)).toBe(type);
   });
 
-  it.each(['12\'4" x 10\'', 'N', 'UP', 'DW', 'REF', 'VUE EN PLAN', '7.70'])(
+  it.each(["12'4\" x 10'", 'N', 'UP', 'DW', 'REF', 'VUE EN PLAN', '7.70'])(
     'finds no room in %j',
     (text) => {
       expect(roomTypeFromLabel(text)).toBeUndefined();
@@ -74,7 +83,7 @@ describe('parseDimension', () => {
   };
 
   it.each([
-    ['12\'4" x 10\'', [12 * FT + 4 * IN, 10 * FT]],
+    ["12'4\" x 10'", [12 * FT + 4 * IN, 10 * FT]],
     ['12\'-4" × 10\'-0"', [12 * FT + 4 * IN, 10 * FT]],
     ['12 ft 4 in x 10 ft', [12 * FT + 4 * IN, 10 * FT]],
     ['12’4” x 10’', [12 * FT + 4 * IN, 10 * FT]],
@@ -127,7 +136,7 @@ describe('parseArea', () => {
     expect(area?.squareMeters).toBeCloseTo(squareMeters, 6);
   });
 
-  it.each(['12\'4" x 10\'', 'BEDROOM', '3600 x 3000'])('finds no area in %j', (text) => {
+  it.each(["12'4\" x 10'", 'BEDROOM', '3600 x 3000'])('finds no area in %j', (text) => {
     expect(parseArea(text)).toBeUndefined();
   });
 });
@@ -141,9 +150,67 @@ describe('readPlanText', () => {
     });
   });
 
-  it('tells dimensions, areas and other text apart', () => {
-    expect(readPlanText('12\'4" x 10\'').kind).toBe('dimension');
+  it('tells dimensions, areas, ceilings and other text apart', () => {
+    expect(readPlanText("12'4\" x 10'").kind).toBe('dimension');
     expect(readPlanText('450 sq ft').kind).toBe('area');
+    expect(readPlanText("9' CLG")).toMatchObject({ kind: 'ceiling', ceiling: 9 * 0.3048 });
     expect(readPlanText('N').kind).toBe('other');
+  });
+
+  it("reads a room's size from the same line as its name", () => {
+    const bedroom = readPlanText('BEDROOM 11\'6" x 11\'6"');
+    expect(bedroom).toMatchObject({ kind: 'room_label', roomType: 'bedroom' });
+    expect(bedroom.dimensions?.map((d) => d.unit)).toEqual(['imperial']);
+    expect(bedroom.dimensions?.[0]?.meters[0]).toBeCloseTo(3.5052, 9);
+    expect(readPlanText("BR2 12'x10'").dimensions?.[0]?.meters).toEqual([12 * 0.3048, 10 * 0.3048]);
+    expect(readPlanText('BEDROOM 2')).not.toHaveProperty('dimensions');
+  });
+});
+
+describe('dimensionsIn', () => {
+  it('needs a unit or a pair inside longer text', () => {
+    expect(dimensionsIn('LIVING 3600 x 4200').map((r) => r.unit)).toEqual([
+      'metric_mm',
+      'metric_cm',
+      'metric_m',
+    ]);
+    expect(dimensionsIn('KITCHEN 3.6 m')).toEqual([{ unit: 'metric_m', meters: [3.6] }]);
+    expect(dimensionsIn('CHAMBRE 2')).toEqual([]);
+  });
+});
+
+describe('parseCeiling', () => {
+  it.each([
+    ["9' CLG", 2.7432],
+    ['CEILING 2.7 m', 2.7],
+    ['HSP 2,50', 2.5],
+    ['H.S.P. 2,50 m', 2.5],
+    ['CLG HT 96"', 2.4384],
+  ])('reads %j as %f m', (text, meters) => {
+    expect(parseCeiling(text)).toBeCloseTo(meters, 6);
+  });
+
+  it('needs a ceiling word and a ceiling-like height', () => {
+    expect(parseCeiling("9' x 10'")).toBeUndefined();
+    expect(parseCeiling('CLG 30 m')).toBeUndefined();
+  });
+});
+
+describe('room names', () => {
+  it.each([
+    ['MASTER BEDROOM', 'bedroom', 'Master bedroom'],
+    ['BEDROOM 2 11\'6" x 11\'6"', 'bedroom', 'Bedroom 2'],
+    ['BR2', 'bedroom', 'Bedroom 2'],
+    ['CHAMBRE 1 10.5 m²', 'bedroom', 'Chambre 1'],
+    ['W.I.C.', 'closet', 'Closet'],
+    ['DEN', 'den_office', 'Den'],
+    ['LIVING/DINING', 'living_room', 'Living/dining'],
+  ] as const)('names %j', (text, type, name) => {
+    expect(roomNameFromLabel(text, type)).toBe(name);
+  });
+
+  it('numbers a name already taken', () => {
+    expect(uniqueRoomName(['Bedroom'], 'Kitchen')).toBe('Kitchen');
+    expect(uniqueRoomName(['Bedroom', 'Bedroom 2'], 'Bedroom')).toBe('Bedroom 3');
   });
 });

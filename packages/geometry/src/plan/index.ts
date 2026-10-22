@@ -8,3 +8,6 @@ export * from './snap';
 export * from './validate';
 export * from './walls';
 export * from './read/tidy';
+export * from './read/analyze';
+export * from './read/compare';
+export * from './read/convert';

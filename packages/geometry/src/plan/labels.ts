@@ -146,32 +146,119 @@ export function parseArea(
   return undefined;
 }
 
+/**
+ * A dimension inside longer text, like "BEDROOM 11'6" x 11'6"": the first run from a number that
+ * reads as one. Only one with its unit written, or a pair, counts, so "BEDROOM 2" isn't 2 m.
+ */
+export function dimensionsIn(text: string): DimensionReading[] {
+  const whole = parseDimension(text);
+  if (whole.length > 0) return whole;
+  for (const match of text.matchAll(/(?<![\d.,])\d/g)) {
+    const readings = parseDimension(text.slice(match.index));
+    if (readings.length === 1 || readings.some((r) => r.meters.length === 2)) return readings;
+  }
+  return [];
+}
+
+/** Ceiling words: "9' CLG", "CEILING 2.7 m", and French "HSP 2,50" (hauteur sous plafond). */
+const CEILING = /\b(?:CLG|CEILING|CEIL|HAUTEUR SOUS PLAFOND|PLAFOND|HSP)\b/;
+/** A length anywhere in text: feet and inches, or a number with or without a metric unit. */
+const LENGTH = new RegExp(
+  String.raw`${FEET}\s*-?\s*(?:${INCHES})?|\d+(?:[.,]\d+)?\s*(?:"|″|in\.?|mm|cm|m(?![a-z]))?`,
+  'gi',
+);
+/** Ceilings are this high, which also tells a bare "2,50" is meters. */
+const CEILING_RANGE: [number, number] = [2, 6];
+
+/** The ceiling height a label gives, in meters: "9' CLG" is 2.74. */
+export function parseCeiling(text: string): number | undefined {
+  if (!CEILING.test(normalize(text))) return undefined;
+  for (const [length] of text.matchAll(LENGTH)) {
+    const heights = parseDimension(length.trim())
+      .filter((r) => r.meters.length === 1)
+      .map((r) => r.meters[0]!)
+      .filter((m) => m >= CEILING_RANGE[0] && m <= CEILING_RANGE[1]);
+    if (heights.length === 1) return heights[0];
+  }
+  return undefined;
+}
+
 export type PlanTextReading = {
   kind: PlanTextKind;
   roomType?: RoomType;
   area?: { squareMeters: number; unit: 'imperial' | 'metric' };
   dimensions?: DimensionReading[];
+  /** A ceiling height, in meters. */
+  ceiling?: number;
 };
 
 /**
  * What a piece of plan text says. A room name wins the kind, so "CHAMBRE 2 10.20 m²" is a room
- * label that also carries its area.
+ * label that also carries its area, and "BEDROOM 11'6" x 11'6"" one with its size.
  */
 export function readPlanText(text: string): PlanTextReading {
   const roomType = roomTypeFromLabel(text);
+  const ceiling = parseCeiling(text);
   const area = parseArea(text);
-  const dimensions = area ? [] : parseDimension(text);
+  const dimensions = area || ceiling ? [] : roomType ? dimensionsIn(text) : parseDimension(text);
   const kind: PlanTextKind = roomType
     ? 'room_label'
-    : area
-      ? 'area'
-      : dimensions.length > 0
-        ? 'dimension'
-        : 'other';
+    : ceiling
+      ? 'ceiling'
+      : area
+        ? 'area'
+        : dimensions.length > 0
+          ? 'dimension'
+          : 'other';
   return {
     kind,
     ...(roomType && { roomType }),
     ...(area && { area }),
     ...(dimensions.length > 0 && { dimensions }),
+    ...(ceiling && { ceiling }),
   };
+}
+
+/** What a room of each type is called until the user names it. */
+export const ROOM_NAMES: Record<RoomType, string> = {
+  living_room: 'Living room',
+  bedroom: 'Bedroom',
+  studio: 'Studio',
+  dining_area: 'Dining area',
+  den_office: 'Den',
+  kitchen: 'Kitchen',
+  bathroom: 'Bathroom',
+  hallway: 'Hallway',
+  closet: 'Closet',
+  laundry: 'Laundry',
+  balcony: 'Balcony',
+  other: 'Room',
+};
+
+/** Where a label's size or area starts: "BEDROOM 2 11'6" x 11'6"" names "BEDROOM 2". */
+const MEASURE_START = new RegExp(
+  String.raw`\d+(?:[.,]\d+)?\s*(?:'|′|"|″|ft\b|x\s*\d|×|m²|m2|sq\b|sf\b|cm\b|mm\b|m\b)`,
+  'i',
+);
+
+/**
+ * A room's name from the label that named it: the label itself when it's written out ("Master
+ * bedroom", "Chambre 2"), else the type's name with the label's number ("BR2" → "Bedroom 2").
+ */
+export function roomNameFromLabel(text: string, type: RoomType): string {
+  const cut = text.search(MEASURE_START);
+  const words = (cut >= 0 ? text.slice(0, cut) : text).replace(/[\s:,–-]+$/, '').trim();
+  if (/\p{L}{5,}/u.test(words)) {
+    const lower = words.toLocaleLowerCase('en-CA').replace(/\s+/g, ' ');
+    return lower.charAt(0).toLocaleUpperCase('en-CA') + lower.slice(1);
+  }
+  const number = /\d+/.exec(words)?.[0];
+  return number ? `${ROOM_NAMES[type]} ${number}` : ROOM_NAMES[type];
+}
+
+/** `name`, or with a number after it if a room already has it: "Bedroom", then "Bedroom 2". */
+export function uniqueRoomName(taken: Iterable<string>, name: string): string {
+  const names = new Set(taken);
+  if (!names.has(name)) return name;
+  for (let n = 2; ; n++) if (!names.has(`${name} ${n}`)) return `${name} ${n}`;
 }

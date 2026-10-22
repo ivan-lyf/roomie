@@ -54,14 +54,14 @@ export type ScaleDetection =
 
 /** Doors are 0.6–1.0 m wide. */
 const DOOR_WIDTH: [number, number] = [0.6, 1.0];
-/** Any room side outside this range means the unit is wrong. */
-const ROOM_SIDE: [number, number] = [0.6, 15];
+/** Any room side outside this range means the unit is wrong: from a shallow closet to a loft. */
+const ROOM_SIDE: [number, number] = [0.4, 30];
 /** Labels disagreeing more than this mean the unit (or the labels) is wrong. */
 const MAX_RESIDUAL = 0.05;
 
 /**
  * Which unit the labels are in. Every hypothesis gets a scale; it's plausible when the labels
- * agree with it, the doors come out 0.6–1.0 m wide, and every room 0.6–15 m a side. Exactly
+ * agree with it, the doors come out 0.6–1.0 m wide, and every room 0.4–30 m a side. Exactly
  * one plausible unit is used; otherwise the user picks, with the most plausible first.
  */
 export function detectScale(

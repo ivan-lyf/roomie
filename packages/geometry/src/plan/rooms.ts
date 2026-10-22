@@ -84,7 +84,11 @@ export function obstacleHeight(
 }
 
 /** The walls along a room's boundary: lying on one of its edges and overlapping it. */
-export function roomWalls(room: Room, walls: readonly Wall[], tolerance = 0.05): Wall[] {
+export function roomWalls(
+  room: Pick<Room, 'boundary'>,
+  walls: readonly Wall[],
+  tolerance = 0.05,
+): Wall[] {
   const edges = room.boundary.map((a, i) => [a, room.boundary[(i + 1) % room.boundary.length]!]);
   return walls.filter((wall) =>
     edges.some(([a, b]) => {
