@@ -7,6 +7,9 @@ from typing import Any
 
 PRODUCT_URL = "https://www.ikea.com/ca/en/p/testa-sofa-gray-s12345678/"
 MODEL_URL = "https://web-api.ikea.com/dimma/assets/test/12345678/simple/glb/testa.glb?cn=pip"
+BEIGE_URL = "https://www.ikea.com/ca/en/p/testa-sofa-beige-s22345678/"
+LOVESEAT_URL = "https://www.ikea.com/ca/en/p/testa-loveseat-gray-s32345678/"
+WOOD_LEGS_URL = "https://www.ikea.com/ca/en/p/testa-sofa-gray-wood-s42345678/"
 
 
 def product_page(
@@ -67,6 +70,40 @@ def product_page(
                                 {"measure": "30 kg", "name": "Max. load", "type": "00099"},
                             ]
                         }
+                    },
+                    "productStylePickerProps": {
+                        "variationStyles": [
+                            {
+                                "title": "Choose cover",
+                                "selectedOption": "Gray",
+                                "code": "COVER",
+                                "allOptions": [
+                                    {"title": "Gray", "url": PRODUCT_URL, "isSelected": True},
+                                    {"title": "Beige", "url": BEIGE_URL, "isSelected": False},
+                                ],
+                            }
+                        ]
+                    },
+                    "productSpecificationSectionProps": {
+                        "variations": [
+                            {
+                                "title": "Choose size",
+                                "selectedOption": "3-seat",
+                                "options": [
+                                    {"title": "2-seat", "url": LOVESEAT_URL},
+                                    {"title": "3-seat", "url": PRODUCT_URL},
+                                ],
+                            }
+                        ]
+                    },
+                    # A group without a selected option still links its variants.
+                    "functionalSelectorProps": {
+                        "variations": [
+                            {
+                                "title": "Choose legs",
+                                "options": [{"title": "Wood", "url": WOOD_LEGS_URL}],
+                            }
+                        ]
                     },
                 }
             }

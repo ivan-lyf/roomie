@@ -35,7 +35,8 @@ User-Agent, and back off on 429 and 5xx responses.
 
 Everything goes to `data/ikea/` at the repo root, which is gitignored:
 
-- `items.jsonl`: one item per line. Runs merge into it by `itemNo`.
+- `items.jsonl`: one item per line. Runs merge into it by `itemNo`. Each item also lists the
+  options it was picked by (color, size, ...) and the item numbers of its other variants.
 - `models/<itemNo>.glb`: 3D models, with `--models`.
 - `raw/`: cached responses. Product pages are trimmed to the embedded JSON the parser reads.
 - `report.json`: a summary of the last run, including failures.

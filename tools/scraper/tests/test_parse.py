@@ -23,6 +23,24 @@ def test_extracts_the_item_record() -> None:
     assert item["scrapedAt"] == "2026-10-21T12:00:00+00:00"
 
 
+def test_reads_variant_options_and_links() -> None:
+    item = parse_product_page(product_page(), PRODUCT_URL, SCRAPED_AT)
+    assert item is not None
+    assert item["options"] == [
+        {"name": "Cover", "value": "Gray"},
+        {"name": "Size", "value": "3-seat"},
+    ]
+    # Every other variant the pickers link to, but not the page itself.
+    assert item["variantItemNos"] == ["22345678", "32345678", "42345678"]
+
+
+def test_pages_without_pickers_have_no_variants() -> None:
+    item = parse_product_page(product_page(with_hydration=False), PRODUCT_URL, SCRAPED_AT)
+    assert item is not None
+    assert item["options"] == []
+    assert item["variantItemNos"] == []
+
+
 def test_category_path_is_ordered_and_skips_the_root() -> None:
     item = parse_product_page(product_page(), PRODUCT_URL, SCRAPED_AT)
     assert item is not None

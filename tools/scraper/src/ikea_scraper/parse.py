@@ -18,6 +18,12 @@ from ikea_scraper.sources import item_no_from_url
 _SCRIPT = re.compile(r"<script\b([^>]*)>(.*?)</script>", re.S | re.I)
 _CATEGORY_ID = re.compile(r"/cat/[^/]*-([a-z]{0,3}\d+)/?$")
 _PROPS_MARKER = '"productInformationSectionProps"'
+# The pickers that link a product's variants: (props block, group list, option list).
+_PICKERS = (
+    ("productStylePickerProps", "variationStyles", "allOptions"),  # color, cover, legs, frame
+    ("productSpecificationSectionProps", "variations", "options"),  # size, desk depth
+    ("functionalSelectorProps", "variations", "options"),  # slatted bed base, mattress
+)
 
 
 def parse_product_page(html: str, url: str, scraped_at: datetime) -> dict[str, Any] | None:
@@ -30,6 +36,7 @@ def parse_product_page(html: str, url: str, scraped_at: datetime) -> dict[str, A
     props = _page_props(html, url_item_no, product_ld.get("mpn")) or {}
     product = props.get("product") or {}
     offer = _offer(product_ld.get("offers"))
+    options, variant_item_nos = _variants(props, url_item_no)
 
     return {
         "itemNo": url_item_no or product.get("itemNo"),
@@ -44,6 +51,8 @@ def parse_product_page(html: str, url: str, scraped_at: datetime) -> dict[str, A
         "availability": _availability(offer),
         "categoryPath": _category_path(_first_of_type(json_ld, "BreadcrumbList")),
         "measurements": _measurements(props),
+        "options": options,
+        "variantItemNos": variant_item_nos,
         "color": product_ld.get("color"),
         "material": product_ld.get("material"),
         "imageUrl": _first_image(product_ld.get("image")),
@@ -184,6 +193,23 @@ def _measurements(props: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _variants(props: dict[str, Any], item_no: str | None) -> tuple[list[dict[str, str]], list[str]]:
+    """The options this variant was picked by, and the item numbers of the other variants."""
+    options: list[dict[str, str]] = []
+    linked: set[str] = set()
+    for block, groups_key, options_key in _PICKERS:
+        for group in (props.get(block) or {}).get(groups_key) or []:
+            name = (group.get("title") or "").removeprefix("Choose ").strip()
+            value = group.get("selectedOption")
+            if name and value:
+                options.append({"name": name[0].upper() + name[1:], "value": value})
+            for option in group.get(options_key) or []:
+                other = item_no_from_url(option.get("url") or "")
+                if other and other != item_no:
+                    linked.add(other)
+    return options, sorted(linked)
 
 
 def _first_image(image: Any) -> str | None:
