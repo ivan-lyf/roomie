@@ -10,7 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "catalog:import": "tsx --env-file-if-exists=../../.env src/catalog/import.ts",
-    "catalog:publish": "tsx --env-file-if-exists=../../.env src/catalog/publish-cli.ts"
+    "catalog:publish": "tsx --env-file-if-exists=../../.env src/catalog/publish-cli.ts",
+    "catalog:check": "tsx --env-file-if-exists=../../.env src/catalog/check-cli.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",

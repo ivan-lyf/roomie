@@ -16,6 +16,8 @@ export const ModelOutcome = z.enum([
 ]);
 export type ModelOutcome = z.infer<typeof ModelOutcome>;
 
+const Vec3 = z.tuple([z.number(), z.number(), z.number()]);
+
 /** One product in data/models/manifest.json, written by `pnpm models:process`. */
 export const ModelManifestEntry = z.object({
   itemNo: z.string(),
@@ -25,7 +27,9 @@ export const ModelManifestEntry = z.object({
   source: ModelSource.nullable(),
   bytes: z.number().int().positive().nullable(),
   /** Scale applied on each axis to reach the listed dims. */
-  scale: z.tuple([z.number(), z.number(), z.number()]).nullable(),
+  scale: Vec3.nullable(),
+  /** Bounds of the written file in meters, measured by reading it back. */
+  bounds: z.object({ min: Vec3, max: Vec3 }).nullable().default(null),
   notes: z.array(z.string()),
   /** What the entry was built from, so unchanged products are skipped on the next run. */
   inputs: z.string(),

@@ -6,10 +6,13 @@ import { Category, type Product } from '@roomie/schema';
 import { loadConfig } from '../config';
 import { type FamilyMember, familyIds } from './families';
 import { IkeaItem, itemNoOf, toProduct } from './ikea';
+import type { ImportReport } from './store';
 
 const { dataDir } = loadConfig();
 const itemsPath = path.join(dataDir, 'ikea', 'items.jsonl');
 const outPath = path.join(dataDir, 'catalog', 'products.json');
+/** What the import kept and why it rejected the rest, for `pnpm catalog:check`. */
+const reportPath = path.join(dataDir, 'catalog', 'report.json');
 
 /** Item numbers with a model downloaded by the scraper. */
 const downloaded = new Set(
@@ -91,6 +94,17 @@ console.table(
   ),
 );
 const familyCount = new Set(products.map((p) => p.familyId)).size;
+const report: ImportReport = {
+  generatedAt: new Date().toISOString(),
+  products: products.length,
+  families: familyCount,
+  unmapped,
+  unreadable,
+  rejected: [...rejected]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, count]) => ({ reason, count })),
+};
+await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 console.log(`${products.length} products in ${familyCount} families -> ${outPath}`);
 console.log(`${unmapped} items outside the mapped categories, ${unreadable} unreadable`);
 for (const [reason, count] of [...rejected].sort((a, b) => b[1] - a[1])) {

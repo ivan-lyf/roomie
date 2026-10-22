@@ -6,6 +6,7 @@ import { access, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/p
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Logger, NodeIO } from '@gltf-transform/core';
+import { getBounds } from '@gltf-transform/functions';
 import { ALL_EXTENSIONS, KHRDracoMeshCompression } from '@gltf-transform/extensions';
 import {
   Category,
@@ -15,7 +16,7 @@ import {
   Product,
 } from '@roomie/schema';
 import draco3d from 'draco3dgltf';
-import { MeshoptEncoder } from 'meshoptimizer';
+import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 import { z } from 'zod';
 import { BACKED, chooseYaw, scaleChange } from './fit';
 import { facesBackwards, normalizeModel, sourceSize } from './normalize';
@@ -47,6 +48,7 @@ const io = new NodeIO()
   .registerExtensions(ALL_EXTENSIONS)
   .registerDependencies({
     'draco3d.decoder': await draco3d.createDecoderModule(),
+    'meshopt.decoder': await MeshoptDecoder.ready.then(() => MeshoptDecoder),
     'meshopt.encoder': MeshoptEncoder,
   })
   // Per-model details go in the manifest instead.
@@ -74,7 +76,7 @@ for (const product of products) {
 
   const before = previous.get(itemNo);
   if (before?.inputs === inputs && (await exists(out))) {
-    entries.push(before);
+    entries.push(before.bounds ? before : { ...before, bounds: await measure(out) });
     reused++;
     continue;
   }
@@ -137,6 +139,7 @@ async function processModel(
   await optimizeModel(doc);
   const glb = await io.writeBinary(doc);
   await writeFile(out, glb);
+  const bounds = await measure(out);
   if (glb.byteLength > SIZE_BUDGET_BYTES) {
     notes.push(`over 1 MB (${(glb.byteLength / SIZE_BUDGET_BYTES).toFixed(1)} MB)`);
   }
@@ -146,6 +149,7 @@ async function processModel(
     source: 'ikea',
     bytes: glb.byteLength,
     scale: rounded,
+    bounds,
     notes,
   };
 }
@@ -158,11 +162,19 @@ async function writeStandIn(
   const doc = standInModel(product.category, product.dims, product.shape, product.color);
   const glb = await io.writeBinary(doc);
   await writeFile(out, glb);
-  return { ...entry, source: 'procedural', bytes: glb.byteLength };
+  return { ...entry, source: 'procedural', bytes: glb.byteLength, bounds: await measure(out) };
+}
+
+/** Bounds of a written model, read back from the file as the browser would load it. */
+async function measure(file: string): Promise<ModelManifestEntry['bounds']> {
+  const doc = await io.read(file);
+  const { min, max } = getBounds(doc.getRoot().getDefaultScene() ?? doc.getRoot().listScenes()[0]!);
+  const mm = (v: ArrayLike<number>) => [0, 1, 2].map((i) => Math.round(v[i]! * 1000) / 1000);
+  return { min: mm(min), max: mm(max) } as NonNullable<ModelManifestEntry['bounds']>;
 }
 
 function empty(outcome: ModelOutcome) {
-  return { outcome, source: null, bytes: null, scale: null, notes: [] };
+  return { outcome, source: null, bytes: null, scale: null, bounds: null, notes: [] };
 }
 
 async function readManifest(): Promise<ModelManifestEntry[]> {

@@ -44,6 +44,7 @@ pnpm catalog:import      # scraped items -> data/catalog/products.json
 pnpm models:download     # IKEA's GLBs for every catalog product -> data/ikea/models
 pnpm models:process      # fit GLBs to listed dims, or make stand-ins -> data/models + manifest.json
 pnpm catalog:publish     # products + model manifest -> Postgres (gone products: discontinued)
+pnpm catalog:check       # every active product: sound data, a true-to-size model; fails otherwise
 ```
 
 Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `ml/`, `uv sync`, then `uv run jupyter lab`.

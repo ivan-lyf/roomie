@@ -61,7 +61,7 @@ pnpm catalog:publish                    # write the products to the database
 pnpm dev                                # then open http://localhost:5173
 ```
 
-For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes), `pnpm models:process` and `pnpm catalog:publish`.
+For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes), `pnpm models:process` and `pnpm catalog:publish`. `pnpm catalog:check` then confirms every product has sound data and a true-to-size model.
 
 Scraped data and models stay in `data/`, which is gitignored.
 
