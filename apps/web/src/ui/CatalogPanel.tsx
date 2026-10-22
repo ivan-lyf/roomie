@@ -43,7 +43,7 @@ export function CatalogPanel(props: Props) {
   const { category, families, selected, loading, error, onCategory, onSelect } = props;
   const family = families.find((f) => f.id === selected?.familyId);
   return (
-    <aside className="absolute top-4 bottom-4 left-4 flex w-96 flex-col gap-3 rounded-xl bg-white/90 p-4 text-sm text-stone-800 shadow-lg backdrop-blur">
+    <aside className="m-4 flex w-96 shrink-0 flex-col gap-3 rounded-xl bg-white p-4 text-sm text-stone-800 shadow-lg">
       <h1 className="text-base font-semibold">Roomie · catalog</h1>
 
       <nav className="flex flex-wrap gap-1" aria-label="Categories">

@@ -57,8 +57,7 @@ export function App() {
   );
 
   return (
-    <main className="relative h-full">
-      <ProductScene product={selected} view={view} onMeasured={onMeasured} />
+    <main className="flex h-full">
       <CatalogPanel
         category={category}
         families={families}
@@ -69,6 +68,9 @@ export function App() {
         onCategory={setCategory}
         onSelect={setArticleNo}
       />
+      <div className="min-w-0 flex-1">
+        <ProductScene product={selected} view={view} onMeasured={onMeasured} />
+      </div>
     </main>
   );
 }
