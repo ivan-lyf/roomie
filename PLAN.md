@@ -25,7 +25,7 @@ Measured against a fixed test set of 10–15 real floor plans (e.g. Vancouver re
 - Single-room or studio floor plans
 - Room types: living room, bedroom, studio
 - Categories: bed, sofa, armchair, coffee table, dining table + chairs, desk + desk chair, shelving, wardrobe/dresser, rugs, floor lamps
-- About 300–500 product variants from IKEA.ca
+- Every valid IKEA.ca product variant in these categories: about 3,000, not a hand-picked 300–500
 - Generation inputs: room type, budget, style preset (2–3), must-haves
 - Real 3D rendering for both the room and the products
 - Wall color, floor material, and lighting controls
@@ -34,7 +34,8 @@ Measured against a fixed test set of 10–15 real floor plans (e.g. Vancouver re
 
 **Out of scope**
 - Multi-room apartments
-- User accounts and sharing
+- L-shaped and corner furniture: corner and chaise sofas, L-shaped desks, corner wardrobes and bookcases (future goal, §8)
+- User accounts and sharing (saving rooms to an account is under consideration, §8)
 - Live price sync (weekly scrape only)
 - Mobile layout
 - Kitchens, bathrooms, wall-mounted items
@@ -100,15 +101,23 @@ Each milestone ends with something demoable. Estimates assume about 10 hours a w
 **Done when:** one sofa renders in a blank R3F scene at its correct real-world size.
 
 ### M1 — Catalog (2 weeks)
-- [ ] Scraper for all MVP categories (prefer IKEA.ca's JSON endpoints and JSON-LD over HTML)
-- [ ] Dimension normalizer (cm and inches, extendable min/max, category-specific fields)
-- [ ] Product → variant modeling (article number per color and size)
-- [ ] GLB capture where available
-- [ ] Model pipeline: rescale to listed dims, origin at bottom center, front facing +Z, decimate, compress, upload to R2
-- [ ] Procedural fallback model per category
-- [ ] Rate limiting, caching, `scrapedAt` timestamps
+The catalog keeps **every valid product** in the MVP categories instead of a hand-picked 300–500; generation filters it for each request (M4). The full crawl found 3,062 candidates, 2,022 of them with an IKEA model. L-shaped and corner pieces stay out until the geometry supports them (§8).
 
-**Done when:** 300+ variants have valid dimensions, price, and link, and every one renders.
+- [x] Scraper for every category: IKEA.ca sitemap, each page's JSON-LD and embedded JSON (`tools/scraper`)
+- [x] Rate limiting, caching, `scrapedAt` timestamps
+- [x] Full crawl: 25,530 products, 0 failures
+- [ ] Category rules: IKEA category IDs for each MVP category; skip parts, add-ons, and L-shaped pieces
+- [ ] Dimension normalizer per category: diameter for round tables, rugs, and lamps; bed length as depth; the everyday size of extendable tables, with the extended length stored
+- [ ] Product fields: footprint shape, extended width, image URL
+- [ ] Product → variant modeling: group colors and sizes into families, from each page's style picker
+- [ ] GLB capture for the MVP categories (about 2,000 models)
+- [ ] Model pipeline: rescale to listed dims, origin at bottom center, front facing +Z (checked per category), height from the model when the listing has none, decimate, compress, textures ≤ 1024 px, < 1 MB per model, upload to R2
+- [ ] Procedural fallback model per category, at the listed size
+- [ ] Products in Postgres; the API reads them from the database
+- [ ] Catalog viewer (category tabs, product list, 3D preview, IKEA model or stand-in badge) and `pnpm catalog:check`
+- [ ] Optional: weekly GitHub Actions refresh of the MVP categories only (the full crawl takes about 7 hours, over the 6-hour job limit)
+
+**Done when:** every valid product in the MVP categories has valid dimensions, price, and link, renders as its IKEA model or a stand-in, and `pnpm catalog:check` passes.
 
 ### M2 — Room (2 weeks)
 - [ ] Floor plan upload
@@ -162,7 +171,12 @@ Each milestone ends with something demoable. Estimates assume about 10 hours a w
 
 Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holodeck.
 
-## 8. Risks
+## 8. Future goals (post-MVP)
+
+- **L-shaped and corner furniture.** Corner and chaise sofas (about half of IKEA's sofas), L-shaped desks, corner wardrobes and bookcases. They need L-shaped footprints in `packages/schema` and `packages/geometry`, left- and right-hand variants, and models to match. Revisit once M4 meets the quality bar with rectangular footprints.
+- **Accounts to save rooms** (under consideration). Sign in to save rooms and layouts and come back to them. Supabase Auth fits the stack: the web app signs in with Supabase, the API verifies the session token, and rooms and layouts get an owner. The browser still talks only to our API, so the tables stay closed to Supabase's public Data API.
+
+## 9. Risks
 
 | Risk | Mitigation |
 |---|---|
@@ -173,7 +187,7 @@ Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holod
 | IKEA terms of service and model licensing | Personal and portfolio use only; revisit before any public launch |
 | Scope creep into multi-room apartments | Not until single rooms pass the quality bar consistently |
 
-## 9. First week
+## 10. First week
 
 1. Set up the monorepo and CI (lint, typecheck, Vitest).
 2. Write the zod schemas.

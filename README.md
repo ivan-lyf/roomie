@@ -4,7 +4,7 @@
 
 Roomie takes the floor plan of a single room or studio and turns it into a 3D room. It then fills the room with real furniture from IKEA.ca. You can walk around the result, swap or delete pieces, and click any item to open it on IKEA's site. Every product has a real price, so you can see what the whole room would cost.
 
-> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. Next is M1, the full catalog. See [PLAN.md](PLAN.md) for the roadmap.
+> **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the full catalog, is under way: all of IKEA.ca has been crawled and the database is set up. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## How it works
 
@@ -22,10 +22,10 @@ Every generated layout is saved and rated internally, so layouts get better over
 
 - Single rooms and studios only (no multi-room apartments yet)
 - Beds, sofas, armchairs, coffee tables, dining sets, desks, shelving, wardrobes, dressers, rugs and floor lamps
-- About 300–500 IKEA.ca products
+- About 3,000 IKEA.ca products: every valid one in these categories
 - Wall color, floor material and lighting controls
 
-Kitchens, bathrooms, wall-mounted items, user accounts and mobile layouts are out of scope for now.
+Kitchens, bathrooms, wall-mounted items, L-shaped and corner furniture, user accounts and mobile layouts are out of scope for now. L-shaped furniture and saving rooms to an account are possible later additions (see [PLAN.md](PLAN.md)).
 
 ## Tech stack
 
