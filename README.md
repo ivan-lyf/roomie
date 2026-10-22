@@ -15,8 +15,9 @@ Roomie takes the floor plan of a single room or studio and turns it into a 3D ro
    - no blocked doors
    - walkways at least 75 cm wide
 4. **Edit it.** Swap an item for a similar one, delete it, or drag it around. The layout is checked again live as you edit.
+5. **Save it.** Sign in to keep your rooms and reopen them later, on any device.
 
-Every generated layout is saved and rated internally, so layouts get better over time.
+Every generated layout is logged and rated internally, so layouts get better over time.
 
 ## What's in scope (MVP)
 
@@ -24,8 +25,9 @@ Every generated layout is saved and rated internally, so layouts get better over
 - Beds, sofas, armchairs, coffee tables, dining sets, desks, shelving, wardrobes, dressers, rugs and floor lamps
 - About 2,700 IKEA.ca products: every valid one in these categories
 - Wall color, floor material and lighting controls
+- Sign in to save your rooms
 
-Kitchens, bathrooms, wall-mounted items, L-shaped and corner furniture, user accounts and mobile layouts are out of scope for now. L-shaped furniture and saving rooms to an account are possible later additions (see [PLAN.md](PLAN.md)).
+Kitchens, bathrooms, wall-mounted items, L-shaped and corner furniture, sharing and mobile layouts are out of scope for now. L-shaped furniture is a possible later addition (see [PLAN.md](PLAN.md)).
 
 ## Tech stack
 
@@ -33,7 +35,7 @@ Kitchens, bathrooms, wall-mounted items, L-shaped and corner furniture, user acc
 |---|---|
 | Web app | React, Vite, TypeScript, React Three Fiber (3D), Tailwind |
 | API | Node, Hono, Claude API, Drizzle ORM |
-| Database and storage | Postgres on Supabase, Cloudflare R2 |
+| Database, sign-in and storage | Postgres and Auth on Supabase, Cloudflare R2 |
 | Product catalog | Python scraper for IKEA.ca (public pages, no credentials) |
 | Layout learning | Python, pandas, scikit-learn / LightGBM |
 

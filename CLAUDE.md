@@ -95,7 +95,7 @@ Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `m
 - Putting coordinates from the LLM straight into a layout.
 - Mixing units, or converting inside geometry or render code.
 - Fixing model scale or orientation in the renderer instead of in `tools/models`.
-- Adding multi-room support, accounts, or other out-of-scope features from `PLAN.md` without asking.
+- Adding multi-room support or other out-of-scope features from `PLAN.md` without asking. Accounts are M6: build them after editing (M5), not before.
 - Large dependencies when a small function will do (e.g. rectangle collision via the separating axis theorem is ~50 lines).
 
 ## Workflow

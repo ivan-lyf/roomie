@@ -31,11 +31,12 @@ Measured against a fixed test set of 10–15 real floor plans (e.g. Vancouver re
 - Wall color, floor material, and lighting controls
 - Click an item to open its link, delete it, or swap it
 - Internal pairwise rating page and layout logging
+- Sign in to save rooms and layouts and reopen them later (M6)
 
 **Out of scope**
 - Multi-room apartments
 - L-shaped, T-shaped and corner furniture: corner and chaise sofas, L-shaped desks, KALLAX desk combinations, corner wardrobes and bookcases (future goal, §8)
-- User accounts and sharing (saving rooms to an account is under consideration, §8)
+- Sharing rooms with other people
 - Live price sync (weekly scrape only)
 - Mobile layout
 - Kitchens, bathrooms, wall-mounted items
@@ -67,6 +68,7 @@ apps/web (React + R3F) ──► apps/api (Node/Hono) ──► Claude API (visi
 | Shared | `packages/schema` (zod), `packages/geometry` (collision, scorer, solver) |
 | API | Node, Hono, Anthropic SDK, Drizzle ORM |
 | Database | Postgres (Supabase or Neon) |
+| Auth | Supabase Auth (M6) |
 | Storage | Cloudflare R2 (GLBs, plan images, screenshots) |
 | Scraper | Python (httpx, uv), weekly GitHub Actions cron |
 | 3D pipeline | gltf-transform (normalize, decimate, meshopt) |
@@ -90,7 +92,7 @@ Rating    { id, layoutA, layoutB, winner, note, createdAt }
 
 ## 6. Milestones
 
-Each milestone ends with something demoable. Estimates assume about 10 hours a week, for a total of about **10–12 weeks**. M1 and M2 are independent and can be interleaved.
+Each milestone ends with something demoable. Estimates assume about 10 hours a week, for a total of about **11–13 weeks**. M1 and M2 are independent and can be interleaved.
 
 ### M0 — Foundations (1 week)
 - [x] pnpm monorepo: `apps/web`, `apps/api`, `packages/schema`, `packages/geometry`, `tools/`, `ml/`
@@ -153,7 +155,17 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [ ] Re-validate and re-score after every edit
 - [ ] Undo/redo
 
-### M6 — Feedback loop (1 week)
+### M6 — Accounts (1 week)
+- [ ] Sign in with Supabase Auth (Google or an email link), asked for only when saving; everything else works signed out
+- [ ] The API verifies the Supabase session token on account routes
+- [ ] `ownerId` on rooms and layouts; users only ever see their own rooms
+- [ ] Save a room with its current layout, rename it, delete it (a status flag, never a hard delete)
+- [ ] "My rooms" page that reopens a saved room exactly as it was left
+- The browser still talks only to our API, so the tables stay closed to Supabase's public Data API (RLS on, no policies).
+
+**Done when:** you can save a furnished room, sign in on another device, and reopen it unchanged.
+
+### M7 — Feedback loop (1 week)
 - [ ] Capture canvas screenshots (3 angles) after generation, upload to R2
 - [ ] Internal `/admin/rate` page: two layouts side by side, pick the winner, optional note
 - [ ] Rate 100+ pairs
@@ -162,7 +174,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 
 ## 7. Feedback pipeline roadmap (post-MVP)
 
-1. **Few-shot prompting** with top-rated layouts (M6)
+1. **Few-shot prompting** with top-rated layouts (M7)
 2. **Best-of-N reranking** with the learned weights
 3. **Learned reward model** (LightGBM → ONNX → onnxruntime-node) once there are several hundred comparisons
 4. **Vision judge:** score screenshots against a rubric, measure agreement with your ratings
@@ -174,7 +186,6 @@ Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holod
 ## 8. Future goals (post-MVP)
 
 - **L-shaped, T-shaped and corner furniture.** Corner and chaise sofas (about half of IKEA's sofas), L-shaped desks, KALLAX desk combinations, corner wardrobes and bookcases. They need non-rectangular footprints in `packages/schema` and `packages/geometry`, left- and right-hand variants, and models to match. Revisit once M4 meets the quality bar with rectangular footprints.
-- **Accounts to save rooms** (under consideration). Sign in to save rooms and layouts and come back to them. Supabase Auth fits the stack: the web app signs in with Supabase, the API verifies the session token, and rooms and layouts get an owner. The browser still talks only to our API, so the tables stay closed to Supabase's public Data API.
 
 ## 9. Risks
 
