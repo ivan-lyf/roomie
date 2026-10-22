@@ -102,7 +102,7 @@ export const PixelBox = z.object({
 });
 export type PixelBox = z.infer<typeof PixelBox>;
 
-export const PlanTextKind = z.enum(['room_label', 'dimension', 'area', 'other']);
+export const PlanTextKind = z.enum(['room_label', 'dimension', 'area', 'ceiling', 'other']);
 export type PlanTextKind = z.infer<typeof PlanTextKind>;
 
 /**
@@ -117,7 +117,7 @@ export const PlanText = z.object({
   kind: PlanTextKind,
   parsed: z
     .object({
-      /** One length, or two for "12' x 10'". */
+      /** One length, or two for "12' x 10'"; a ceiling label's height. */
       meters: z.array(PositiveMeters).min(1).max(2).optional(),
       squareMeters: PositiveMeters.optional(),
       roomType: RoomType.optional(),
@@ -196,13 +196,80 @@ export const PlanImage = z.object({
 });
 export type PlanImage = z.infer<typeof PlanImage>;
 
+// The plan reader's work (PLAN.md §5): what a vision model read off the image, in image pixels,
+// and the same tidied up. Plan space is meters, so the draft is converted only once the plan has
+// a scale (from its labels, or from the user).
+
+/** A door's swing as drawn: the jamb it's hinged on, and a point on the side it opens into. */
+export const RawSwing = z.object({ hinge: Vec2, toward: Vec2 });
+export type RawSwing = z.infer<typeof RawSwing>;
+
+/** A plan as the reader returned it, in image pixels, before any tidying. */
+export const RawPlan = z.object({
+  /** Center lines, with the thickness across. */
+  walls: z.array(z.object({ a: Vec2, b: Vec2, thickness: z.number().finite().nonnegative() })),
+  /** From one jamb to the other, along the wall. */
+  openings: z.array(z.object({ kind: OpeningKind, a: Vec2, b: Vec2, swing: RawSwing.optional() })),
+  rooms: z.array(
+    z.object({
+      polygon: z.array(Vec2).min(3),
+      /** The text the reader saw naming it. */
+      label: z.string().optional(),
+      /** The reader's guess; the plan's own labels win. */
+      type: RoomType.optional(),
+    }),
+  ),
+  obstacles: z.array(z.object({ kind: ObstacleKind, polygon: z.array(Vec2).min(3) })),
+  /** Every piece of text, one line each. */
+  texts: z.array(z.object({ text: z.string(), bbox: PixelBox })),
+});
+export type RawPlan = z.infer<typeof RawPlan>;
+
+/**
+ * A tidied draft: walls joined at corners, openings placed on their walls, rooms on the walls'
+ * center lines. The same shapes as a floorplan's, but in image pixels.
+ */
+export const PlanDraft = z.object({
+  walls: z.array(Wall),
+  openings: z.array(
+    Opening.pick({ id: true, wallId: true, kind: true, offset: true, width: true, swing: true }),
+  ),
+  rooms: z.array(
+    z.object({
+      id: z.string().min(1),
+      polygon: z.array(Vec2).min(3),
+      label: z.string().optional(),
+      type: RoomType.optional(),
+    }),
+  ),
+  obstacles: z.array(Obstacle.omit({ height: true })),
+  texts: z.array(z.object({ id: z.string().min(1), text: z.string(), bbox: PixelBox })),
+});
+export type PlanDraft = z.infer<typeof PlanDraft>;
+
+/** A scale the plan's labels could give, when they fit more than one unit: the user picks. */
+export const ScaleCandidate = Scale.extend({
+  /** Doors, rooms and labels all make sense at this scale. */
+  plausible: z.boolean(),
+});
+export type ScaleCandidate = z.infer<typeof ScaleCandidate>;
+
 /** What the plan reader returned, kept for debugging and evaluation. */
 export const PlanReading = z.object({
   provider: z.string().min(1),
   model: z.string().min(1),
   promptVersion: z.string().min(1),
   durationMs: z.number().nonnegative(),
+  usage: z
+    .object({
+      inputTokens: z.number().int().nonnegative(),
+      outputTokens: z.number().int().nonnegative(),
+    })
+    .optional(),
+  /** The reader's own answer, as it came. */
   raw: z.unknown(),
+  draft: PlanDraft,
+  scaleCandidates: z.array(ScaleCandidate).default([]),
 });
 export type PlanReading = z.infer<typeof PlanReading>;
 

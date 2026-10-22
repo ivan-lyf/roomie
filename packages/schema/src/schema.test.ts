@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Layout, Opening, Product } from './index';
+import { Layout, Opening, PlanReading, Product } from './index';
 
 describe('Product', () => {
   const sofa = {
@@ -70,5 +70,26 @@ describe('Layout', () => {
     };
     expect(Layout.safeParse(layout).success).toBe(false);
     expect(Layout.safeParse({ ...layout, score: 0.8 }).success).toBe(true);
+  });
+});
+
+describe('PlanReading', () => {
+  it('keeps the tidied draft, with no units to ask about by default', () => {
+    const reading = PlanReading.parse({
+      provider: 'gemini',
+      model: 'gemini-test',
+      promptVersion: 'plan-read.v1',
+      durationMs: 1200,
+      raw: { walls: [] },
+      draft: {
+        walls: [{ id: 'w1', a: { x: 10, y: 10 }, b: { x: 400, y: 10 }, thickness: 20 }],
+        openings: [{ id: 'o1', wallId: 'w1', kind: 'window', offset: 50, width: 120 }],
+        rooms: [],
+        obstacles: [],
+        texts: [{ id: 't1', text: 'LIVING', bbox: { x: 100, y: 100, w: 60, h: 14 } }],
+      },
+    });
+    expect(reading.scaleCandidates).toEqual([]);
+    expect(reading.draft.openings[0]).not.toHaveProperty('height');
   });
 });
