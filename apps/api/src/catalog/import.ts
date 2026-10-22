@@ -4,7 +4,8 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Category, type Product } from '@roomie/schema';
 import { loadConfig } from '../config';
-import { IkeaItem, toProduct } from './ikea';
+import { type FamilyMember, familyIds } from './families';
+import { IkeaItem, itemNoOf, toProduct } from './ikea';
 
 const { dataDir } = loadConfig();
 const itemsPath = path.join(dataDir, 'ikea', 'items.jsonl');
@@ -23,6 +24,7 @@ const tallies = new Map<Category, Tally>(
 );
 const rejected = new Map<string, number>();
 const products: Product[] = [];
+const members: FamilyMember[] = [];
 let unmapped = 0;
 let unreadable = 0;
 
@@ -43,17 +45,32 @@ for (const line of (await readFile(itemsPath, 'utf8')).split('\n')) {
   if (!result) {
     unmapped++;
   } else if (result.ok) {
-    products.push(result.product);
-    const tally = tallies.get(result.product.category)!;
+    const { product } = result;
+    products.push(product);
+    members.push({
+      itemNo: item.itemNo,
+      articleNo: product.articleNo,
+      category: product.category,
+      variantItemNos: item.variantItemNos,
+    });
+    const tally = tallies.get(product.category)!;
     tally.products++;
     if (item.modelUrl) tally.ikeaModels++;
-    if (result.product.modelSource === 'ikea') tally.downloaded++;
+    if (product.modelSource === 'ikea') tally.downloaded++;
   } else {
     tallies.get(result.category)!.rejected++;
     const key = `${result.category}: ${result.reason}`;
     rejected.set(key, (rejected.get(key) ?? 0) + 1);
   }
 }
+
+// Variants that IKEA's pickers link share a family.
+const familyOf = familyIds(members);
+for (const product of products) {
+  product.familyId = familyOf.get(itemNoOf(product)) ?? product.familyId;
+}
+const families = new Map(Category.options.map((c) => [c, new Set<string>()]));
+for (const product of products) families.get(product.category)!.add(product.familyId);
 
 products.sort((a, b) => a.articleNo.localeCompare(b.articleNo));
 await mkdir(path.dirname(outPath), { recursive: true });
@@ -65,6 +82,7 @@ console.table(
       category,
       {
         products: t.products,
+        families: families.get(category)!.size,
         'IKEA has a model': t.ikeaModels,
         'model downloaded': t.downloaded,
         rejected: t.rejected,
@@ -72,7 +90,8 @@ console.table(
     ]),
   ),
 );
-console.log(`${products.length} products -> ${outPath}`);
+const familyCount = new Set(products.map((p) => p.familyId)).size;
+console.log(`${products.length} products in ${familyCount} families -> ${outPath}`);
 console.log(`${unmapped} items outside the mapped categories, ${unreadable} unreadable`);
 for (const [reason, count] of [...rejected].sort((a, b) => b[1] - a[1])) {
   console.log(`rejected ${count}: ${reason}`);

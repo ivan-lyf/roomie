@@ -111,7 +111,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] Category rules: IKEA category IDs for each MVP category; skip parts, add-ons, and L-shaped pieces
 - [x] Dimension normalizer per category: diameter for round tables, rugs, and lamps; bed length as depth; the everyday size of extendable tables, with the extended length stored
 - [x] Product fields: footprint shape, extended width, image URL
-- [ ] Product → variant modeling: group colors and sizes into families, from each page's style picker
+- [x] Product → variant modeling: colors, sizes, and options grouped into 1,041 families, from each page's pickers
 - [ ] GLB capture for the MVP categories (about 2,000 models)
 - [ ] Model pipeline: rescale to listed dims, origin at bottom center, front facing +Z (checked per category), height from the model when the listing has none, decimate, compress, textures ≤ 1024 px, < 1 MB per model, upload to R2
 - [ ] Procedural fallback model per category, at the listed size
