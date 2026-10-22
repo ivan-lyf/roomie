@@ -1,128 +1,92 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import type { Product } from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app';
-
-const product = (articleNo: string) => ({
-  articleNo,
-  familyId: articleNo,
-  options: [],
-  name: `TESTA ${articleNo}`,
-  category: 'sofa',
-  status: 'active',
-  priceCad: 499,
-  url: `https://www.ikea.com/ca/en/p/testa-${articleNo.replaceAll('.', '')}/`,
-  imageUrl: null,
-  color: null,
-  material: null,
-  dims: { w: 2, d: 0.9, h: 0.8 },
-  shape: 'rect',
-  extendedW: null,
-  modelUrl: null,
-  modelSource: 'ikea',
-  styleTags: [],
-  scrapedAt: '2026-10-21T00:00:00.000Z',
-});
+import { products } from './db/schema';
+import { testDb } from './test/db';
+import { product } from './test/fixtures';
 
 let dataDir: string;
+let db: Awaited<ReturnType<typeof testDb>>;
 
 beforeEach(async () => {
   dataDir = await mkdtemp(path.join(tmpdir(), 'roomie-api-'));
-  await mkdir(path.join(dataDir, 'catalog'));
   await mkdir(path.join(dataDir, 'models'));
+  db = await testDb();
 });
 
 afterEach(async () => {
   await rm(dataDir, { recursive: true, force: true });
 });
 
-const writeProducts = (products: unknown) =>
-  writeFile(path.join(dataDir, 'catalog', 'products.json'), JSON.stringify(products));
-
-/** A model manifest, as `pnpm models:process` writes it: item number -> model source. */
-const writeModels = (sources: Record<string, 'ikea' | 'procedural' | null>) =>
-  writeFile(
-    path.join(dataDir, 'models', 'manifest.json'),
-    JSON.stringify({
-      pipelineVersion: 1,
-      generatedAt: '2026-10-21T00:00:00.000Z',
-      entries: Object.entries(sources).map(([itemNo, source]) => ({
-        itemNo,
-        category: 'sofa',
-        outcome: source === 'ikea' ? 'fitted' : 'no_model',
-        source,
-        bytes: source ? 100 : null,
-        scale: null,
-        notes: [],
-        inputs: '',
-      })),
-    }),
-  );
+const get = (url: string) => createApp({ dataDir, db }).request(url);
+const articleNos = async (res: Response) =>
+  ((await res.json()) as Product[]).map((p) => p.articleNo);
 
 describe('GET /api/health', () => {
   it('reports ok', async () => {
-    const res = await createApp({ dataDir }).request('/api/health');
+    const res = await get('/api/health');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
   });
 });
 
 describe('GET /api/products', () => {
-  it('returns an empty list before the catalog is imported', async () => {
-    await rm(path.join(dataDir, 'catalog'), { recursive: true });
-    const res = await createApp({ dataDir }).request('/api/products');
-    expect(await res.json()).toEqual([]);
+  it('returns an empty list before the catalog is published', async () => {
+    expect(await (await get('/api/products')).json()).toEqual([]);
   });
 
-  it('links each product to the model the pipeline made for it', async () => {
-    await writeProducts([product('111.111.11'), product('222.222.22'), product('333.333.33')]);
-    await writeModels({ '11111111': 'ikea', '22222222': 'procedural', '33333333': null });
-    const res = await createApp({ dataDir }).request('http://localhost:5173/api/products');
-    const body = (await res.json()) as {
-      articleNo: string;
-      modelSource: string;
-      modelUrl: string | null;
-    }[];
+  it('serves active products, with their model links', async () => {
+    await db
+      .insert(products)
+      .values([
+        product('111.111.11'),
+        product('222.222.22', { modelSource: 'procedural' }),
+        product('333.333.33', { status: 'discontinued' }),
+      ]);
+    const body = (await (await get('/api/products')).json()) as Product[];
     expect(body.map((p) => [p.articleNo, p.modelSource, p.modelUrl])).toEqual([
-      ['111.111.11', 'ikea', 'http://localhost:5173/api/models/11111111.glb'],
-      ['222.222.22', 'procedural', 'http://localhost:5173/api/models/22222222.glb'],
-      ['333.333.33', 'ikea', null],
+      ['111.111.11', 'ikea', '/api/models/11111111.glb'],
+      ['222.222.22', 'procedural', '/api/models/22222222.glb'],
     ]);
   });
 
   it('filters by category', async () => {
-    await writeProducts([product('111.111.11'), { ...product('333.333.33'), category: 'bed' }]);
-    const res = await createApp({ dataDir }).request('/api/products?category=bed');
-    const body = (await res.json()) as { articleNo: string }[];
-    expect(body.map((p) => p.articleNo)).toEqual(['333.333.33']);
+    await db
+      .insert(products)
+      .values([product('111.111.11'), product('333.333.33', { category: 'bed' })]);
+    expect(await articleNos(await get('/api/products?category=bed'))).toEqual(['333.333.33']);
   });
 
   it('rejects unknown categories', async () => {
-    const res = await createApp({ dataDir }).request('/api/products?category=spaceship');
-    expect(res.status).toBe(400);
+    expect((await get('/api/products?category=spaceship')).status).toBe(400);
   });
 
-  it('fails on an invalid catalog instead of serving it', async () => {
-    await writeProducts([{ ...product('111.111.11'), dims: { w: -1, d: 1, h: 1 } }]);
+  it('answers 503 without a database', async () => {
     const res = await createApp({ dataDir }).request('/api/products');
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(503);
+  });
+
+  it('fails on an invalid row instead of serving it', async () => {
+    await db.insert(products).values([product('111.111.11', { dims: { w: -1, d: 1, h: 1 } })]);
+    expect((await get('/api/products')).status).toBe(500);
   });
 });
 
 describe('GET /api/models/:file', () => {
   it('serves a processed model', async () => {
     await writeFile(path.join(dataDir, 'models', '11111111.glb'), 'glTF');
-    const res = await createApp({ dataDir }).request('/api/models/11111111.glb');
+    const res = await get('/api/models/11111111.glb');
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('model/gltf-binary');
     expect(await res.text()).toBe('glTF');
   });
 
   it('404s for missing models and other file names', async () => {
-    const app = createApp({ dataDir });
     for (const file of ['22222222.glb', '..%2Fcatalog%2Fproducts.json', 'abc.glb']) {
-      expect((await app.request(`/api/models/${file}`)).status).toBe(404);
+      expect((await get(`/api/models/${file}`)).status).toBe(404);
     }
   });
 });

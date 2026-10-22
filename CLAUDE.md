@@ -40,9 +40,10 @@ pnpm lint
 pnpm db:generate         # drizzle migrations from schema
 pnpm db:migrate
 pnpm scrape --category fu003     # scrape one IKEA category (fu003 = sofas); no flag = everything
-pnpm catalog:import      # scraped items -> data/catalog/products.json (the database from M1)
+pnpm catalog:import      # scraped items -> data/catalog/products.json
 pnpm models:download     # IKEA's GLBs for every catalog product -> data/ikea/models
-pnpm models:process      # fit downloaded GLBs to listed dims -> data/models (R2 upload from M1)
+pnpm models:process      # fit GLBs to listed dims, or make stand-ins -> data/models + manifest.json
+pnpm catalog:publish     # products + model manifest -> Postgres (gone products: discontinued)
 ```
 
 Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `ml/`, `uv sync`, then `uv run jupyter lab`.

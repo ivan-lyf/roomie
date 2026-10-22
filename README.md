@@ -46,9 +46,9 @@ You'll need:
 
 - Node 24+ and pnpm
 - Python with [uv](https://docs.astral.sh/uv/) (for the scraper and the `ml/` folder)
-- Later: a Supabase project, a Claude API key and a Cloudflare R2 bucket
+- A Postgres database (we use Supabase); later a Claude API key and a Cloudflare R2 bucket
 
-Copy `.env.example` to `.env` and fill in your own values. `.env` is gitignored and must never be committed. Nothing needs a database yet.
+Copy `.env.example` to `.env` and fill in your own values. `.env` is gitignored and must never be committed. The API reads the catalog from Postgres, so set `DATABASE_URL` and run `pnpm db:migrate` once.
 
 To see a real IKEA sofa in 3D:
 
@@ -56,11 +56,12 @@ To see a real IKEA sofa in 3D:
 pnpm install
 pnpm scrape --category fu003 --models   # fetch IKEA.ca's sofas and their 3D models (~20 min)
 pnpm catalog:import                     # turn them into catalog products
-pnpm models:process                     # fit each model to its listed size
+pnpm models:process                     # fit each model to its listed size, or make a stand-in
+pnpm catalog:publish                    # write the products to the database
 pnpm dev                                # then open http://localhost:5173
 ```
 
-For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes) and `pnpm models:process`.
+For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes), `pnpm models:process` and `pnpm catalog:publish`.
 
 Scraped data and models stay in `data/`, which is gitignored.
 

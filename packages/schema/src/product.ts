@@ -65,7 +65,8 @@ export const Product = z.object({
   shape: ProductShape,
   /** Width when fully extended (extendable tables); dims hold the everyday size. */
   extendedW: PositiveMeters.nullable(),
-  modelUrl: z.url().nullable(),
+  /** Where the browser loads the model: the API's /api/models/<itemNo>.glb, or a full URL. */
+  modelUrl: z.string().regex(/^(\/[^/]|https?:\/\/)/).nullable(),
   modelSource: ModelSource,
   styleTags: z.array(z.string()),
   scrapedAt: z.coerce.date(),

@@ -1,6 +1,10 @@
+import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
+
+/** Any Postgres driver: postgres.js against Supabase, PGlite in tests. */
+export type Db = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 export function createDb(databaseUrl: string | undefined) {
   if (!databaseUrl) {
@@ -11,4 +15,3 @@ export function createDb(databaseUrl: string | undefined) {
   return drizzle(client, { schema });
 }
 
-export type Db = ReturnType<typeof createDb>;
