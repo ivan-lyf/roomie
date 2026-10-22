@@ -10,6 +10,7 @@ From the repo root:
 pnpm scrape                              # every product in the sitemap (~25k pages, ~7 h)
 pnpm scrape --category fu003 --models    # one category (fu003 = sofas), plus 3D models
 pnpm scrape --category fu003 --limit 20  # a quick sample
+pnpm models:download                     # 3D models for every catalog product (after pnpm catalog:import)
 ```
 
 or `uv run --project tools/scraper ikea-scrape --help`. A category id is the last part of a

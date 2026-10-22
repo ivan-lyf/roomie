@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     max_age = timedelta(0) if args.refresh else timedelta(days=args.max_age_days)
     with Client(data_dir / "raw", min_interval=args.delay, max_age=max_age) as client:
         try:
+            if args.models_for:
+                return _download_catalog_models(client, args.models_for, data_dir)
             return _crawl(client, args, data_dir)
         except SourceError as e:
             log.error("%s", e)
@@ -57,6 +59,13 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
     p.add_argument("--limit", type=int, help="stop after this many product pages")
     p.add_argument("--models", action="store_true", help="also download 3D models (GLB)")
+    p.add_argument(
+        "--models-for",
+        type=Path,
+        metavar="CATALOG",
+        help="only download the 3D models of the products in this catalog file "
+        "(data/catalog/products.json), from the model URLs already scraped",
+    )
     p.add_argument(
         "--max-age-days",
         type=float,
@@ -141,6 +150,48 @@ def _crawl(client: Client, args: argparse.Namespace, data_dir: Path) -> int:
     return 0 if scraped or not urls else 1
 
 
+def _download_catalog_models(client: Client, catalog: Path, data_dir: Path) -> int:
+    """Download the models of every catalog product, skipping models already on disk."""
+    started_at = datetime.now(UTC)
+    products = json.loads(catalog.read_text(encoding="utf-8"))
+    wanted = sorted({p["articleNo"].replace(".", "") for p in products})
+    items = _read_items(data_dir / "items.jsonl")
+    records = [items[i] for i in wanted if i in items and items[i].get("modelUrl")]
+    log.info("%d catalog products, %d with a model", len(wanted), len(records))
+
+    failures: list[dict[str, str]] = []
+    downloaded = 0
+    t0 = time.monotonic()
+    try:
+        for i, record in enumerate(records, 1):
+            downloaded += _download_model(client, record, data_dir, failures)
+            if i % 50 == 0 or i == len(records):
+                _progress(i, len(records), downloaded, len(failures), t0, "downloaded")
+    except KeyboardInterrupt:
+        log.warning("interrupted; re-run to resume")
+    finally:
+        _write_report(
+            data_dir / "report.json",
+            {
+                "startedAt": started_at.isoformat(),
+                "finishedAt": datetime.now(UTC).isoformat(),
+                "catalog": str(catalog),
+                "products": len(wanted),
+                "withModels": len(records),
+                "modelsDownloaded": downloaded,
+                "networkRequests": client.network_requests,
+                "failures": failures,
+            },
+        )
+    log.info(
+        "done: %d models downloaded, %d already on disk, %d failed",
+        downloaded,
+        len(records) - downloaded - len(failures),
+        len(failures),
+    )
+    return 1 if records and len(failures) == len(records) else 0
+
+
 def _scrape_one(client: Client, url: str, failures: list[dict[str, str]]) -> dict[str, Any] | None:
     try:
         resp = client.get_text(url, keep=keep_product_data)
@@ -169,14 +220,17 @@ def _download_model(
         return 0
 
 
-def _progress(done: int, total: int, scraped: int, failed: int, t0: float) -> None:
+def _progress(
+    done: int, total: int, ok: int, failed: int, t0: float, what: str = "scraped"
+) -> None:
     elapsed = time.monotonic() - t0
     eta = elapsed / done * (total - done)
     log.info(
-        "[%d/%d] %d scraped, %d failed, ETA %s",
+        "[%d/%d] %d %s, %d failed, ETA %s",
         done,
         total,
-        scraped,
+        ok,
+        what,
         failed,
         timedelta(seconds=round(eta)),
     )

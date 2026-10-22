@@ -59,6 +59,8 @@ pnpm models:process                     # fit each model to its listed size
 pnpm dev                                # then open http://localhost:5173
 ```
 
+For the whole catalog (about 2,700 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes) and `pnpm models:process`.
+
 Scraped data and models stay in `data/`, which is gitignored.
 
 ## Repository layout
