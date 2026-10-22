@@ -20,6 +20,10 @@ export const IkeaItem = z.object({
       maxM: z.number().nullable(),
     }),
   ),
+  /** What the page's color, size and option pickers say this variant is. */
+  options: z.array(z.object({ name: z.string(), value: z.string() })).default([]),
+  /** The other variants those pickers link to. */
+  variantItemNos: z.array(z.string()).default([]),
   imageUrl: z.string().nullable(),
   modelUrl: z.string().nullable(),
   scrapedAt: z.string(),
@@ -276,6 +280,9 @@ export function toProduct(item: IkeaItem, hasModel: boolean): ImportResult | und
 
   const parsed = Product.safeParse({
     articleNo: item.articleNo,
+    // Its own family until the import groups variants (families.ts).
+    familyId: item.articleNo,
+    options: item.options,
     name: item.name,
     category,
     priceCad: item.priceCad,

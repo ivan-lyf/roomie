@@ -6,6 +6,8 @@ import { createApp } from './app';
 
 const product = (articleNo: string) => ({
   articleNo,
+  familyId: articleNo,
+  options: [],
   name: `TESTA ${articleNo}`,
   category: 'sofa',
   priceCad: 499,

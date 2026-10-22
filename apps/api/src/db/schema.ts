@@ -7,6 +7,7 @@ import type {
   ModelSource,
   Opening,
   Placement,
+  ProductOption,
   ProductShape,
   Rating,
   RatingStatus,
@@ -39,6 +40,8 @@ export const products = pgTable(
   'products',
   {
     articleNo: text('article_no').primaryKey(),
+    familyId: text('family_id').notNull(),
+    options: jsonb('options').$type<ProductOption[]>().notNull(),
     name: text('name').notNull(),
     category: text('category').$type<Category>().notNull(),
     priceCad: numeric('price_cad', { precision: 10, scale: 2, mode: 'number' }).notNull(),
@@ -52,7 +55,10 @@ export const products = pgTable(
     styleTags: text('style_tags').array().notNull().default(emptyTextArray),
     scrapedAt: timestamp('scraped_at', { withTimezone: true }).notNull(),
   },
-  (t) => [index('products_category_idx').on(t.category)],
+  (t) => [
+    index('products_category_idx').on(t.category),
+    index('products_family_id_idx').on(t.familyId),
+  ],
 ).enableRLS();
 
 export const layouts = pgTable(

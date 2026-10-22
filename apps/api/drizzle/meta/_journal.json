@@ -22,6 +22,13 @@
       "when": 1792631095007,
       "tag": "0002_product_shape_and_image",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792633772708,
+      "tag": "0003_product_families",
+      "breakpoints": true
     }
   ]
 }

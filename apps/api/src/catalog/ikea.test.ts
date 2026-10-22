@@ -26,6 +26,8 @@ const sofa: IkeaItem = {
     measure('Backrest height', 0.76),
     measure('Height including back cushions', 0.92),
   ],
+  options: [{ name: 'Cover', value: 'Kilanda light beige' }],
+  variantItemNos: ['39384115'],
   imageUrl: null,
   modelUrl: null,
   scrapedAt: '2026-10-21T15:55:24+00:00',
@@ -62,6 +64,8 @@ describe('toProduct', () => {
       ok: true,
       product: {
         articleNo: '594.424.83',
+        familyId: '594.424.83',
+        options: [{ name: 'Cover', value: 'Kilanda light beige' }],
         category: 'sofa',
         priceCad: 749,
         dims: { w: 2.24, d: 0.92, h: 0.92 },

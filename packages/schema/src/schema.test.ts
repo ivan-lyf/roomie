@@ -4,6 +4,8 @@ import { Layout, Opening, Product } from './index';
 describe('Product', () => {
   const sofa = {
     articleNo: '123.456.78',
+    familyId: '123.456.78',
+    options: [],
     name: 'KIVIK 3-seat sofa',
     category: 'sofa',
     priceCad: 999,

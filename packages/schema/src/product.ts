@@ -36,8 +36,16 @@ export type ProductShape = z.infer<typeof ProductShape>;
 export const ModelSource = z.enum(['ikea', 'procedural']);
 export type ModelSource = z.infer<typeof ModelSource>;
 
+/** One option a variant is picked by, e.g. { name: 'Color', value: 'White' }. */
+export const ProductOption = z.object({ name: z.string().min(1), value: z.string().min(1) });
+export type ProductOption = z.infer<typeof ProductOption>;
+
 export const Product = z.object({
   articleNo: ArticleNo,
+  /** Shared by the variants of one design: the lowest article number among them. */
+  familyId: ArticleNo,
+  /** What sets this variant apart within its family, in the order IKEA's pickers show. */
+  options: z.array(ProductOption),
   name: z.string().min(1),
   category: Category,
   priceCad: z.number().nonnegative(),
