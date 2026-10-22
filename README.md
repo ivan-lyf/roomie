@@ -1,33 +1,34 @@
 # Roomie
 
-**Upload a floor plan, get a furnished 3D room with real IKEA Canada products that actually fits.**
+**Upload a floor plan, get a furnished 3D home with real IKEA Canada products that actually fits.**
 
-Roomie takes the floor plan of a single room or studio and turns it into a 3D room. It then fills the room with real furniture from IKEA.ca. You can walk around the result, swap or delete pieces, and click any item to open it on IKEA's site. Every product has a real price, so you can see what the whole room would cost.
+Roomie takes the floor plan of a room, a studio, or a whole apartment and turns it into 3D. It then fills the rooms with real furniture from IKEA.ca. You can walk around the result, swap or delete pieces, and click any item to open it on IKEA's site. Every product has a real price, so you can see what each room, and the whole home, would cost.
 
 > **Status:** M0 (foundations) is done: the monorepo, data schemas, the IKEA.ca scraper, and a single real sofa shown in 3D at its true size. M1, the full catalog, is under way: all of IKEA.ca has been crawled and the database is set up. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## How it works
 
-1. **Upload a floor plan.** An AI vision model reads the walls, doors and windows. You fix anything it got wrong in a simple 2D editor.
-2. **Pick a few preferences.** Choose a room type (living room, bedroom or studio), a budget, a style, and anything you must have.
-3. **Get a furnished room.** Claude picks the products and says roughly where they should go ("sofa against the longest wall, facing the TV"). Then regular code works out the exact positions and checks that the layout works in real life:
+1. **Upload a floor plan.** An AI vision model reads the walls, doors, windows and rooms, and uses the plan's text ("Bedroom", "LR", "12' x 10'") to tell what each room is for and how big it is, detecting feet or metric on its own. If the plan has no measurements, measure one wall, or enter the known area (optionally with one measured side), and Roomie works out the rest. You fix anything it got wrong in a simple 2D editor.
+2. **Pick a few preferences.** Choose which rooms to furnish, a budget for the whole home, a style, and anything you must have.
+3. **Get furnished rooms.** Claude picks the products and says roughly where they should go ("sofa against the longest wall, facing the TV"). Then regular code works out the exact positions and checks that the layout works in real life:
    - no furniture overlaps
    - no blocked doors
    - walkways at least 75 cm wide
 4. **Edit it.** Swap an item for a similar one, delete it, or drag it around. The layout is checked again live as you edit.
-5. **Save it.** Sign in to keep your rooms and reopen them later, on any device.
+5. **Save it.** Sign in to keep your homes and reopen them later, on any device.
 
 Every generated layout is logged and rated internally, so layouts get better over time.
 
 ## What's in scope (MVP)
 
-- Single rooms and studios only (no multi-room apartments yet)
+- Single-floor homes: single rooms, studios and multi-room apartments
+- Living rooms, bedrooms, studios, dining areas and dens get furnished; kitchens, bathrooms, hallways and the like are shown in 3D but left empty
 - Beds, sofas, armchairs, coffee tables, dining sets, desks, shelving, wardrobes, dressers, rugs and floor lamps
 - About 2,700 IKEA.ca products: every valid one in these categories
 - Wall color, floor material and lighting controls
-- Sign in to save your rooms
+- Sign in to save your homes
 
-Kitchens, bathrooms, wall-mounted items, L-shaped and corner furniture, sharing and mobile layouts are out of scope for now. L-shaped furniture is a possible later addition (see [PLAN.md](PLAN.md)).
+Multi-storey homes, furnishing kitchens and bathrooms, wall-mounted items, L-shaped and corner furniture, sharing and mobile layouts are out of scope for now. L-shaped furniture is a possible later addition (see [PLAN.md](PLAN.md)).
 
 ## Tech stack
 

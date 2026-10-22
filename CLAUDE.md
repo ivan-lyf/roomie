@@ -4,9 +4,9 @@ Guidance for Claude Code when working in this repository.
 
 ## Project
 
-**Roomie** is a web app that turns a 2D apartment floor plan into a 3D room and furnishes it automatically with real IKEA Canada products. Users can edit the result (swap, delete, move items) and follow product links. Generated layouts are logged and rated internally to improve layout quality over time.
+**Roomie** is a web app that turns a 2D apartment floor plan into a 3D home and furnishes its rooms automatically with real IKEA Canada products. Users can edit the result (swap, delete, move items) and follow product links. Generated layouts are logged and rated internally to improve layout quality over time.
 
-See `PLAN.md` for scope, milestones, and success criteria. Current scope is the MVP: **single rooms or studios only**.
+See `PLAN.md` for scope, milestones, and success criteria. Current scope is the MVP: **single-floor homes**, from one room or a studio to a multi-room apartment. Every room is rendered; only living rooms, bedrooms, studios, dining areas, and dens get furniture.
 
 ## Architecture principle (read this first)
 
@@ -50,7 +50,8 @@ Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `m
 ## Conventions
 
 ### Units and coordinates (most common source of bugs)
-- **All lengths are meters** internally. Convert cm and inches at the boundary (scraper, UI input) and nowhere else.
+- **All lengths are meters** internally. Convert cm and inches at the boundary (scraper, UI input, floor plan scale) and nowhere else.
+- **Floor plan scale:** extraction works in image pixels; one `metersPerPixel` per floorplan (from dimension labels or user calibration, see `PLAN.md` §5.1) converts everything to meters once. Store the detected source unit and the calibration inputs; never guess a unit without the plausibility checks.
 - **2D plan space:** `(x, y)`, x to the right, y down the page as drawn in the source image after scaling.
 - **3D space:** Y-up. Plan `(x, y)` maps to 3D `(x, 0, y)`.
 - **Rotation:** radians about the vertical axis. `0` means the product's front faces plan **+y** (3D +Z).
@@ -96,7 +97,7 @@ Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `m
 - Putting coordinates from the LLM straight into a layout.
 - Mixing units, or converting inside geometry or render code.
 - Fixing model scale or orientation in the renderer instead of in `tools/models`.
-- Adding multi-room support or other out-of-scope features from `PLAN.md` without asking. Accounts are M6: build them after editing (M5), not before.
+- Adding out-of-scope features from `PLAN.md` (multi-storey homes, furnishing kitchens or bathrooms, ...) without asking. Accounts are M6: build them after editing (M5), not before.
 - Large dependencies when a small function will do (e.g. rectangle collision via the separating axis theorem is ~50 lines).
 
 ## Workflow
