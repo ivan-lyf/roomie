@@ -55,6 +55,21 @@ describe('wallPieces', () => {
     expect(pieces.filter((p) => p.bottom === 0).map(span)).toEqual([[-0.1, 3.2]]);
   });
 
+  it('cuts pieces where the rooms beside the wall change', () => {
+    const window = opening({ kind: 'window', offset: 2, width: 1, height: 1.2, sillHeight: 0.9 });
+    const pieces = wallPieces(wall, [window], 2.44, [1.5, 2.5, 9]);
+    expect(pieces.map((p) => [p.from, p.to, p.bottom])).toEqual([
+      [-0.1, 1.5, 0],
+      [1.5, 2, 0],
+      [2, 2.5, 0],
+      [2.5, 3, 0],
+      [2, 2.5, 2.1],
+      [2.5, 3, 2.1],
+      [3, 4.1, 0],
+    ]);
+    expect(pieces[0]).toMatchObject({ center: { x: 0.7, y: 0 }, length: 1.6 });
+  });
+
   it('turns pieces along their wall', () => {
     const down: Wall = { ...wall, b: { x: 0, y: 4 } };
     expect(wallPieces(down, [], 2.44)[0]?.rotationY).toBeCloseTo(-Math.PI / 2);

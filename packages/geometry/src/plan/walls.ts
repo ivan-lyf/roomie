@@ -27,11 +27,14 @@ export function pointAlong(wall: Wall, distance: number): Vec2 {
 
 /**
  * A box of wall: its center in plan space, length along the wall and thickness across it, from
- * `bottom` to `top` above the floor. `rotationY` turns a box whose length runs along local X
- * onto the wall, in three.js terms (plan (x, y) is 3D (x, 0, y)).
+ * `bottom` to `top` above the floor. `from` and `to` are where it starts and ends along the wall,
+ * in meters from `a`. `rotationY` turns a box whose length runs along local X onto the wall, in
+ * three.js terms (plan (x, y) is 3D (x, 0, y)).
  */
 export type WallPiece = {
   center: Vec2;
+  from: number;
+  to: number;
   length: number;
   thickness: number;
   bottom: number;
@@ -43,23 +46,28 @@ export type WallPiece = {
  * The boxes a wall is built from: solid runs between openings, the wall above each door or
  * passage, and the wall below and above each window. Openings are clamped to the wall, and
  * overlapping ones share a gap. The wall's two ends reach half its thickness further, so walls
- * meeting at a corner close it.
+ * meeting at a corner close it. Pieces are also cut at `breaks` (meters from `a`), so each one
+ * has the same rooms beside it all along (see `wallBreaks`).
  */
-export function wallPieces(wall: Wall, openings: readonly Opening[], height: number): WallPiece[] {
+export function wallPieces(
+  wall: Wall,
+  openings: readonly Opening[],
+  height: number,
+  breaks: readonly number[] = [],
+): WallPiece[] {
   const length = wallLength(wall);
   const half = wall.thickness / 2;
   const rotationY = -Math.atan2(wall.b.y - wall.a.y, wall.b.x - wall.a.x);
-  const piece = (from: number, to: number, bottom: number, top: number): WallPiece => ({
-    center: pointAlong(wall, (from + to) / 2),
-    length: to - from,
-    thickness: wall.thickness,
-    bottom,
-    top,
-    rotationY,
-  });
+  type Span = { from: number; to: number; bottom: number; top: number };
+  const spans: Span[] = [];
   // The wall ends extend past `a` and `b`; openings never do.
   const solid = (from: number, to: number) =>
-    piece(from === 0 ? -half : from, to === length ? length + half : to, 0, height);
+    spans.push({
+      from: from === 0 ? -half : from,
+      to: to === length ? length + half : to,
+      bottom: 0,
+      top: height,
+    });
 
   const own = openings
     .filter((o) => o.wallId === wall.id)
@@ -67,23 +75,41 @@ export function wallPieces(wall: Wall, openings: readonly Opening[], height: num
     .filter((o) => o.end > o.start)
     .sort((a, b) => a.start - b.start);
 
-  const pieces: WallPiece[] = [];
   let cursor = 0;
   for (const o of own) {
     const start = Math.max(o.start, cursor);
-    if (start > cursor) pieces.push(solid(cursor, start));
+    if (start > cursor) solid(cursor, start);
     if (o.end <= start) continue;
     if (o.kind === 'window') {
       const sill = Math.min(o.sillHeight ?? DEFAULT_SILL_HEIGHT, height);
       const head = Math.min(sill + o.height, height);
-      pieces.push(piece(start, o.end, 0, sill), piece(start, o.end, head, height));
+      spans.push({ from: start, to: o.end, bottom: 0, top: sill });
+      spans.push({ from: start, to: o.end, bottom: head, top: height });
     } else {
-      pieces.push(piece(start, o.end, Math.min(o.height, height), height));
+      spans.push({ from: start, to: o.end, bottom: Math.min(o.height, height), top: height });
     }
     cursor = o.end;
   }
-  if (cursor < length) pieces.push(solid(cursor, length));
-  return pieces.filter((p) => p.length > EPS && p.top - p.bottom > EPS);
+  if (cursor < length) solid(cursor, length);
+
+  const cuts = breaks.filter((t) => t > EPS && t < length - EPS).toSorted((a, b) => a - b);
+  return spans
+    .flatMap((s) => {
+      const inside = cuts.filter((t) => t > s.from + EPS && t < s.to - EPS);
+      const ends = [s.from, ...inside, s.to];
+      return ends.slice(1).map((to, i) => ({ ...s, from: ends[i]!, to }));
+    })
+    .filter((s) => s.to - s.from > EPS && s.top - s.bottom > EPS)
+    .map((s) => ({
+      center: pointAlong(wall, (s.from + s.to) / 2),
+      from: s.from,
+      to: s.to,
+      length: s.to - s.from,
+      thickness: wall.thickness,
+      bottom: s.bottom,
+      top: s.top,
+      rotationY,
+    }));
 }
 
 /**

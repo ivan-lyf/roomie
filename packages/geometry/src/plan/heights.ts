@@ -1,4 +1,4 @@
-import type { OpeningKind } from '@roomie/schema';
+import type { ObstacleKind, OpeningKind } from '@roomie/schema';
 
 // Plans almost never show heights, so these are defaults the user can change (PLAN.md §5.1).
 
@@ -19,3 +19,14 @@ export function defaultOpeningHeight(
   const sillHeight = Math.min(DEFAULT_SILL_HEIGHT, ceiling / 2);
   return { height: Math.max(ceiling - WINDOW_HEAD_GAP - sillHeight, 0.1), sillHeight };
 }
+
+/** How tall each kind of obstacle is when the plan doesn't say; `ceiling` reaches the ceiling. */
+export const OBSTACLE_HEIGHTS: Record<ObstacleKind, number | 'ceiling'> = {
+  counter: 0.9,
+  appliance: 0.9,
+  closet: 'ceiling',
+  column: 'ceiling',
+  radiator: 0.6,
+  fireplace: 1.0,
+  other: 1.0,
+};
