@@ -144,7 +144,11 @@ export function parseDimension(text: string): DimensionReading[] {
 
   // A unit written once, at the end, covers both values: "3.60 x 3.00 m".
   const unit = METRIC_UNIT.exec(parts.at(-1)!)?.[2]?.toLowerCase();
-  const numbers = parts.map((p) => p.replace(/\s*(mm|cm|m)$/i, ''));
+  const numbers = parts.map((p) => {
+    const n = p.replace(/\s*(mm|cm|m)$/i, '');
+    // A space can group thousands, as in French plans' "1 370" (cm).
+    return /^\d{1,3}(?:\s\d{3})+$/.test(n) ? n.replace(/\s/g, '') : n;
+  });
   if (!numbers.every((n) => NUMBER.test(n))) return [];
   const values = numbers.map(toNumber);
   if (values.some((v) => v <= 0)) return [];

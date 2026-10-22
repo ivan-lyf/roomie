@@ -169,6 +169,66 @@ describe('room labels on two lines', () => {
   });
 });
 
+describe('overall sizes and mixed labels', () => {
+  const P = (x: number, y: number) => ({ x, y });
+  const box = (x0: number, y0: number, x1: number, y1: number) => [
+    P(x0, y0),
+    P(x1, y0),
+    P(x1, y1),
+    P(x0, y1),
+  ];
+  // A 500 x 400 px house with 20 px walls: 520 x 420 px to the outer faces.
+  const walls = box(100, 100, 600, 500).map((a, i, all) => ({
+    id: `w${i + 1}`,
+    a,
+    b: all[(i + 1) % 4]!,
+    thickness: 20,
+  }));
+  const text = (id: string, value: string, x: number, y: number) => ({
+    id,
+    text: value,
+    bbox: { x, y, w: 60, h: 16 },
+  });
+
+  it("takes the scale from the building's overall sizes beside it", () => {
+    const analysis = analyzeDraft({
+      walls,
+      openings: [{ id: 'o1', wallId: 'w1', kind: 'door', offset: 100, width: 40 }],
+      rooms: [{ id: 'r1', polygon: box(100, 100, 600, 500) }],
+      obstacles: [],
+      texts: [
+        // "1 040" cm across the top, and "840" down the right: 0.02 m a pixel both ways.
+        text('t1', '1 040', 320, 40),
+        text('t2', '840', 640, 290),
+        // A part of the width, also above: the longest is the whole.
+        text('t3', '500', 150, 40),
+        // A room area that disagrees: the overall sizes win.
+        text('t4', 'SEJOUR', 320, 280),
+        text('t5', '120 m²', 320, 300),
+      ],
+    });
+    expect(analysis.scale.status).toBe('found');
+    if (analysis.scale.status !== 'found') return;
+    expect(analysis.scale.scale).toMatchObject({
+      sourceUnit: 'metric_cm',
+      inputs: { convention: 'overall', labelIds: ['t1', 't2'] },
+    });
+    expect(analysis.scale.scale.metersPerPixel).toBeCloseTo(0.02, 9);
+  });
+
+  it("settles a room holding two rooms' labels by what the reader said it is", () => {
+    const draft = (type?: 'hallway') => ({
+      walls,
+      openings: [],
+      rooms: [{ id: 'r1', polygon: box(100, 100, 600, 500), ...(type && { type }) }],
+      obstacles: [],
+      texts: [text('t1', 'WC', 200, 200), text('t2', 'HALL', 300, 300)],
+    });
+    expect(analyzeDraft(draft('hallway')).rooms.get('r1')).toMatchObject({ type: 'hallway' });
+    expect(analyzeDraft(draft()).rooms.get('r1')).toMatchObject({ type: 'bathroom' });
+  });
+});
+
 describe('an open plan read as one room', () => {
   it("leaves out the room's two sizes, and scales from the others", () => {
     // The living room and kitchen as one polygon, holding both their labels.

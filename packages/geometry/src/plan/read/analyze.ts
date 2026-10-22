@@ -81,6 +81,65 @@ function perimeter(points: readonly Vec2[]): number {
 }
 
 /**
+ * The building's overall width and depth, from the dimension lines beside it: for each unit and
+ * direction, the longest single length printed just outside the walls along that side (the
+ * overall size, not one of the parts given beside it), against the walls' outer faces.
+ */
+function overallSizes(
+  draft: PlanDraft,
+  texts: Map<string, PlanTextReading>,
+  inRooms: ReadonlySet<string>,
+): Map<SourceUnit, { samples: LengthSample[]; labelIds: string[] }> {
+  const sizes = new Map<SourceUnit, { samples: LengthSample[]; labelIds: string[] }>();
+  if (draft.walls.length === 0) return sizes;
+  const corners = draft.walls.flatMap((w) => {
+    const length = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y) || 1;
+    const n = {
+      x: ((w.b.y - w.a.y) / length) * (w.thickness / 2),
+      y: (-(w.b.x - w.a.x) / length) * (w.thickness / 2),
+    };
+    return [w.a, w.b].flatMap((p) => [
+      { x: p.x + n.x, y: p.y + n.y },
+      { x: p.x - n.x, y: p.y - n.y },
+    ]);
+  });
+  const { min, max } = bounds(corners);
+  const [width, depth] = [max.x - min.x, max.y - min.y];
+  const longest = new Map<string, { meters: number; id: string }>();
+  for (const t of draft.texts) {
+    if (inRooms.has(t.id)) continue;
+    const c = center(t.bbox);
+    const besideX = c.x > min.x && c.x < max.x;
+    const besideY = c.y > min.y && c.y < max.y;
+    const aboveOrBelow =
+      besideX &&
+      (c.y < min.y ? min.y - c.y : c.y - max.y) > 0 &&
+      Math.max(min.y - c.y, c.y - max.y) < 0.25 * depth;
+    const leftOrRight =
+      besideY &&
+      (c.x < min.x ? min.x - c.x : c.x - max.x) > 0 &&
+      Math.max(min.x - c.x, c.x - max.x) < 0.25 * width;
+    const axis = aboveOrBelow ? 'x' : leftOrRight ? 'y' : undefined;
+    if (!axis) continue;
+    for (const d of texts.get(t.id)!.dimensions ?? []) {
+      if (d.meters.length !== 1) continue;
+      const key = `${d.unit} ${axis}`;
+      const known = longest.get(key);
+      if (!known || d.meters[0]! > known.meters)
+        longest.set(key, { meters: d.meters[0]!, id: t.id });
+    }
+  }
+  for (const [key, { meters, id }] of longest) {
+    const [unit, axis] = key.split(' ') as [SourceUnit, 'x' | 'y'];
+    const entry = sizes.get(unit) ?? { samples: [], labelIds: [] };
+    entry.samples.push({ meters, pixels: axis === 'x' ? width : depth });
+    entry.labelIds.push(id);
+    sizes.set(unit, entry);
+  }
+  return sizes;
+}
+
+/**
  * How well labels agree on one scale: their mean distance from the best fit, each capped at 10%
  * so a misread label can't decide. The median `scaleFromSamples` reports would ignore the few
  * small rooms that tell the two conventions apart.
@@ -120,7 +179,12 @@ export function analyzeDraft(draft: PlanDraft): DraftAnalysis {
         const weak = Number(ra.weakRoomType ?? false) - Number(rb.weakRoomType ?? false);
         return weak || TYPE_PRIORITY.indexOf(ra.roomType!) - TYPE_PRIORITY.indexOf(rb.roomType!);
       });
-    const named = labels[0];
+    // A room holding labels of different types (a hall that caught the WC's label) takes the
+    // one the reader said the room is, when that's among them.
+    const strong = labels.filter((t) => !texts.get(t.id)!.weakRoomType);
+    const conflict = new Set(strong.map((t) => texts.get(t.id)!.roomType)).size > 1;
+    const named =
+      (conflict && r.type && strong.find((t) => texts.get(t.id)!.roomType === r.type)) || labels[0];
     const fromReader = r.label ? roomTypeFromLabel(r.label) : undefined;
     const type = (named && texts.get(named.id)!.roomType) ?? r.type ?? fromReader ?? 'other';
     const nameText = named?.text ?? (fromReader === type ? r.label : undefined);
@@ -138,7 +202,7 @@ export function analyzeDraft(draft: PlanDraft): DraftAnalysis {
     texts,
     rooms,
     ...(ceilings.length > 0 && { ceiling: median(ceilings) }),
-    scale: draftScale(draft, texts, rooms),
+    scale: draftScale(draft, texts, rooms, new Set([...roomTexts.values()].flat())),
   };
 }
 
@@ -154,6 +218,7 @@ function draftScale(
   draft: PlanDraft,
   texts: Map<string, PlanTextReading>,
   rooms: Map<string, DraftRoom>,
+  inRooms: ReadonlySet<string>,
 ): DraftScale {
   const thickness = draft.walls.length > 0 ? median(draft.walls.map((w) => w.thickness)) : 0;
   const tolerance = Math.max(2, thickness / 2);
@@ -196,13 +261,23 @@ function draftScale(
       }
     }
   }
+  const overall = overallSizes(draft, texts, inRooms);
+  for (const unit of overall.keys()) if (!byUnit.has(unit)) byUnit.set(unit, empty());
   // With no dimension labels, the area labels' own unit is the plan's.
   if (byUnit.size === 0 && areas.labelIds.size > 0) {
     byUnit.set(areaUnits.has('imperial') ? 'imperial' : 'metric_m', empty());
   }
 
-  const conventions = new Map<SourceUnit, { convention: LabelConvention; labelIds: string[] }>();
+  type Inputs = { convention: LabelConvention | 'overall'; labelIds: string[] };
+  const conventions = new Map<SourceUnit, Inputs>();
   const hypotheses: UnitHypothesis[] = [...byUnit].map(([unit, s]) => {
+    // The building's overall sizes beat room labels: they're long, and only need the outside
+    // walls right.
+    const outside = overall.get(unit);
+    if (outside) {
+      conventions.set(unit, { convention: 'overall', labelIds: outside.labelIds });
+      return { unit, samples: outside.samples };
+    }
     const fit = (c: LabelConvention) => [...s[c], ...areas[c]];
     const center = spread(fit('center'));
     const inside = spread(fit('inside'));

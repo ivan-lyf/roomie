@@ -128,6 +128,12 @@ describe('parseDimension', () => {
     close(readings[0]?.meters, [3.6, 3.0]);
   });
 
+  it('reads thousands grouped by a space', () => {
+    const readings = parseDimension('1 370').map((r) => r.meters[0]!);
+    expect(readings.map((m) => +m.toFixed(6))).toEqual([1.37, 13.7, 1370]);
+    expect(parseDimension('12 6')).toEqual([]);
+  });
+
   it('reads bare numbers in every metric unit, for detectScale to choose', () => {
     const readings = parseDimension('3600x3000');
     expect(readings.map((r) => r.unit)).toEqual(['metric_mm', 'metric_cm', 'metric_m']);
