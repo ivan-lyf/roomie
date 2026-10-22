@@ -61,6 +61,8 @@ pnpm catalog:publish                    # write the products to the database
 pnpm dev                                # then open http://localhost:5173
 ```
 
+At http://localhost:5173 you can upload a floor plan (an image or a PDF) and open the demo home in 3D; `/catalog` browses the products.
+
 For the whole catalog (about 2,900 products), run `pnpm scrape` (every IKEA.ca product, about 7 hours), `pnpm catalog:import`, `pnpm models:download` (about 40 minutes), `pnpm models:process` and `pnpm catalog:publish`. `pnpm catalog:check` then confirms every product has sound data and a true-to-size model.
 
 Scraped data and models stay in `data/`, which is gitignored.

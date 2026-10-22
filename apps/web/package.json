@@ -16,6 +16,7 @@
     "@react-three/postprocessing": "^3.2.1",
     "@roomie/geometry": "workspace:*",
     "@roomie/schema": "workspace:*",
+    "pdfjs-dist": "^6.4.299",
     "postprocessing": "^6.39.5",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
