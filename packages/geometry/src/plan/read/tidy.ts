@@ -2,6 +2,7 @@ import type { DoorSwing, PlanDraft, RawPlan, Vec2 } from '@roomie/schema';
 import { area, simplify } from '../polygon';
 import { median } from '../scale';
 import { distance } from '../snap';
+import { separateRooms } from './separate';
 
 // Tidies what a plan reader returned, in image pixels: a vision model's walls are roughly placed,
 // broken at openings and short of their corners. Tolerances follow the image size and the walls'
@@ -334,8 +335,8 @@ function squareUp(points: Vec2[]): Vec2[] {
 
 /**
  * Tidies a reader's plan into a draft: walls straightened, joined and met at corners and
- * T-junctions; openings placed on their walls; rooms and fixtures on the walls' center lines;
- * text kept as read. Everything stays in image pixels.
+ * T-junctions; openings placed on their walls; rooms and fixtures on the walls' center lines,
+ * and overlapping rooms cut apart; text kept as read. Everything stays in image pixels.
  */
 export function tidyDraft(raw: RawPlan, size: ImageSize): PlanDraft {
   const inside = (p: Vec2): Vec2 => ({
@@ -376,9 +377,10 @@ export function tidyDraft(raw: RawPlan, size: ImageSize): PlanDraft {
   );
 
   const minArea = (2 * tol) ** 2;
-  const rooms = raw.rooms
+  const traced = raw.rooms
     .map((r) => ({ ...r, polygon: tidyPolygon(r.polygon.map(inside), walls, tol) }))
-    .filter((r) => r.polygon.length >= 3 && area(r.polygon) >= minArea)
+    .filter((r) => r.polygon.length >= 3 && area(r.polygon) >= minArea);
+  const rooms = separateRooms(traced, raw.texts, minArea)
     .map((r, i) => ({
       id: `r${i + 1}`,
       polygon: r.polygon,
