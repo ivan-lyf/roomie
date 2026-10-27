@@ -78,6 +78,7 @@ Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `m
 - Model names come from config, not inline strings.
 
 ### Frontend
+- Follow `docs/frontend-design.md` for user-facing screens, flow, and copy: the users are non-technical and new to interior design.
 - 3D scene components live in `apps/web/src/scene/`, UI panels in `apps/web/src/ui/`.
 - App state is in Zustand stores. Room and layout edits go through store actions so undo works.
 - Validation runs live while dragging, using `packages/geometry` directly in the browser.
