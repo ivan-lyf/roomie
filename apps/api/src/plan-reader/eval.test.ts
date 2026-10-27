@@ -3,7 +3,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { demoPlan, demoRawPlan } from '../test/fixtures';
-import { type EvalPlan, evalPlan, formatReport, LabelTruth, ReadingCache } from './eval';
+import type { PlanDraft } from '@roomie/schema';
+import {
+  type EvalPlan,
+  evalPlan,
+  formatReport,
+  LabelTruth,
+  ReadingCache,
+  scoreFit,
+} from './eval';
 import type { PlanReader } from './reader';
 
 let dir: string;
@@ -92,14 +100,71 @@ describe('evalPlan, for a plan known by its labels', () => {
     const result = await evalPlan(labelled, perfectReader());
     expect(result.geometry).toBeUndefined();
     // Every room but the pantry the truth made up; the bath's 40 m² is wrong on purpose.
-    expect(result.rooms).toEqual({
+    expect(result.rooms).toMatchObject({
       named: 7,
       found: 6,
       typed: 6,
       areas: { checked: 2, within: 1 },
     });
+    expect(result.rooms.areas!.rooms.map((r) => r.label)).toEqual(['BEDROOM', 'BATH']);
+    expect(result.rooms.areas!.rooms[0]!.read).toBeCloseTo(3.4 * 3.4, 0);
     expect(Math.abs(result.scale.error!)).toBeLessThan(0.01);
     expect(result.problems).toEqual([]);
+  });
+});
+
+describe('scoreFit', () => {
+  const P = (x: number, y: number) => ({ x, y });
+  const box = (x0: number, y0: number, x1: number, y1: number) => [
+    P(x0, y0),
+    P(x1, y0),
+    P(x1, y1),
+    P(x0, y1),
+  ];
+  const wall = (id: string, a: { x: number; y: number }, b: { x: number; y: number }) => ({
+    id,
+    a,
+    b,
+    thickness: 10,
+  });
+  const draft: PlanDraft = {
+    walls: [
+      wall('w1', P(0, 0), P(800, 0)),
+      wall('w2', P(800, 0), P(800, 400)),
+      wall('w3', P(800, 400), P(0, 400)),
+      wall('w4', P(0, 400), P(0, 0)),
+      wall('w5', P(400, 0), P(400, 400)),
+    ],
+    openings: [],
+    rooms: [
+      // The hall is drawn 100 px too far right, past the wall between, and off its label.
+      { id: 'r1', polygon: box(0, 0, 500, 400), label: 'BEDROOM' },
+      { id: 'r2', polygon: box(500, 0, 800, 400), label: 'HALL' },
+    ],
+    obstacles: [],
+    texts: [
+      { id: 't1', text: 'BEDROOM', bbox: { x: 150, y: 190, w: 80, h: 20 } },
+      { id: 't2', text: 'HALL', bbox: { x: 430, y: 190, w: 40, h: 20 } },
+    ],
+  };
+
+  it('counts labels outside their room, and edges between rooms with no wall', () => {
+    const fit = scoreFit(draft, 0.01);
+    expect(fit).toMatchObject({ labelled: 2, labelsOutside: 1 });
+    // The edge between them, 1 m off the wall; near the corners the outside walls are close.
+    expect(fit.edgesWithoutWall).toBeGreaterThan(0.7);
+  });
+
+  it('finds a wall under every edge between rooms when they follow the walls', () => {
+    const fitted = {
+      ...draft,
+      rooms: [
+        { id: 'r1', polygon: box(0, 0, 400, 400), label: 'BEDROOM' },
+        { id: 'r2', polygon: box(400, 0, 800, 400), label: 'HALL' },
+      ],
+    };
+    expect(scoreFit(fitted, 0.01)).toEqual({ labelled: 2, labelsOutside: 0, edgesWithoutWall: 0 });
+    expect(scoreFit(fitted, undefined)).toEqual({ labelled: 2, labelsOutside: 0 });
   });
 });
 
@@ -113,5 +178,6 @@ describe('formatReport', () => {
     expect(report).toMatch(/demo-by-label .*–\s+–\s+–\s+6\/7\s+6\/7\s+1\/2/);
     expect(report).toMatch(/Room types right: 12\/13 \(92%, goal ≥ 90%\)/);
     expect(report).toMatch(/Scale within 3%: 2\/2/);
+    expect(report).toMatch(/Areas within 15%: 1\/2\. Labels outside their room: 0\//);
   });
 });

@@ -4,10 +4,13 @@ import path from 'node:path';
 import {
   analyzeDraft,
   area,
+  closestOnSegment,
   comparePlans,
+  contains,
   convertDraft,
   type DraftAnalysis,
   DEFAULT_CEILING_HEIGHT,
+  distance,
   labelTokens,
   median,
   type PlanComparison,
@@ -84,8 +87,24 @@ export type EvalResult = {
     found: number;
     /** …with the right type: the ≥ 90% goal. */
     typed: number;
-    /** Rooms with a printed area, and how many of them the reading draws within 15%. */
-    areas?: { checked: number; within: number };
+    /**
+     * Rooms with a printed area, and how many of them the reading draws within 15%; `rooms`
+     * has each one's printed and read area, to find the misses.
+     */
+    areas?: {
+      checked: number;
+      within: number;
+      rooms: { label: string; printed: number; read: number }[];
+    };
+  };
+  /** How well the read rooms fit their labels and the walls. */
+  fit: {
+    /** Read rooms whose label is on the plan… */
+    labelled: number;
+    /** …and how many of them have it outside their outline. */
+    labelsOutside: number;
+    /** The share of the edges between rooms with no wall within 30 cm, when the scale is known. */
+    edgesWithoutWall?: number;
   };
   ceiling?: { expected: number; found?: number };
   /** What `validateFloorplan` finds in the plan the app would make from the reading. */
@@ -150,24 +169,75 @@ export function scoreLabels(
   };
   const mpp = truth.metersPerPixel;
   const thickness = draft.walls.length > 0 ? median(draft.walls.map((w) => w.thickness)) : 0;
-  let [found, typed, checked, within] = [0, 0, 0, 0];
+  let [found, typed] = [0, 0];
+  const areas: { label: string; printed: number; read: number }[] = [];
   for (const room of truth.rooms) {
     const holders = holding(room.label);
     if (holders.length === 0) continue;
     found++;
     if (holders.some((r) => analysis.rooms.get(r.id)!.type === room.type)) typed++;
     if (room.squareMeters === undefined || mpp === null) continue;
-    checked++;
     const group = new Set([room.label, ...room.with].flatMap(holding));
     const pixels = [...group].reduce((sum, r) => sum + insideArea(r.polygon, thickness), 0);
-    if (Math.abs((pixels * mpp * mpp) / room.squareMeters - 1) <= 0.15) within++;
+    areas.push({ label: room.label, printed: room.squareMeters, read: pixels * mpp * mpp });
   }
+  const within = areas.filter((a) => Math.abs(a.read / a.printed - 1) <= 0.15).length;
   return {
     named: truth.rooms.length,
     found,
     typed,
-    ...(mpp !== null && { areas: { checked, within } }),
+    ...(mpp !== null && { areas: { checked: areas.length, within, rooms: areas } }),
   };
+}
+
+const boxCenter = (box: { x: number; y: number; w: number; h: number }): Vec2 => ({
+  x: box.x + box.w / 2,
+  y: box.y + box.h / 2,
+});
+const toSegment = (s: { a: Vec2; b: Vec2 }) => (p: Vec2) => distance(p, closestOnSegment(p, s).point);
+const edges = (polygon: readonly Vec2[]) =>
+  polygon.map((a, i) => ({ a, b: polygon[(i + 1) % polygon.length]! }));
+
+/**
+ * How well a draft's rooms fit their labels and its walls. A room's label is the plan text whose
+ * words are all in what the reader called it; it's outside when none of that text is in the
+ * room. Edges between rooms (within 30 cm of another room) are sampled every 10 cm, and count
+ * as without a wall when no wall's center line is within 30 cm.
+ */
+export function scoreFit(draft: PlanDraft, metersPerPixel: number | undefined): EvalResult['fit'] {
+  let [labelled, labelsOutside] = [0, 0];
+  for (const room of draft.rooms) {
+    if (!room.label) continue;
+    const words = new Set(labelTokens(room.label));
+    const own = draft.texts.filter((t) => {
+      const tokens = labelTokens(t.text);
+      return tokens.length > 0 && tokens.every((w) => words.has(w));
+    });
+    if (own.length === 0) continue;
+    labelled++;
+    if (!own.some((t) => contains(room.polygon, boxCenter(t.bbox)))) labelsOutside++;
+  }
+  if (metersPerPixel === undefined) return { labelled, labelsOutside };
+
+  const reach = 0.3 / metersPerPixel;
+  const step = 0.1 / metersPerPixel;
+  const walls = draft.walls.map(toSegment);
+  let [between, bare] = [0, 0];
+  draft.rooms.forEach((room, i) => {
+    const others = draft.rooms.filter((_, j) => j !== i).flatMap((r) => edges(r.polygon));
+    const near = others.map(toSegment);
+    for (const { a, b } of edges(room.polygon)) {
+      const n = Math.max(1, Math.round(distance(a, b) / step));
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n;
+        const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+        if (!near.some((d) => d(p) <= reach)) continue;
+        between++;
+        if (!walls.some((d) => d(p) <= reach)) bare++;
+      }
+    }
+  });
+  return { labelled, labelsOutside, edgesWithoutWall: between === 0 ? 0 : bare / between };
 }
 
 /**
@@ -238,6 +308,7 @@ export async function evalPlan(
     },
     ...(geometry && { geometry }),
     rooms,
+    fit: scoreFit(draft, (trueScale ?? found)?.metersPerPixel),
     ...('labels' in plan &&
       plan.labels.ceilingHeight !== undefined && {
         ceiling: {
@@ -302,6 +373,8 @@ export function formatReport(results: readonly EvalResult[]): string {
       `${r.rooms.found}/${r.rooms.named}`,
       `${r.rooms.typed}/${r.rooms.named}`,
       areas,
+      `${r.fit.labelsOutside}/${r.fit.labelled}`,
+      r.fit.edgesWithoutWall === undefined ? '–' : pct(r.fit.edgesWithoutWall),
       r.problems.join(' ') || 'none',
     ];
   });
@@ -316,6 +389,8 @@ export function formatReport(results: readonly EvalResult[]): string {
     'rooms found',
     'typed',
     'areas',
+    'label out',
+    'no wall',
     'problems',
   ];
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]!.length)));
@@ -332,11 +407,18 @@ export function formatReport(results: readonly EvalResult[]): string {
   const known = results.filter(
     (r) => r.scale.error !== undefined || r.geometry || r.rooms.areas,
   ).length;
+  const sum = (f: (r: EvalResult) => number) => results.reduce((s, r) => s + f(r), 0);
+  const fitted = results.filter((r) => r.fit.edgesWithoutWall !== undefined);
+  const bare = fitted.reduce((s, r) => s + r.fit.edgesWithoutWall!, 0) / Math.max(fitted.length, 1);
   return [
     line(header),
     ...rows.map(line),
     '',
     `Room types right: ${typed}/${named} (${pct(typed / Math.max(named, 1))}, goal ≥ 90%). ` +
       `Scale within 3%: ${within}/${known} plans with a known scale. * = cached reading.`,
+    `Areas within 15%: ${sum((r) => r.rooms.areas?.within ?? 0)}/` +
+      `${sum((r) => r.rooms.areas?.checked ?? 0)}. ` +
+      `Labels outside their room: ${sum((r) => r.fit.labelsOutside)}/${sum((r) => r.fit.labelled)}. ` +
+      `Edges between rooms with no wall: ${pct(bare)} (mean of plans).`,
   ].join('\n');
 }
