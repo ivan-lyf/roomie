@@ -8,10 +8,39 @@ import {
 } from '@roomie/schema';
 import { defaultOpeningHeight } from '../heights';
 import type { PlanTextReading } from '../labels';
+import { contains } from '../polygon';
 import { analyzeDraft, type DraftAnalysis } from './analyze';
 
 /** A room's own ceiling label counts when it's this far from the home's. */
 const CEILING_DIFFERENCE = 0.05;
+/**
+ * Readers draw walls 2–4 times too thick (15–46 cm, where most are partitions). A wall with a
+ * room on both sides that's read thicker than `INSIDE_MAX` becomes `INSIDE_WALL`: a 2x4 stud
+ * wall with drywall, which also covers the thinner European partitions.
+ */
+const INSIDE_MAX = 0.15;
+const INSIDE_WALL = 0.12;
+/** Outside walls (or ones with a room on one side only) stay within what's built. */
+const OUTSIDE_MIN = 0.15;
+const OUTSIDE_MAX = 0.35;
+/** How far past a wall's face to look for a room on each side. */
+const SIDE_PROBE = 0.05;
+
+/** A read wall's thickness in meters, kept to what an inside or outside wall really is. */
+function wallThickness(wall: PlanDraft['walls'][number], rooms: PlanDraft['rooms'], m: number) {
+  const thickness = wall.thickness * m;
+  const length = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y);
+  if (length === 0) return Math.min(Math.max(thickness, OUTSIDE_MIN), OUTSIDE_MAX);
+  const mid = { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 };
+  const off = wall.thickness / 2 + SIDE_PROBE / m;
+  const normal = { x: (wall.a.y - wall.b.y) / length, y: (wall.b.x - wall.a.x) / length };
+  const roomAt = (side: number) => {
+    const p = { x: mid.x + normal.x * off * side, y: mid.y + normal.y * off * side };
+    return rooms.some((r) => contains(r.polygon, p));
+  };
+  if (roomAt(1) && roomAt(-1)) return thickness > INSIDE_MAX ? INSIDE_WALL : thickness;
+  return Math.min(Math.max(thickness, OUTSIDE_MIN), OUTSIDE_MAX);
+}
 
 export type ConvertedDraft = Pick<
   Floorplan,
@@ -64,7 +93,7 @@ export function convertDraft(
       ...w,
       a: point(w.a),
       b: point(w.b),
-      thickness: w.thickness * m,
+      thickness: wallThickness(w, draft.rooms, m),
     })),
     openings: draft.openings.map((o) => ({
       ...o,

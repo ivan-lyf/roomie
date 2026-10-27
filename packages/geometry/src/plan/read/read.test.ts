@@ -304,3 +304,38 @@ describe('comparePlans', () => {
     expect(overlap(square(0), square(1))).toBe(0);
   });
 });
+
+describe('wall thickness', () => {
+  const P = (x: number, y: number) => ({ x, y });
+  const wall = (id: string, a: Vec2, b: Vec2, thickness: number) => ({ id, a, b, thickness });
+  /** Two rooms side by side at 1 cm a pixel, every wall read `t` px thick. */
+  const draft = (t: number, inside = t) => ({
+    walls: [
+      wall('w1', P(0, 0), P(800, 0), t),
+      wall('w2', P(800, 0), P(800, 400), t),
+      wall('w3', P(800, 400), P(0, 400), t),
+      wall('w4', P(0, 400), P(0, 0), t),
+      wall('w5', P(400, 0), P(400, 400), inside),
+    ],
+    openings: [],
+    rooms: [
+      { id: 'r1', polygon: [P(0, 0), P(400, 0), P(400, 400), P(0, 400)], label: 'BEDROOM' },
+      { id: 'r2', polygon: [P(400, 0), P(800, 0), P(800, 400), P(400, 400)], label: 'LIVING' },
+    ],
+    obstacles: [],
+    texts: [],
+  });
+  const thicknesses = (d: ReturnType<typeof draft>) =>
+    convertDraft(d, { metersPerPixel: 0.01, sourceUnit: 'metric_cm' }, 2.5).walls.map(
+      (w) => +w.thickness.toFixed(3),
+    );
+
+  it('makes an inside wall read too thick 12 cm, and keeps outside walls within 35 cm', () => {
+    expect(thicknesses(draft(40))).toEqual([0.35, 0.35, 0.35, 0.35, 0.12]);
+  });
+
+  it('keeps an inside wall read thin enough, and thickens a thin outside wall', () => {
+    expect(thicknesses(draft(10, 9))).toEqual([0.15, 0.15, 0.15, 0.15, 0.09]);
+    expect(thicknesses(draft(25, 14))).toEqual([0.25, 0.25, 0.25, 0.25, 0.14]);
+  });
+});
