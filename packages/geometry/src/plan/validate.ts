@@ -147,6 +147,11 @@ function edgesCross(p: Vec2, q: Vec2, a: Vec2, b: Vec2): boolean {
   const [d1, d2] = [side(a, b, p), side(a, b, q)];
   const [d3, d4] = [side(p, q, a), side(p, q, b)];
   if (!(d1 * d2 < 0 && d3 * d4 < 0)) return false;
+  // An end on the other edge's line is a touch: edges along one line can lean a hair apart in
+  // floating point, which would put a "crossing" anywhere along them.
+  const [ab, pq] = [distance(a, b), distance(p, q)];
+  if (Math.min(Math.abs(d1), Math.abs(d2)) <= OVERLAP_TOLERANCE * ab) return false;
+  if (Math.min(Math.abs(d3), Math.abs(d4)) <= OVERLAP_TOLERANCE * pq) return false;
   // A crossing within the tolerance of an end is two rooms meeting at a corner.
   const ends = [p, q, a, b];
   const t = d1 / (d1 - d2);

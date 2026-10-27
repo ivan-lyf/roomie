@@ -53,6 +53,26 @@ describe('more checks', () => {
   it('lets rooms share edges and corners', () => {
     expect(codes(plan)).toEqual([]);
   });
+
+  it('lets rooms share an edge that leans a hair apart in floating point', () => {
+    const P = (x: number, y: number) => ({ x, y });
+    const room = (id: string, boundary: { x: number; y: number }[]) => ({
+      ...plan.rooms[0]!,
+      id,
+      boundary,
+    });
+    // A bath with a closet beside it, its corner on the bath's side wall: a T.
+    const rooms = [
+      room('a', [P(0.5, 3.98), P(2.495628822275011, 3.98), P(2.495628822275013, 7), P(0.5, 7)]),
+      room('b', [
+        P(2.4956288222750116, 3.98),
+        P(4, 3.98),
+        P(4, 5.21),
+        P(2.4956288222750116, 5.21),
+      ]),
+    ];
+    expect(codes({ ...plan, rooms })).toEqual([]);
+  });
 });
 
 describe('planStatus', () => {
