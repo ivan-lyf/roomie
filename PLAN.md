@@ -185,7 +185,7 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] Environment lighting, soft shadows, ambient occlusion
 - [x] Scale with Opus: within 3% on 15 of 16 test plans, and the 16th (two rooms' labels that disagree) asks for calibration instead of guessing. Area labels are measured inside the walls
 - [x] No overlapping rooms in Opus's readings of the test plans: L-shaped rooms no longer trip the overlap check, and thin overlaps on diagonal walls are cut
-- [ ] Room areas with Opus: within 15% on 90/112 printed rooms; find what the misses have in common
+- [x] Room areas with Opus: within 15% on 91/112 printed rooms, and on 40/45 of the rooms that get furniture. Floor area is measured inside each room's own walls (`floorArea`), for the scale and the eval alike. Most misses are halls and terraces whose printed area covers space the plan doesn't close off with walls; the rest are boundary calls (closets counted in a bedroom, an open plan split elsewhere), left to the editor
 - [ ] Timed correction pass in the editor: one studio and one multi-room plan, read by Opus
 
 **Done when:** every test plan becomes a correct 3D home, with rooms labelled and scale within 3%, in ≤ 2 min of correction for a studio and ≤ 5 min for a multi-room plan.
