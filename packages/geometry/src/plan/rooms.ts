@@ -10,7 +10,7 @@ import type {
 } from '@roomie/schema';
 import { roomTypeFromLabel } from './labels';
 import { OBSTACLE_HEIGHTS } from './heights';
-import { centroid, contains } from './polygon';
+import { area, centroid, contains, signedArea } from './polygon';
 import { leftNormal, pointAlong, wallDirection, wallLength } from './walls';
 
 /** Pieces shorter than this don't count as overlapping. */
@@ -104,6 +104,53 @@ export function roomWalls(
       return Math.min(t1!, length) - Math.max(t0!, 0) > tolerance;
     }),
   );
+}
+
+/**
+ * A room's floor area inside its walls: its outline (on the walls' center lines) less half of
+ * each wall along each edge, with the corners where two walls meet put right. An edge with no
+ * wall along it (a room open to the next) loses nothing. `walls` only need `a`, `b` and
+ * `thickness`, in the outline's units.
+ */
+export function floorArea(
+  boundary: readonly Vec2[],
+  walls: readonly Pick<Wall, 'a' | 'b' | 'thickness'>[],
+  tolerance = 0.05,
+): number {
+  const n = boundary.length;
+  // How far each edge's walls reach into the room: half their thickness, averaged along it.
+  const inset = boundary.map((a, i) => {
+    const b = boundary[(i + 1) % n]!;
+    const edge: Wall = { id: '', a, b, thickness: 0 };
+    const length = wallLength(edge);
+    if (length < EPS) return 0;
+    const d = wallDirection(edge);
+    const normal = leftNormal(d);
+    const along = (p: Vec2) => (p.x - a.x) * d.x + (p.y - a.y) * d.y;
+    const across = (p: Vec2) => Math.abs((p.x - a.x) * normal.x + (p.y - a.y) * normal.y);
+    let covered = 0;
+    for (const wall of walls) {
+      if (across(wall.a) > tolerance || across(wall.b) > tolerance) continue;
+      const [t0, t1] = [along(wall.a), along(wall.b)].sort((u, v) => u - v);
+      const overlap = Math.min(t1!, length) - Math.max(t0!, 0);
+      if (overlap > 0) covered += (overlap * wall.thickness) / 2;
+    }
+    return Math.min(covered / length, length / 2);
+  });
+  const lengths = boundary.map((a, i) => {
+    const b = boundary[(i + 1) % n]!;
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  });
+  const sign = Math.sign(signedArea(boundary)) || 1;
+  let lost = 0;
+  for (let i = 0; i < n; i++) {
+    lost += lengths[i]! * inset[i]!;
+    // Where two insets meet, a convex corner was taken off twice, a reflex one not at all.
+    const [prev, here, next] = [boundary[(i + n - 1) % n]!, boundary[i]!, boundary[(i + 1) % n]!];
+    const turn = (here.x - prev.x) * (next.y - here.y) - (here.y - prev.y) * (next.x - here.x);
+    lost -= Math.sign(turn) * sign * inset[(i + n - 1) % n]! * inset[i]!;
+  }
+  return Math.max(area(boundary) - lost, 0);
 }
 
 export function roomCeiling(plan: Pick<Floorplan, 'ceilingHeight'>, room: Room): number {

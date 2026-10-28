@@ -2,6 +2,7 @@ import { Floorplan, type Obstacle } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import {
+  floorArea,
   labelsIn,
   obstacleHeight,
   roomAt,
@@ -84,5 +85,42 @@ describe('labelsIn', () => {
     expect(roomTypeFromLabels(labels)).toBe('bedroom');
     expect(roomTypeFromLabels(labelsIn(plan, room('r5').boundary))).toBe('closet');
     expect(labelsIn({ ...plan, scale: null }, room('r1').boundary)).toEqual([]);
+  });
+});
+
+describe('floorArea', () => {
+  const P = (x: number, y: number) => ({ x, y });
+  const wall = (a: { x: number; y: number }, b: { x: number; y: number }, thickness: number) => ({
+    a,
+    b,
+    thickness,
+  });
+  const rect = [P(0, 0), P(4, 0), P(4, 3), P(0, 3)];
+
+  it('takes half of each wall off its side, and puts the corners right', () => {
+    const walls = [
+      wall(P(-1, 0), P(5, 0), 0.3),
+      wall(P(4, -1), P(4, 4), 0.1),
+      wall(P(5, 3), P(-1, 3), 0.3),
+      wall(P(0, 4), P(0, -1), 0.1),
+    ];
+    expect(floorArea(rect, walls)).toBeCloseTo(3.9 * 2.7, 9);
+  });
+
+  it('takes nothing off a side with no wall', () => {
+    const walls = [
+      wall(P(0, 0), P(4, 0), 0.3),
+      wall(P(4, 3), P(0, 3), 0.3),
+      wall(P(0, 3), P(0, 0), 0.1),
+    ];
+    expect(floorArea(rect, walls)).toBeCloseTo(3.95 * 2.7, 9);
+  });
+
+  it('measures an L inside its walls, either way round', () => {
+    const l = [P(0, 0), P(4, 0), P(4, 1), P(1, 1), P(1, 3), P(0, 3)];
+    const walls = l.map((a, i) => wall(a, l[(i + 1) % l.length]!, 0.2));
+    // Inside: 3.8 × 0.8 along the top, and 0.8 × 2 down the side.
+    expect(floorArea(l, walls)).toBeCloseTo(3.8 * 0.8 + 0.8 * 2, 9);
+    expect(floorArea(l.toReversed(), walls)).toBeCloseTo(3.8 * 0.8 + 0.8 * 2, 9);
   });
 });

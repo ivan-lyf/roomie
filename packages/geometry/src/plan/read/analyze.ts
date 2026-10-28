@@ -7,8 +7,8 @@ import {
   roomTypeFromLabel,
   uniqueRoomName,
 } from '../labels';
-import { area, bounds, contains } from '../polygon';
-import { roomWalls } from '../rooms';
+import { bounds, contains } from '../polygon';
+import { floorArea, roomWalls } from '../rooms';
 import {
   detectScale,
   type LengthSample,
@@ -72,13 +72,6 @@ const center = (box: { x: number; y: number; w: number; h: number }): Vec2 => ({
 
 const sameText = (a: string, b: string) =>
   a.replace(/\s+/g, ' ').trim().toLowerCase() === b.replace(/\s+/g, ' ').trim().toLowerCase();
-
-function perimeter(points: readonly Vec2[]): number {
-  return points.reduce((sum, p, i) => {
-    const q = points[(i + 1) % points.length]!;
-    return sum + Math.hypot(q.x - p.x, q.y - p.y);
-  }, 0);
-}
 
 /**
  * The building's overall width and depth, from the dimension lines beside it: for each unit and
@@ -254,7 +247,7 @@ function draftScale(
       }
       if (reading.area && areaIds.length === 1) {
         // A room's printed area is its floor inside the walls, whichever way its sizes are given.
-        const inner = area(room.polygon) - (perimeter(room.polygon) * inset) / 2 + inset * inset;
+        const inner = floorArea(room.polygon, walls, tolerance);
         const side = Math.sqrt(reading.area.squareMeters);
         areas.push({ meters: side, pixels: Math.sqrt(Math.max(inner, 1)), source: room.id });
         areaLabelIds.add(id);
