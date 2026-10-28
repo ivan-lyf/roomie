@@ -184,7 +184,8 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] Wall color, floor material (3–5 textures), light warmth and intensity, per room or for the whole home
 - [x] Environment lighting, soft shadows, ambient occlusion
 - [x] Scale with Opus: within 3% on 15 of 16 test plans, and the 16th (two rooms' labels that disagree) asks for calibration instead of guessing. Area labels are measured inside the walls
-- [ ] Opus's remaining misses: rooms overlapping on fr-12 and fr-93, room areas within 15% on 90/112; recheck the rules tuned to Gemini's readings (overlap cutting, label matching) against Opus's
+- [x] No overlapping rooms in Opus's readings of the test plans: L-shaped rooms no longer trip the overlap check, and thin overlaps on diagonal walls are cut
+- [ ] Room areas with Opus: within 15% on 90/112 printed rooms; find what the misses have in common
 - [ ] Timed correction pass in the editor: one studio and one multi-room plan, read by Opus
 
 **Done when:** every test plan becomes a correct 3D home, with rooms labelled and scale within 3%, in ≤ 2 min of correction for a studio and ≤ 5 min for a multi-room plan.
