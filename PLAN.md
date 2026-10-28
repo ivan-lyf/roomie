@@ -173,6 +173,8 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] Schema: `Floorplan` holding walls, openings, rooms, obstacles, plan text, and scale (§5); Drizzle migration and fixtures in the same change
 - [x] Floor plan upload (image or PDF)
 - [x] Vision-model extraction to Floorplan JSON in plan pixels: walls, openings, room boundaries, fixed obstacles, and every piece of text with its position. Sample furniture drawn on the plan is ignored
+- [x] Plan reader chosen by `pnpm plans:eval` on 17 test plans: **Claude Opus 5.5** (about $0.09 and 6–30 s a plan), with Gemini 3 Flash as the free fallback. Room areas within 15%: Opus 90/111, Gemini 65/111, Sonnet 5.5 59/110, Haiku 5.5 55/111; Fable 5.1 was no better than Opus at 3–6× the cost
+- [x] Reading cleanup: overlapping room outlines cut apart, inside walls 12 cm and outside walls 15–35 cm thick
 - [x] Text → meaning: room labels mapped to room types (abbreviations like `BR`, `LR`, `DR`, `W/D`, `WIC`, `DN`, `ENS`, `PDR`), dimension labels attached to the room or wall they describe, area labels parsed (rooms so far: sizes on dimension lines along walls wait for the test plans)
 - [x] Unit detection and scale from the dimension labels (§5.1), with the plausibility checks
 - [x] Calibration UI for plans without labels: wall length, area, or area plus side (§5.1); runs before the plan is converted to meters
@@ -181,6 +183,8 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] 3D render: the whole home with extruded walls, window and door cutouts, floor, ceiling toggle; a room picker that frames one room and cuts away the walls in front of it
 - [x] Wall color, floor material (3–5 textures), light warmth and intensity, per room or for the whole home
 - [x] Environment lighting, soft shadows, ambient occlusion
+- [ ] Opus's remaining misses on the test plans: scale off on fr-7 (−7.7%) and us-120 (−16.5%), rooms overlapping on 4 plans; recheck the rules tuned to Gemini's readings (overlap cutting, label matching, unit checks) against Opus's
+- [ ] Timed correction pass in the editor: one studio and one multi-room plan, read by Opus
 
 **Done when:** every test plan becomes a correct 3D home, with rooms labelled and scale within 3%, in ≤ 2 min of correction for a studio and ≤ 5 min for a multi-room plan.
 
@@ -249,6 +253,7 @@ Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holod
 | Captured GLBs have inconsistent scale, orientation, or size | Normalize everything in M1; procedural fallback so no product is blocked |
 | Layouts are valid but ugly | Scorer and ratings exist for this; iterate on scoring rules more than prompts |
 | Vision extraction fails on some plan styles | The correction editor is the safety net; don't chase full automation |
+| Reading plans costs money (Opus, about $0.09 a plan) | Readings are cached by image, model and prompt; `plans:eval` prices every run; Gemini's free tier is the fallback |
 | Room boundaries are ambiguous in open-plan homes | Ask the model for the boundary between labels; the editor makes splitting and merging rooms quick |
 | Wrong scale silently ruins every clearance check | Plausibility checks on units, a stored residual for every scale, and labels always checked against calibration (§5.1) |
 | Listed areas include walls, closets, or balconies | The area calibration UI asks what the figure covers; area plus a side catches the mismatch |
