@@ -3,7 +3,6 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   analyzeDraft,
-  area,
   closestOnSegment,
   comparePlans,
   contains,
@@ -11,6 +10,7 @@ import {
   type DraftAnalysis,
   DEFAULT_CEILING_HEIGHT,
   distance,
+  floorArea,
   labelTokens,
   median,
   type PlanComparison,
@@ -137,17 +137,6 @@ export class ReadingCache {
   }
 }
 
-function perimeter(points: readonly Vec2[]): number {
-  return points.reduce((sum, p, i) => {
-    const q = points[(i + 1) % points.length]!;
-    return sum + Math.hypot(q.x - p.x, q.y - p.y);
-  }, 0);
-}
-
-/** Printed areas are inside the walls: shrink an outline on the walls' centers by half a wall. */
-const insideArea = (points: readonly Vec2[], thickness: number) =>
-  area(points) - (perimeter(points) * thickness) / 2 + thickness * thickness;
-
 /**
  * Checks a reading against the rooms a plan's labels name: a room is found when a read room
  * holds every word of its label, typed when that room has its type, and its size is right when
@@ -171,7 +160,10 @@ export function scoreLabels(
     return draft.rooms.filter((r) => want.every((w) => words.get(r.id)!.has(w)));
   };
   const mpp = truth.metersPerPixel;
+  // Printed areas are inside the walls: each room loses half of the walls along its sides.
   const thickness = draft.walls.length > 0 ? median(draft.walls.map((w) => w.thickness)) : 0;
+  const tolerance = Math.max(2, thickness / 2);
+  const inside = (polygon: readonly Vec2[]) => floorArea(polygon, draft.walls, tolerance);
   let [found, typed] = [0, 0];
   const areas: { label: string; printed: number; read: number }[] = [];
   for (const room of truth.rooms) {
@@ -181,7 +173,7 @@ export function scoreLabels(
     if (holders.some((r) => analysis.rooms.get(r.id)!.type === room.type)) typed++;
     if (room.squareMeters === undefined || mpp === null) continue;
     const group = new Set([room.label, ...room.with].flatMap(holding));
-    const pixels = [...group].reduce((sum, r) => sum + insideArea(r.polygon, thickness), 0);
+    const pixels = [...group].reduce((sum, r) => sum + inside(r.polygon), 0);
     areas.push({ label: room.label, printed: room.squareMeters, read: pixels * mpp * mpp });
   }
   const within = areas.filter((a) => Math.abs(a.read / a.printed - 1) <= 0.15).length;
