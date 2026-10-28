@@ -111,13 +111,16 @@ export type EvalResult = {
   problems: string[];
 };
 
+/** A short name for an image, from its bytes. */
+export const imageId = (image: PlanImage) =>
+  createHash('sha256').update(image.bytes).digest('hex').slice(0, 16);
+
 /** Answers already read, by image, model and prompt version: re-runs cost nothing. */
 export class ReadingCache {
   constructor(private readonly dir: string) {}
 
   private file(image: PlanImage, reader: PlanReader) {
-    const hash = createHash('sha256').update(image.bytes).digest('hex').slice(0, 16);
-    return path.join(this.dir, `${hash}-${reader.model}-${reader.promptVersion}.json`);
+    return path.join(this.dir, `${imageId(image)}-${reader.model}-${reader.promptVersion}.json`);
   }
 
   async get(image: PlanImage, reader: PlanReader): Promise<ReaderResult | undefined> {
@@ -194,7 +197,8 @@ const boxCenter = (box: { x: number; y: number; w: number; h: number }): Vec2 =>
   x: box.x + box.w / 2,
   y: box.y + box.h / 2,
 });
-const toSegment = (s: { a: Vec2; b: Vec2 }) => (p: Vec2) => distance(p, closestOnSegment(p, s).point);
+const toSegment = (s: { a: Vec2; b: Vec2 }) => (p: Vec2) =>
+  distance(p, closestOnSegment(p, s).point);
 const edges = (polygon: readonly Vec2[]) =>
   polygon.map((a, i) => ({ a, b: polygon[(i + 1) % polygon.length]! }));
 
@@ -418,7 +422,8 @@ export function formatReport(results: readonly EvalResult[]): string {
       `Scale within 3%: ${within}/${known} plans with a known scale. * = cached reading.`,
     `Areas within 15%: ${sum((r) => r.rooms.areas?.within ?? 0)}/` +
       `${sum((r) => r.rooms.areas?.checked ?? 0)}. ` +
-      `Labels outside their room: ${sum((r) => r.fit.labelsOutside)}/${sum((r) => r.fit.labelled)}. ` +
+      `Labels outside their room: ${sum((r) => r.fit.labelsOutside)}/` +
+      `${sum((r) => r.fit.labelled)}. ` +
       `Edges between rooms with no wall: ${pct(bare)} (mean of plans).`,
   ].join('\n');
 }

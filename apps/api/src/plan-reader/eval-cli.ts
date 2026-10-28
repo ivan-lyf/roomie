@@ -1,10 +1,12 @@
-// pnpm plans:eval [--model <gemini model>] [--fresh] [plan folders...]
+// pnpm plans:eval [--provider gemini|claude] [--model <model>] [--effort <level>] [--batch]
+//                 [--fresh] [plan folders...]
 //
 // Reads every test plan (fixtures/plans, and data/plans/eval for plans that can't be
 // committed) that has a checked floorplan.json or a truth.json, and reports how close the
 // readings are. Readings are cached by image, model and prompt version; --fresh reads again.
-// This sends the images to Gemini: on its free tier Google may use them, so only plans you're
-// happy to share (see the README).
+// This sends the images to Gemini (on its free tier Google may use them) or to Claude (paid per
+// read; --batch reads every plan not yet cached in one batch, at half price), so only plans
+// you're happy to share (see the README).
 
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -18,9 +20,11 @@ import {
   type EvalResult,
   evalPlan,
   formatReport,
+  imageId,
   LabelTruth,
   ReadingCache,
 } from './eval';
+import { ClaudeEffort, claudeBatch, claudeReader, readingCost } from './claude';
 import { geminiReader } from './gemini';
 import { ReaderError } from './reader';
 
@@ -32,16 +36,35 @@ const option = (name: string) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
+const withValue = ['--provider', '--model', '--effort'];
+const folders = args.filter((a, i) => !a.startsWith('--') && !withValue.includes(args[i - 1]!));
+const provider = option('--provider') ?? config.reader?.provider ?? 'gemini';
 const model = option('--model');
-const folders = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--model');
+const batch = flag('--batch');
 
-if (!config.reader) {
-  console.error('Set GEMINI_API_KEY in .env to read plans (see .env.example).');
+const claude = provider === 'claude' ? config.readers.claude : undefined;
+const gemini = provider === 'gemini' ? config.readers.gemini : undefined;
+if (!claude && !gemini) {
+  const key = provider === 'claude' ? 'CLAUDE_API_KEY' : 'GEMINI_API_KEY';
+  console.error(`Set ${key} in .env to read plans with ${provider} (see .env.example).`);
   process.exit(1);
 }
+if (batch && !claude) {
+  console.error('--batch reads with Claude: add --provider claude.');
+  process.exit(1);
+}
+const claudeOptions = claude && {
+  ...claude,
+  model: model ?? claude.model,
+  effort: ClaudeEffort.parse(option('--effort') ?? claude.effort),
+};
 // One model at a time, so each reading is that model's.
-const reader = geminiReader({ ...config.reader, models: [model ?? config.reader.models[0]!] });
+const reader = claudeOptions
+  ? claudeReader(claudeOptions)
+  : geminiReader({ ...gemini!, models: [model ?? gemini!.models[0]!] });
 const cache = new ReadingCache(path.join(config.dataDir, 'cache', 'plan-reader'));
+/** Dollars spent on readings in this run, when the model's price is known. */
+let spent = 0;
 
 /** The folders under each parent, for the default set of test plans. */
 async function children(parent: string): Promise<string[]> {
@@ -92,14 +115,43 @@ const dirs =
         ...(await children(path.join(root, 'fixtures', 'plans'))),
         ...(await children(path.join(config.dataDir, 'plans', 'eval'))),
       ];
+const plans = (await Promise.all(dirs.map(loadPlan))).filter((p) => p !== undefined);
+
+// A batch first reads every plan not cached yet; the loop below then scores them from the cache.
+const failed = new Set<string>();
+if (batch && claudeOptions) {
+  const unread = [];
+  for (const plan of plans) {
+    if (flag('--fresh') || !(await cache.get(plan.image, reader))) unread.push(plan);
+  }
+  if (unread.length > 0) {
+    console.log(`Reading ${unread.length} plans in one batch with ${reader.model}…`);
+    const read = await claudeBatch(
+      { ...claudeOptions, onStatus: (status) => console.log(`  ${status}`) },
+      unread.map((plan) => ({ id: imageId(plan.image), image: plan.image })),
+    );
+    for (const plan of unread) {
+      const result = read.get(imageId(plan.image));
+      if (result && !(result instanceof ReaderError)) {
+        await cache.put(plan.image, reader, result);
+        spent += (result.usage && readingCost(reader.model, result.usage, true)) ?? 0;
+      } else {
+        failed.add(plan.name);
+        console.log(`${plan.name}: failed: ${result?.message ?? 'no result'}`);
+      }
+    }
+  }
+}
+
 const results: EvalResult[] = [];
-for (const dir of dirs) {
-  const plan = await loadPlan(dir);
-  if (!plan) continue;
+for (const plan of plans) {
+  if (failed.has(plan.name)) continue;
   process.stdout.write(`${plan.name}: reading with ${reader.model}… `);
   try {
-    const result = await evalPlan(plan, reader, cache, { fresh: flag('--fresh') });
+    const fresh = flag('--fresh') && !batch;
+    const result = await evalPlan(plan, reader, cache, { fresh });
     results.push(result);
+    if (!result.cached && result.usage) spent += readingCost(reader.model, result.usage) ?? 0;
     console.log('done');
   } catch (e) {
     console.log(`failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -112,6 +164,7 @@ if (results.length === 0) {
   process.exit(1);
 }
 console.log(`\n${formatReport(results)}`);
+if (provider === 'claude') console.log(`Spent on readings this run: $${spent.toFixed(2)}.`);
 const stamp = new Date().toISOString().slice(0, 19).replaceAll(':', '-');
 const out = path.join(config.dataDir, 'eval', `${stamp}-${reader.model}.json`);
 await mkdir(path.dirname(out), { recursive: true });
