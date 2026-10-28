@@ -85,6 +85,32 @@ describe('detectScale', () => {
   it('finds nothing without labels', () => {
     expect(detectScale([], evidence)).toEqual({ status: 'none' });
   });
+
+  describe('with labels from few rooms', () => {
+    // Two rooms' sizes; the second room was traced 20% too large on one side.
+    const room = (source: string, ...sides: [number, number][]) =>
+      sides.map(([meters, pixels]) => ({ meters, pixels, source }));
+    const evidence = { doorPixels: [], rooms: [] };
+    const twoRooms = [
+      ...room('r1', [3.6, 360], [3, 300]),
+      ...room('r2', [4, 400], [3.5, 420]),
+    ];
+
+    it('asks when one of them is off, though the median label fits', () => {
+      const result = detectScale([{ unit: 'metric_m', samples: twoRooms }], evidence);
+      expect(result.status).toBe('ask');
+    });
+
+    it('lets three or more rooms outvote one that is off', () => {
+      const samples = [...twoRooms, ...room('r3', [2.5, 250], [2, 200])];
+      expect(detectScale([{ unit: 'metric_m', samples }], evidence).status).toBe('found');
+    });
+
+    it('takes two rooms that agree', () => {
+      const samples = [...room('r1', [3.6, 360], [3, 300]), ...room('r2', [4, 404], [3.5, 347])];
+      expect(detectScale([{ unit: 'metric_m', samples }], evidence).status).toBe('found');
+    });
+  });
 });
 
 describe('calibration', () => {

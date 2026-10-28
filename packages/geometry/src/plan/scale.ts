@@ -5,8 +5,11 @@ import { roomWalls } from './rooms';
 // One meters-per-pixel scale for the whole image, from the plan's labels or the user's
 // measurements (PLAN.md §5.1). Everything is converted to meters with it, once.
 
-/** A known length on the plan: what a label (or the user) says it is, against its pixels. */
-export type LengthSample = { meters: number; pixels: number };
+/**
+ * A known length on the plan: what a label (or the user) says it is, against its pixels, and
+ * where it came from (the room or label), when it's one of several from the same place.
+ */
+export type LengthSample = { meters: number; pixels: number; source?: string };
 
 export type ScaleFit = { metersPerPixel: number; residual: number };
 
@@ -64,10 +67,16 @@ const ROOM_SIDE: [number, number] = [0.4, 30];
  * off an image are only so exact, so this allows for them; the editor shows each label's fit.
  */
 const MAX_RESIDUAL = 0.1;
+/**
+ * Fewer sources than this (two rooms' labels, say) can't outvote a misread one: every sample has
+ * to agree with the scale within `MAX_RESIDUAL`, not just the median one.
+ */
+const MIN_SOURCES = 3;
 
 /**
  * Which unit the labels are in. Every hypothesis gets a scale; it's plausible when the labels
- * agree with it within 10%, the doors come out 0.5–1.5 m wide, and every room 0.4–30 m a side.
+ * agree with it within 10% (every one of them, when they come from fewer than three rooms or
+ * labels), the doors come out 0.5–1.5 m wide, and every room 0.4–30 m a side.
  * Exactly one plausible unit is used; otherwise the user picks, with the most plausible first.
  */
 export function detectScale(
@@ -85,7 +94,15 @@ export function detectScale(
     const rooms = evidence.rooms.every((r) =>
       r.pixels.every((px) => inRange(px * fit.metersPerPixel, ROOM_SIDE)),
     );
-    return [{ ...fit, unit: h.unit, plausible: fit.residual <= MAX_RESIDUAL && doors && rooms }];
+    const sources = new Set(h.samples.flatMap((s) => (s.source === undefined ? [] : [s.source])));
+    const agree =
+      sources.size === 0 ||
+      sources.size >= MIN_SOURCES ||
+      h.samples.every(
+        (s) => Math.abs((s.pixels * fit.metersPerPixel) / s.meters - 1) <= MAX_RESIDUAL,
+      );
+    const plausible = fit.residual <= MAX_RESIDUAL && agree && doors && rooms;
+    return [{ ...fit, unit: h.unit, plausible }];
   });
   if (candidates.length === 0) return { status: 'none' };
   const plausible = candidates.filter((c) => c.plausible);

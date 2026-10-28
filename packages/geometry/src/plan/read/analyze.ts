@@ -132,7 +132,7 @@ function overallSizes(
   for (const [key, { meters, id }] of longest) {
     const [unit, axis] = key.split(' ') as [SourceUnit, 'x' | 'y'];
     const entry = sizes.get(unit) ?? { samples: [], labelIds: [] };
-    entry.samples.push({ meters, pixels: axis === 'x' ? width : depth });
+    entry.samples.push({ meters, pixels: axis === 'x' ? width : depth, source: id });
     entry.labelIds.push(id);
     sizes.set(unit, entry);
   }
@@ -225,7 +225,8 @@ function draftScale(
   type Samples = Record<LabelConvention, LengthSample[]> & { labelIds: Set<string> };
   const empty = (): Samples => ({ center: [], inside: [], labelIds: new Set() });
   const byUnit = new Map<SourceUnit, Samples>();
-  const areas = empty();
+  const areas: LengthSample[] = [];
+  const areaLabelIds = new Set<string>();
   const areaUnits = new Set<'imperial' | 'metric'>();
 
   for (const room of draft.rooms) {
@@ -245,18 +246,18 @@ function draftScale(
         const samples = byUnit.get(d.unit) ?? empty();
         byUnit.set(d.unit, samples);
         meters.forEach((m, i) => {
-          samples.center.push({ meters: m, pixels: sides[i]! });
-          samples.inside.push({ meters: m, pixels: Math.max(sides[i]! - inset, 1) });
+          const source = room.id;
+          samples.center.push({ meters: m, pixels: sides[i]!, source });
+          samples.inside.push({ meters: m, pixels: Math.max(sides[i]! - inset, 1), source });
         });
         samples.labelIds.add(id);
       }
       if (reading.area && areaIds.length === 1) {
-        const pixels = area(room.polygon);
-        const inner = pixels - (perimeter(room.polygon) * inset) / 2 + inset * inset;
+        // A room's printed area is its floor inside the walls, whichever way its sizes are given.
+        const inner = area(room.polygon) - (perimeter(room.polygon) * inset) / 2 + inset * inset;
         const side = Math.sqrt(reading.area.squareMeters);
-        areas.center.push({ meters: side, pixels: Math.sqrt(pixels) });
-        areas.inside.push({ meters: side, pixels: Math.sqrt(Math.max(inner, 1)) });
-        areas.labelIds.add(id);
+        areas.push({ meters: side, pixels: Math.sqrt(Math.max(inner, 1)), source: room.id });
+        areaLabelIds.add(id);
         areaUnits.add(reading.area.unit);
       }
     }
@@ -264,7 +265,7 @@ function draftScale(
   const overall = overallSizes(draft, texts, inRooms);
   for (const unit of overall.keys()) if (!byUnit.has(unit)) byUnit.set(unit, empty());
   // With no dimension labels, the area labels' own unit is the plan's.
-  if (byUnit.size === 0 && areas.labelIds.size > 0) {
+  if (byUnit.size === 0 && areaLabelIds.size > 0) {
     byUnit.set(areaUnits.has('imperial') ? 'imperial' : 'metric_m', empty());
   }
 
@@ -278,12 +279,13 @@ function draftScale(
       conventions.set(unit, { convention: 'overall', labelIds: outside.labelIds });
       return { unit, samples: outside.samples };
     }
-    const fit = (c: LabelConvention) => [...s[c], ...areas[c]];
+    const fit = (c: LabelConvention) => [...s[c], ...areas];
     const center = spread(fit('center'));
     const inside = spread(fit('inside'));
-    // Labels give the inside more often, so it wins a tie.
-    const convention: LabelConvention = center < inside - 0.002 ? 'center' : 'inside';
-    conventions.set(unit, { convention, labelIds: [...s.labelIds, ...areas.labelIds] });
+    // Labels give the inside more often, so it wins a tie; with only areas, it's the inside.
+    const convention: LabelConvention =
+      s.center.length > 0 && center < inside - 0.002 ? 'center' : 'inside';
+    conventions.set(unit, { convention, labelIds: [...s.labelIds, ...areaLabelIds] });
     return { unit, samples: fit(convention) };
   });
 

@@ -339,3 +339,62 @@ describe('wall thickness', () => {
     expect(thicknesses(draft(25, 14))).toEqual([0.25, 0.25, 0.25, 0.25, 0.14]);
   });
 });
+
+describe('a plan with only area labels', () => {
+  /** The two-room draft below, with the areas printed in each room. */
+  const read = (first: string, second: string) => analyzeDraft(twoRooms(first, second)).scale;
+
+  it('measures the areas inside the walls', () => {
+    const scale = read('9.99 m²', '12.69 m²');
+    expect(scale.status).toBe('found');
+    if (scale.status === 'found') {
+      expect(scale.scale.metersPerPixel).toBeCloseTo(0.01, 4);
+      expect(scale.scale.inputs).toMatchObject({ convention: 'inside' });
+    }
+  });
+
+  it('keeps to the inside even when the center lines fit the areas a little better', () => {
+    // 12 and 15 m² are the rooms center to center; inside the walls, they'd be 1.09 cm a pixel.
+    const scale = read('12.00 m²', '15.00 m²');
+    expect(scale.status).toBe('found');
+    if (scale.status === 'found') {
+      expect(scale.scale.metersPerPixel).toBeCloseTo(0.0109, 4);
+      expect(scale.scale.inputs).toMatchObject({ convention: 'inside' });
+    }
+  });
+
+  function twoRooms(first: string, second: string) {
+    const P = (x: number, y: number) => ({ x, y });
+    // At 1 cm a pixel, two rooms 400 × 300 and 500 × 300 px on 30 px walls' center lines: inside
+    // the walls, 3.7 × 2.7 m and 4.7 × 2.7 m.
+    const wall = (id: string, a: Vec2, b: Vec2) => ({ id, a, b, thickness: 30 });
+    const box = (x0: number, x1: number) => [P(x0, 0), P(x1, 0), P(x1, 300), P(x0, 300)];
+    const label = (id: string, text: string, x: number, y: number) => ({
+      id,
+      text,
+      bbox: { x, y, w: 80, h: 20 },
+    });
+    const draft = {
+      walls: [
+        wall('w1', P(0, 0), P(900, 0)),
+        wall('w2', P(900, 0), P(900, 300)),
+        wall('w3', P(900, 300), P(0, 300)),
+        wall('w4', P(0, 300), P(0, 0)),
+        wall('w5', P(400, 0), P(400, 300)),
+      ],
+      openings: [],
+      rooms: [
+        { id: 'r1', polygon: box(0, 400), label: 'CHAMBRE' },
+        { id: 'r2', polygon: box(400, 900), label: 'SEJOUR' },
+      ],
+      obstacles: [],
+      texts: [
+        label('t1', 'CHAMBRE', 150, 100),
+        label('t2', first, 150, 150),
+        label('t3', 'SEJOUR', 600, 100),
+        label('t4', second, 600, 150),
+      ],
+    };
+    return draft;
+  }
+});
