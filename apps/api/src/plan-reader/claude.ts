@@ -152,6 +152,8 @@ function readAnswer(message: Anthropic.Message, size: ImageSize) {
     .flatMap((block) => (block.type === 'text' ? [block.text] : []))
     .join('');
   const plan = parseAnswer(text);
+  // Now and then an answer collapses to a wall or two and nothing else: valid, and useless.
+  if (plan.rooms.length === 0) throw new Error('the answer has no rooms');
   return { raw: plan, plan: toRawPlan(plan, size) };
 }
 

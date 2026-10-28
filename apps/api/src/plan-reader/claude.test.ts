@@ -158,6 +158,17 @@ describe('claudeReader', () => {
     expect(retry[2]!.content).toMatch(/cut off/);
   });
 
+  it('asks again when the answer collapses to no rooms', async () => {
+    const empty = { walls: [plan.walls[0]!], openings: [], rooms: [], fixtures: [], texts: [] };
+    const { client, requests } = fakeClaude(
+      message(JSON.stringify(empty)),
+      message(JSON.stringify(plan)),
+    );
+    const result = await claudeReader(options(client)).read(image);
+    expect(result.plan.rooms).toHaveLength(1);
+    expect(requests[1]!.messages[2]!.content).toMatch(/no rooms/);
+  });
+
   it('gives up cleanly after a second malformed answer', async () => {
     const { client } = fakeClaude(message('not json'), message('{"walls": 1}'));
     await expect(claudeReader(options(client)).read(image)).rejects.toThrow(
