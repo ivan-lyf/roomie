@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { loadConfig } from './config';
 import { createDb } from './db/client';
+import { claudeReader } from './plan-reader/claude';
 import { geminiReader } from './plan-reader/gemini';
 import { createStorage } from './storage';
 
@@ -10,8 +11,10 @@ const db = config.databaseUrl ? createDb(config.databaseUrl) : undefined;
 if (!db) console.warn('DATABASE_URL is not set, so /api/products answers 503 (see .env.example).');
 const storage = config.storage ? createStorage(config.storage) : undefined;
 const plans = config.plansStorage ? createStorage(config.plansStorage) : undefined;
-const reader = config.reader && geminiReader(config.reader);
-if (!reader) console.warn('GEMINI_API_KEY is not set, so plans are traced by hand.');
+const reader =
+  config.reader &&
+  (config.reader.provider === 'claude' ? claudeReader(config.reader) : geminiReader(config.reader));
+if (!reader) console.warn('No GEMINI_API_KEY or CLAUDE_API_KEY, so plans are traced by hand.');
 const app = createApp({ dataDir: config.dataDir, db, storage, plans, reader });
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {

@@ -19,6 +19,7 @@ describe('loadConfig', () => {
       storage: undefined,
       plansStorage: undefined,
       reader: undefined,
+      readers: {},
     });
   });
 
@@ -29,11 +30,27 @@ describe('loadConfig', () => {
       models: DEFAULT_GEMINI_MODELS,
     });
     const models = (GEMINI_MODEL: string) =>
-      loadConfig({ GEMINI_API_KEY: 'key', GEMINI_MODEL }).reader?.models;
+      loadConfig({ GEMINI_API_KEY: 'key', GEMINI_MODEL }).readers.gemini?.models;
     expect(models('gemini-x')).toEqual(['gemini-x']);
     expect(models(' gemini-x, gemini-y ,')).toEqual(['gemini-x', 'gemini-y']);
     expect(loadConfig({ GEMINI_API_KEY: 'key', PLAN_READER: 'none' }).reader).toBeUndefined();
     expect(() => loadConfig({ PLAN_READER: 'gemini' })).toThrow(/needs GEMINI_API_KEY/);
+  });
+
+  it('reads plans with Claude when told to, or when it has the only key', () => {
+    const claude = { provider: 'claude', apiKey: 'c', model: 'claude-opus-5-5', effort: 'medium' };
+    expect(loadConfig({ CLAUDE_API_KEY: 'c' }).reader).toEqual(claude);
+    expect(loadConfig({ ANTHROPIC_API_KEY: 'c' }).reader).toEqual(claude);
+    const both = { GEMINI_API_KEY: 'g', CLAUDE_API_KEY: 'c' };
+    expect(loadConfig(both).reader?.provider).toBe('gemini');
+    expect(loadConfig(both).readers.claude).toEqual(claude);
+    expect(loadConfig({ ...both, PLAN_READER: 'claude' }).reader).toEqual(claude);
+    expect(
+      loadConfig({ CLAUDE_API_KEY: 'c', CLAUDE_MODEL: 'claude-haiku-5-5', CLAUDE_EFFORT: 'low' })
+        .reader,
+    ).toMatchObject({ model: 'claude-haiku-5-5', effort: 'low' });
+    expect(() => loadConfig({ PLAN_READER: 'claude' })).toThrow(/needs CLAUDE_API_KEY/);
+    expect(() => loadConfig({ CLAUDE_API_KEY: 'c', CLAUDE_EFFORT: 'huge' })).toThrow();
   });
 
   it('reads the storage settings as a set', () => {

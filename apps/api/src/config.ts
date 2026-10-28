@@ -11,6 +11,9 @@ const defaultDataDir = fileURLToPath(new URL('../../../data', import.meta.url));
  */
 export const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash'];
 
+/** The Claude model that reads plans when CLAUDE_MODEL doesn't name one. */
+export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5';
+
 /** Treat empty values in .env as unset. */
 const unsetIfEmpty = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (v === '' ? undefined : v), schema);
@@ -31,15 +34,28 @@ const Env = z.object({
   STORAGE_BUCKET: optional(),
   /** Uploaded plan images, in a second private bucket on the same service. */
   STORAGE_PLANS_BUCKET: unsetIfEmpty(z.string().default('plans')),
-  // The vision model that reads uploaded plans: Gemini when there's a key, unless set to none.
-  PLAN_READER: unsetIfEmpty(z.enum(['gemini', 'none']).optional()),
+  // The vision model that reads uploaded plans: Gemini when there's a key, else Claude when
+  // there's one, unless set to one of them or to none.
+  PLAN_READER: unsetIfEmpty(z.enum(['gemini', 'claude', 'none']).optional()),
   GEMINI_API_KEY: optional(),
   /** One model, or several separated by commas, tried in order. */
   GEMINI_MODEL: optional(),
+  CLAUDE_API_KEY: optional(),
+  /** The name the Anthropic SDK looks for, taken when CLAUDE_API_KEY isn't set. */
+  ANTHROPIC_API_KEY: optional(),
+  CLAUDE_MODEL: unsetIfEmpty(z.string().default(DEFAULT_CLAUDE_MODEL)),
+  CLAUDE_EFFORT: unsetIfEmpty(z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium')),
 });
 
+export type GeminiReaderConfig = { provider: 'gemini'; apiKey: string; models: string[] };
+export type ClaudeReaderConfig = {
+  provider: 'claude';
+  apiKey: string;
+  model: string;
+  effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+};
 /** Which vision model reads plans, and how to reach it. */
-export type ReaderConfig = { provider: 'gemini'; apiKey: string; models: string[] };
+export type ReaderConfig = GeminiReaderConfig | ClaudeReaderConfig;
 
 export type Config = {
   port: number;
@@ -51,6 +67,8 @@ export type Config = {
   plansStorage: StorageConfig | undefined;
   /** Without one, plans are traced by hand. */
   reader: ReaderConfig | undefined;
+  /** Every reader there's a key for, for `plans:eval --provider`. */
+  readers: { gemini?: GeminiReaderConfig; claude?: ClaudeReaderConfig };
 };
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
@@ -60,6 +78,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
   const e = parsed.data;
   const storage = storageConfig(e);
+  const [gemini, claude] = [geminiConfig(e), claudeConfig(e)];
   return {
     port: e.PORT,
     databaseUrl: e.DATABASE_URL,
@@ -67,17 +86,28 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     storage,
     plansStorage: storage && { ...storage, bucket: e.STORAGE_PLANS_BUCKET },
     reader: readerConfig(e),
+    readers: {
+      ...(gemini && { gemini }),
+      ...(claude && { claude }),
+    },
   };
 }
 
 function readerConfig(e: z.infer<typeof Env>): ReaderConfig | undefined {
   if (e.PLAN_READER === 'none') return undefined;
-  if (!e.GEMINI_API_KEY) {
-    if (e.PLAN_READER === 'gemini') {
-      throw new Error('Invalid environment: PLAN_READER=gemini needs GEMINI_API_KEY');
-    }
-    return undefined;
+  const [gemini, claude] = [geminiConfig(e), claudeConfig(e)];
+  if (e.PLAN_READER === 'gemini' && !gemini) {
+    throw new Error('Invalid environment: PLAN_READER=gemini needs GEMINI_API_KEY');
   }
+  if (e.PLAN_READER === 'claude' && !claude) {
+    throw new Error('Invalid environment: PLAN_READER=claude needs CLAUDE_API_KEY');
+  }
+  if (e.PLAN_READER === 'claude') return claude;
+  return gemini ?? claude;
+}
+
+function geminiConfig(e: z.infer<typeof Env>): GeminiReaderConfig | undefined {
+  if (!e.GEMINI_API_KEY) return undefined;
   const models = (e.GEMINI_MODEL ?? '')
     .split(',')
     .map((m) => m.trim())
@@ -87,6 +117,12 @@ function readerConfig(e: z.infer<typeof Env>): ReaderConfig | undefined {
     apiKey: e.GEMINI_API_KEY,
     models: models.length > 0 ? models : DEFAULT_GEMINI_MODELS,
   };
+}
+
+function claudeConfig(e: z.infer<typeof Env>): ClaudeReaderConfig | undefined {
+  const apiKey = e.CLAUDE_API_KEY ?? e.ANTHROPIC_API_KEY;
+  if (!apiKey) return undefined;
+  return { provider: 'claude', apiKey, model: e.CLAUDE_MODEL, effort: e.CLAUDE_EFFORT };
 }
 
 /** All five STORAGE_* settings, or none: a partial set is almost always a typo. */

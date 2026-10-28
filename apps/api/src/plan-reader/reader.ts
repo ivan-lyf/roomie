@@ -8,6 +8,12 @@ export const PLAN_READ_PROMPT = {
   text: readFileSync(new URL('../prompts/plan-read.v2.md', import.meta.url), 'utf8'),
 };
 
+/** The same for Claude: the coordinates are in pixels, the way Claude's vision models give them. */
+export const PLAN_READ_CLAUDE_PROMPT = {
+  version: 'plan-read-claude.v1',
+  text: readFileSync(new URL('../prompts/plan-read-claude.v1.md', import.meta.url), 'utf8'),
+};
+
 export type PlanImage = ImageSize & { bytes: Uint8Array; mimeType: 'image/png' | 'image/jpeg' };
 
 export type ReaderUsage = { inputTokens: number; outputTokens: number };
