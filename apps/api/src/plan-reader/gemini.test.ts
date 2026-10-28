@@ -104,7 +104,7 @@ describe('geminiReader', () => {
     expect(result.raw).toEqual(plan);
     expect(result.plan.walls).toHaveLength(1);
     expect(result.usage).toEqual({ inputTokens: 1000, outputTokens: 250 });
-    expect(reader).toMatchObject({ provider: 'gemini', promptVersion: 'plan-read.v1' });
+    expect(reader).toMatchObject({ provider: 'gemini', promptVersion: 'plan-read.v2' });
   });
 
   it('asks once more when the answer is malformed, saying what was wrong', async () => {

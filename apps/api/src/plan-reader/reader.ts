@@ -4,8 +4,8 @@ import type { RawPlan } from '@roomie/schema';
 
 /** The prompt that asks for a plan, versioned: every reading records which one it used. */
 export const PLAN_READ_PROMPT = {
-  version: 'plan-read.v1',
-  text: readFileSync(new URL('../prompts/plan-read.v1.md', import.meta.url), 'utf8'),
+  version: 'plan-read.v2',
+  text: readFileSync(new URL('../prompts/plan-read.v2.md', import.meta.url), 'utf8'),
 };
 
 export type PlanImage = ImageSize & { bytes: Uint8Array; mimeType: 'image/png' | 'image/jpeg' };
