@@ -79,12 +79,16 @@ describe('separateRooms', () => {
     expect(separateRooms(rooms, [], MIN)).toEqual(rooms);
   });
 
-  it('leaves rooms that only share a wall, or barely overlap', () => {
-    const rooms = [
-      { polygon: box(0, 0, 200, 200) },
-      { polygon: box(200, 0, 400, 200) },
-      { polygon: box(395, 0, 600, 200) },
-    ];
-    expect(separateRooms(rooms, [], 5 * 200 + 1)).toEqual(rooms);
+  it('leaves rooms that only share a wall', () => {
+    const rooms = [{ polygon: box(0, 0, 200, 200) }, { polygon: box(200, 0, 400, 200) }];
+    expect(separateRooms(rooms, [], MIN)).toEqual(rooms);
+  });
+
+  it('cuts an overlap thinner than the smallest room it keeps', () => {
+    // Two rooms 5 px into each other, a 1000 px² sliver, where pieces under 1001 px² are dropped.
+    const rooms = [{ polygon: box(0, 0, 200, 200) }, { polygon: box(195, 0, 400, 200) }];
+    const [left, right] = separateRooms(rooms, [], 5 * 200 + 1);
+    expect(left!.polygon).toEqual(rooms[0]!.polygon);
+    expect(area(right!.polygon)).toBeCloseTo(200 * 200);
   });
 });

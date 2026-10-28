@@ -9,6 +9,9 @@ import { area, contains, simplify } from '../polygon';
 
 type DraftRoom = { polygon: Vec2[]; label?: string };
 
+/** Overlaps smaller than this, in square pixels, are rooms sharing an edge. */
+const SLIVER = 1;
+
 const toPolygon = (points: readonly Vec2[]): Polygon => [points.map((p) => [p.x, p.y])];
 /** The outer ring of a result, without its closing point. */
 const ring = (polygon: Polygon): Vec2[] => polygon[0]!.slice(0, -1).map(([x, y]) => ({ x, y }));
@@ -37,9 +40,9 @@ const holdsAny = (polygon: readonly Vec2[], points: readonly Vec2[]) =>
 /**
  * Cuts overlapping rooms apart. Where two overlap, the room whose label is in the overlap keeps
  * it, else the smaller room; the other loses it. A room cut in pieces keeps the piece with its
- * label, else the largest. A room left with nothing is dropped, and a cut that would leave a
- * hole (one room wholly inside another, touching none of its walls) isn't made: that one is
- * the user's to fix.
+ * label, else the largest, and pieces smaller than `minArea` are dropped. A room left with
+ * nothing is dropped, and a cut that would leave a hole (one room wholly inside another,
+ * touching none of its walls) isn't made: that one is the user's to fix.
  */
 export function separateRooms<R extends DraftRoom>(
   rooms: readonly R[],
@@ -54,7 +57,8 @@ export function separateRooms<R extends DraftRoom>(
       if (!a || !b) continue;
       const shared = polygonClipping.intersection(toPolygon(a.polygon), toPolygon(b.polygon));
       const overlap = shared.reduce((s, p) => s + area(ring(p)), 0);
-      if (overlap < minArea) continue;
+      // Any overlap is cut, however thin: the plan's checks catch rooms 5 cm into each other.
+      if (overlap < SLIVER) continue;
 
       const inOverlap = (k: number) => shared.some((p) => holdsAny(ring(p), labels[k]!));
       const [aHere, bHere] = [inOverlap(i), inOverlap(j)];
