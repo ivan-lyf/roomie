@@ -183,7 +183,8 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 - [x] 3D render: the whole home with extruded walls, window and door cutouts, floor, ceiling toggle; a room picker that frames one room and cuts away the walls in front of it
 - [x] Wall color, floor material (3–5 textures), light warmth and intensity, per room or for the whole home
 - [x] Environment lighting, soft shadows, ambient occlusion
-- [ ] Opus's remaining misses on the test plans: scale off on fr-7 (−7.7%) and us-120 (−16.5%), rooms overlapping on 4 plans; recheck the rules tuned to Gemini's readings (overlap cutting, label matching, unit checks) against Opus's
+- [x] Scale with Opus: within 3% on 15 of 16 test plans, and the 16th (two rooms' labels that disagree) asks for calibration instead of guessing. Area labels are measured inside the walls
+- [ ] Opus's remaining misses: rooms overlapping on fr-12 and fr-93, room areas within 15% on 90/112; recheck the rules tuned to Gemini's readings (overlap cutting, label matching) against Opus's
 - [ ] Timed correction pass in the editor: one studio and one multi-room plan, read by Opus
 
 **Done when:** every test plan becomes a correct 3D home, with rooms labelled and scale within 3%, in ≤ 2 min of correction for a studio and ≤ 5 min for a multi-room plan.
