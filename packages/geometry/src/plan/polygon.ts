@@ -40,6 +40,36 @@ export function centroid(points: readonly Vec2[]): Vec2 {
   return { x: x / (6 * a), y: y / (6 * a) };
 }
 
+/**
+ * A point well inside the polygon: its centroid when that's inside, else (an L or a U, whose
+ * centroid can fall outside it) the middle of the widest stretch inside it across the centroid's
+ * height, or across the middle of its bounds.
+ */
+export function interiorPoint(points: readonly Vec2[]): Vec2 {
+  const c = centroid(points);
+  if (contains(points, c)) return c;
+  const { min, max } = bounds(points);
+  for (const y of [c.y, (min.y + max.y) / 2]) {
+    const xs: number[] = [];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i]!;
+      const b = points[(i + 1) % points.length]!;
+      if (a.y > y !== b.y > y) xs.push(a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y));
+    }
+    xs.sort((u, v) => u - v);
+    let best: Vec2 | undefined;
+    let widest = 0;
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      if (xs[i + 1]! - xs[i]! > widest) {
+        widest = xs[i + 1]! - xs[i]!;
+        best = { x: (xs[i]! + xs[i + 1]!) / 2, y };
+      }
+    }
+    if (best) return best;
+  }
+  return c;
+}
+
 /** Whether a point is inside the polygon (even-odd rule); points on an edge may go either way. */
 export function contains(points: readonly Vec2[], p: Vec2): boolean {
   let inside = false;

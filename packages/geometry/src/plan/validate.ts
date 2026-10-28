@@ -1,5 +1,5 @@
 import type { Floorplan, FloorplanStatus, Vec2 } from '@roomie/schema';
-import { area, centroid, contains } from './polygon';
+import { area, contains, interiorPoint } from './polygon';
 import { closestOnSegment, distance } from './snap';
 import { wallHeight } from './rooms';
 import { wallLength } from './walls';
@@ -161,8 +161,8 @@ function edgesCross(p: Vec2, q: Vec2, a: Vec2, b: Vec2): boolean {
 
 /** Whether two room outlines overlap by more than sharing an edge. */
 function overlap(a: readonly Vec2[], b: readonly Vec2[]): boolean {
-  if ([...a, centroid(a)].some((p) => deepInside(b, p))) return true;
-  if ([...b, centroid(b)].some((p) => deepInside(a, p))) return true;
+  if ([...a, interiorPoint(a)].some((p) => deepInside(b, p))) return true;
+  if ([...b, interiorPoint(b)].some((p) => deepInside(a, p))) return true;
   return a.some((p, i) =>
     b.some((u, j) => edgesCross(p, a[(i + 1) % a.length]!, u, b[(j + 1) % b.length]!)),
   );

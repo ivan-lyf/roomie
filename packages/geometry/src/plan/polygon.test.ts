@@ -5,6 +5,7 @@ import {
   bounds,
   centroid,
   contains,
+  interiorPoint,
   mergePolygons,
   signedArea,
   splitPolygon,
@@ -91,5 +92,23 @@ describe('mergePolygons', () => {
   it("won't join rooms that don't touch along an edge", () => {
     expect(mergePolygons(rect(0, 0, 1, 1), rect(2, 0, 3, 1))).toBeUndefined();
     expect(mergePolygons(rect(0, 0, 1, 1), rect(1, 1, 2, 2))).toBeUndefined();
+  });
+});
+
+describe('interiorPoint', () => {
+  const P = (x: number, y: number) => ({ x, y });
+
+  it('is the centroid of a shape that holds it', () => {
+    expect(interiorPoint([P(0, 0), P(4, 0), P(4, 2), P(0, 2)])).toEqual(P(2, 1));
+  });
+
+  it('stays inside an L and a U, whose centroids fall outside them', () => {
+    // A hall: a corridor along the top, and one down the right.
+    const l = [P(0, 0), P(10, 0), P(10, 6), P(9, 6), P(9, 1), P(0, 1)];
+    const u = [P(0, 0), P(1, 0), P(1, 5), P(5, 5), P(5, 0), P(6, 0), P(6, 6), P(0, 6)];
+    for (const shape of [l, u]) {
+      expect(contains(shape, centroid(shape))).toBe(false);
+      expect(contains(shape, interiorPoint(shape))).toBe(true);
+    }
   });
 });

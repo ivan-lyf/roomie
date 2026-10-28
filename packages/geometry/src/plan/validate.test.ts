@@ -54,6 +54,22 @@ describe('more checks', () => {
     expect(codes(plan)).toEqual([]);
   });
 
+  it("doesn't take an L-shaped hall for overlapping the room in its crook", () => {
+    // The hall runs along the top and down the right of the bedroom; its centroid is in the
+    // bedroom.
+    const P = (x: number, y: number) => ({ x, y });
+    const room = (id: string, boundary: { x: number; y: number }[]) => ({
+      ...plan.rooms[0]!,
+      id,
+      boundary,
+    });
+    const rooms = [
+      room('hall', [P(1, 0), P(8, 0), P(8, 5), P(7, 5), P(7, 1), P(1, 1)]),
+      room('bedroom', [P(3, 1), P(7, 1), P(7, 5), P(3, 5)]),
+    ];
+    expect(codes({ ...plan, rooms })).toEqual([]);
+  });
+
   it('lets rooms share an edge that leans a hair apart in floating point', () => {
     const P = (x: number, y: number) => ({ x, y });
     const room = (id: string, boundary: { x: number; y: number }[]) => ({
