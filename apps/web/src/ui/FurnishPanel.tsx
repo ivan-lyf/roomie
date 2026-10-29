@@ -30,6 +30,7 @@ import { useFurnish } from '../stores/furnish';
 import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
 import { AutoFurnish } from './AutoFurnish';
+import { SwapList } from './SwapList';
 
 /** The category a room's furnishing starts on. */
 const FIRST_CATEGORY: Partial<Record<RoomType, Category>> = {
@@ -275,6 +276,7 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
   const products = useProducts((s) => s.byArticle);
   const selected = useFurnish((s) => s.selected);
   const select = useFurnish((s) => s.select);
+  const swapping = useFurnish((s) => s.swapping);
   const problems = useLayoutProblems(plan);
   const items = plan.furniture.filter((f) => f.roomId === room.id);
   const item = plan.furniture.find((f) => f.id === selected);
@@ -401,6 +403,14 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
             <button
               type="button"
               className="rounded-md border border-stone-300 bg-white px-2 py-1"
+              aria-pressed={swapping}
+              onClick={() => useFurnish.getState().setSwapping(!swapping)}
+            >
+              Swap (S)
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-stone-300 bg-white px-2 py-1"
               onClick={() => removeItem(item.id)}
             >
               Remove (Delete)
@@ -409,6 +419,9 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
           <p className="text-xs text-stone-500">
             Drag it to move it; it snaps to the walls unless you hold Alt. Arrows nudge it.
           </p>
+          {swapping && (
+            <SwapList key={item.id} plan={plan} item={item} product={product} imperial={imperial} />
+          )}
         </section>
       )}
     </section>

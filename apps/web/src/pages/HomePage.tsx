@@ -52,11 +52,14 @@ export function HomePage({ id }: { id: string }) {
     history.replaceState(null, '', params.size > 0 ? `?${params}` : location.pathname);
   }, [roomId]);
 
-  // Escape stops placing, else lets go of the item, else goes back to the whole home. R turns
-  // what's being placed or the item selected, Delete removes the item, arrows nudge it.
+  // Escape stops placing, else closes the swap list, else lets go of the item, else goes back to
+  // the whole home. R turns what's being placed or the item selected, S opens its swap list,
+  // Delete removes the item, arrows nudge it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLElement && e.target.closest('input, select, textarea')) return;
+      // Keys typed into a field are the field's; a ticked checkbox leaves them to the page.
+      const field = 'input:not([type=checkbox]):not([type=radio]), select, textarea';
+      if (e.target instanceof HTMLElement && e.target.closest(field)) return;
       const furnish = useFurnish.getState();
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
@@ -71,8 +74,11 @@ export function HomePage({ id }: { id: string }) {
       const by = e.shiftKey ? STEP_FINE : STEP;
       if (e.key === 'Escape') {
         if (furnish.armed) furnish.arm(undefined);
+        else if (furnish.swapping) furnish.setSwapping(false);
         else if (item) furnish.select(undefined);
         else setRoomId(undefined);
+      } else if (key === 's' && item) {
+        furnish.setSwapping(!furnish.swapping);
       } else if (key === 'r' && furnish.armed) {
         furnish.turnArmed(turn(furnish.armed.rotation, by));
       } else if (key === 'r' && item) {
