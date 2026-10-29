@@ -62,6 +62,9 @@ describe('generateHome', () => {
       home.winner.placements.map((_, i) => `f${i + 1}`),
     );
     expect(home.winner.placements).toHaveLength(11);
+    // Each item keeps the intent's name for it, to find its reason and relations later.
+    const refs = intent.rooms.flatMap((r) => r.items.map((i) => i.ref));
+    expect(home.winner.placements.map((p) => p.ref).toSorted()).toEqual(refs.toSorted());
     expect(validateLayout(plan, home.winner.placements, byArticle)).toEqual([]);
     expect(home.winner.score).toBeGreaterThan(0.6);
     expect(home.winner.breakdown).toHaveProperty('r1.relations');

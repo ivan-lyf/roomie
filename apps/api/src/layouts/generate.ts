@@ -89,9 +89,12 @@ const addUsage = (a: ReaderUsage, b: ReaderUsage): ReaderUsage => ({
 const better = (a: RoomSolution, b: RoomSolution) =>
   a.unplaced.length - b.unplaced.length || b.score - a.score;
 
-/** Placements from several rooms, with ids unique in the home: f1, f2, and so on. */
+/**
+ * Placements from several rooms, with ids unique in the home (f1, f2, and so on), each keeping
+ * the intent's ref it was solved under.
+ */
 function numbered(rooms: readonly RoomSolution[]): Placement[] {
-  return rooms.flatMap((r) => r.placements).map((p, i) => ({ ...p, id: `f${i + 1}` }));
+  return rooms.flatMap((r) => r.placements).map((p, i) => ({ ...p, id: `f${i + 1}`, ref: p.id }));
 }
 
 export async function generateHome(

@@ -29,6 +29,11 @@ export const Placement = z.object({
   x: z.number().finite(),
   y: z.number().finite(),
   rotation: Radians,
+  /**
+   * The intent's name for the item ("sofa", "ns_left"), kept through swaps, which ties it to its
+   * reason and relations. Items placed by hand have none.
+   */
+  ref: z.string().min(1).optional(),
 });
 export type Placement = z.infer<typeof Placement>;
 
