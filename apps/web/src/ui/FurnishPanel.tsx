@@ -18,8 +18,14 @@ import {
   parseLength,
   ROOM_TYPES,
 } from '../format';
-import { removeItem, rotateItem, useLayoutProblems, useScores, whyOf } from '../furnishing';
-import { redo, undo } from '../stores/floorplan';
+import {
+  clearRoom,
+  removeItem,
+  rotateItem,
+  useLayoutProblems,
+  useScores,
+  whyOf,
+} from '../furnishing';
 import { useFurnish } from '../stores/furnish';
 import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
@@ -292,14 +298,11 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
           In the {room.name}: {items.length} item{items.length === 1 ? '' : 's'}
           {items.length > 0 && `, ${formatPrice(total)}`}
         </h2>
-        <span className="flex gap-2 text-xs">
-          <button type="button" className="underline" onClick={undo} title="Ctrl+Z">
-            Undo
+        {items.length > 0 && (
+          <button type="button" className="text-xs underline" onClick={() => clearRoom(room.id)}>
+            Clear the room
           </button>
-          <button type="button" className="underline" onClick={redo} title="Ctrl+Shift+Z">
-            Redo
-          </button>
-        </span>
+        )}
       </header>
 
       {score !== undefined && (
@@ -350,6 +353,15 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
                     ↗
                   </a>
                 )}
+                <button
+                  type="button"
+                  onClick={() => removeItem(f.id)}
+                  className="px-2 text-stone-500 hover:text-red-700"
+                  title="Remove it"
+                  aria-label={`Remove the ${p ? familyName(p) : 'item'}`}
+                >
+                  ×
+                </button>
               </li>
             );
           })}

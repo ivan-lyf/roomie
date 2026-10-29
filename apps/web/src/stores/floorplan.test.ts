@@ -167,6 +167,26 @@ describe('furnishing', () => {
     redo();
     expect(current().furniture[0]!.x).toBe(6);
   });
+
+  it('clears a room, and puts in a furnished layout, each one edit to undo', () => {
+    const item = (id: string, roomId: string) => ({
+      id,
+      articleNo: '123.456.78',
+      roomId,
+      x: 5,
+      y: 2,
+      rotation: 0,
+    });
+    state().setFurniture([item('f1', 'r1'), item('f2', 'r2'), item('f3', 'r2')]);
+    state().remove(['f2', 'f3']);
+    expect(current().furniture.map((f) => f.id)).toEqual(['f1']);
+    expect(history().pastStates).toHaveLength(2);
+    undo();
+    expect(current().furniture.map((f) => f.id)).toEqual(['f1', 'f2', 'f3']);
+    undo();
+    expect(current().furniture).toEqual([]);
+    expect(history().pastStates).toHaveLength(0);
+  });
 });
 
 describe('a plan the reader read', () => {

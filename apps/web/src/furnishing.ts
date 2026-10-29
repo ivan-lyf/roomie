@@ -175,6 +175,15 @@ export function removeItem(itemId: string) {
   useFurnish.getState().select(undefined);
 }
 
+/** Takes everything out of a room, as one edit to undo. */
+export function clearRoom(roomId: string) {
+  const { plan, remove } = useFloorplan.getState();
+  const ids = plan?.furniture.filter((f) => f.roomId === roomId).map((f) => f.id) ?? [];
+  if (ids.length === 0) return;
+  remove(ids);
+  useFurnish.getState().select(undefined);
+}
+
 export type Totals = { count: number; priceCad: number };
 
 /**

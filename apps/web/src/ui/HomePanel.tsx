@@ -2,6 +2,7 @@ import { area } from '@roomie/geometry';
 import type { Floorplan } from '@roomie/schema';
 import { useState } from 'react';
 import { Link } from 'wouter';
+import { useStore } from 'zustand';
 import { formatPrice, ROOM_TYPES, squareMeters } from '../format';
 import {
   furnitureTotals,
@@ -11,6 +12,7 @@ import {
   useScores,
 } from '../furnishing';
 import { DEMO_ID } from '../plans';
+import { redo, undo, useFloorplan } from '../stores/floorplan';
 import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
 import { FurnishPanel } from './FurnishPanel';
@@ -41,6 +43,7 @@ export function HomePanel(props: Props) {
         <Link href="/" className="text-stone-500 hover:text-stone-800">
           ← Plans
         </Link>
+        <UndoRedo />
         <Link href={`/plans/${props.id}/edit`} className="underline">
           Edit the plan
         </Link>
@@ -82,6 +85,29 @@ export function HomePanel(props: Props) {
         <HomeTab {...props} />
       )}
     </aside>
+  );
+}
+
+/** Undo and Redo for every edit to the home, each greyed out when there's nothing to take. */
+function UndoRedo() {
+  const canUndo = useStore(useFloorplan.temporal, (s) => s.pastStates.length > 0);
+  const canRedo = useStore(useFloorplan.temporal, (s) => s.futureStates.length > 0);
+  const button = 'underline disabled:text-stone-300 disabled:no-underline';
+  return (
+    <span className="flex gap-3">
+      <button type="button" className={button} onClick={undo} disabled={!canUndo} title="Ctrl+Z">
+        Undo
+      </button>
+      <button
+        type="button"
+        className={button}
+        onClick={redo}
+        disabled={!canRedo}
+        title="Ctrl+Shift+Z"
+      >
+        Redo
+      </button>
+    </span>
   );
 }
 
