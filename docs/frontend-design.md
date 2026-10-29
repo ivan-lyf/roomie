@@ -56,7 +56,7 @@ Each principle comes with the rule that makes it checkable.
 
 - The first four steps show a **step bar** at the top: `Plan · Check · Preferences · Your home`. Done steps can be clicked to go back.
 - Reopening a plan resumes where it was left (see the statuses in §4.1).
-- **Save** (M6) is asked for only when the user clicks Save. Everything else works signed out.
+- **Sign in** (M6) is asked for only right before a step that uses the AI: reading a plan, furnishing, or trying another layout. Everything else works signed out, and homes autosave without an account.
 
 ---
 
@@ -70,7 +70,7 @@ Every screen spec lists purpose, layout, copy, and states. **Every screen must h
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  Roomie                                                 [Save] │
+│  Roomie                                              [Sign in] │
 │                                                                │
 │   Upload your floor plan. See your home furnished with         │
 │   IKEA pieces that actually fit, with prices.                  │
@@ -241,7 +241,7 @@ Every screen spec lists purpose, layout, copy, and states. **Every screen must h
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ ← Homes   Kits 1BR ✎   Saved ✓        ↶ ↷    ft|m     Total $2,340 [Shopping list] [Save] │
+│ ← Homes   Kits 1BR ✎   Saved ✓        ↶ ↷    ft|m     Total $2,340 [Shopping list]        │
 ├────────────┬───────────────────────────────────────────────┬─────────────────┤
 │ Whole home │                                               │  (context panel)│
 │ 3 rooms    │                                               │                 │
@@ -259,7 +259,7 @@ Every screen spec lists purpose, layout, copy, and states. **Every screen must h
 └────────────┴───────────────────────────────────────────────┴─────────────────┘
 ```
 
-**Top bar:** back to homes, editable name, save state (reuse the labels from `EditorPage`, reworded: "Saved", "Saving…", "Couldn't save · Retry"), undo and redo, units toggle, **running total** linking to the shopping list, and Save (M6).
+**Top bar:** back to homes, editable name, save state (reuse the labels from `EditorPage`, reworded: "Saved", "Saving…", "Couldn't save · Retry"), undo and redo, units toggle, **running total** linking to the shopping list.
 
 **Left rail (rooms):** "Whole home" plus every room, with a type icon, item count, and subtotal. Unfurnished rooms say "Not furnished" (kitchens, bathrooms) or "Not furnished yet · [Furnish]" (furnishable rooms the user switched off). Clicking a room frames it, as `HomePanel` does today.
 
@@ -347,10 +347,11 @@ Every screen spec lists purpose, layout, copy, and states. **Every screen must h
 - "Copy list" copies plain text (name, color, article number, quantity, price, link). "Print" uses a print stylesheet.
 - The price date is the oldest `scrapedAt` among the listed products.
 
-### 4.8 Save and My homes (M6)
+### 4.8 Sign in and daily limit (M6)
 
-- Save opens a small dialog: "**Save this home** to come back to it on any device." [Continue with Google] [Email me a link]. Before then, homes autosave as they do today, without an account, and the top bar says so quietly ("Not saved to an account").
-- Signed in, Save is replaced by "Saved ✓", and the landing page's "Your homes" lists account homes. Deleting a home sets a status flag (never a hard delete) and offers Undo in a toast.
+- Signed out, the button that starts an AI step ("Read my plan", "Furnish my home", "Try another layout") opens a small dialog first: "**Sign in to continue.** It keeps things fair: everyone gets a daily share of plan readings and furnishings." [Continue with Google] [Email me a link]. After signing in, the step starts on its own; the user doesn't click again.
+- Homes autosave as they do today, without an account. Signing in doesn't change "Your homes".
+- At the daily limit, the step doesn't start: "You've used today's share. You can still move, swap and remove furniture. More is available tomorrow." Never show tokens or dollar amounts.
 
 ---
 
@@ -368,23 +369,27 @@ Every screen spec lists purpose, layout, copy, and states. **Every screen must h
 
 ## 6. Visual design system
 
-**Feel:** calm, warm, homey. Like a well-lit apartment, not a CAD tool. The 3D home is the hero; the UI frames it and stays quiet.
+**Feel: a drafting table.** The UI borrows from an architect's plan sheet: paper, black rules, dimension lines, small monospace labels, one blueprint-blue accent. It ties the look to what Roomie does (read plans, make things fit) and keeps it from reading like a generic template. The 3D home stays the hero and keeps its own warm colours; the UI around it stays flat and quiet. The reference is the Welcome page and app screens in the design prototype.
+
+**Avoid:** grids of rounded cards, icons in tinted squares, pill-shaped buttons and chips, soft drop shadows, gradient washes. Group with whitespace and rules, not boxes.
 
 **Tokens** in `apps/web/src/index.css`, via Tailwind v4 `@theme`, so components use names, not raw colors:
 
 | Token | Use | Start value |
 |---|---|---|
-| `--color-canvas` | page background | stone-100 `#f5f5f4` (today's) |
-| `--color-surface` | panels, cards | white |
-| `--color-ink` / `--color-ink-muted` | text | stone-800 / stone-500 |
-| `--color-line` | borders | stone-200 |
-| `--color-accent` / `--color-accent-ink` | the one primary button, selection, focus | a warm terracotta or deep green, AA on white |
+| `--color-canvas` | page background (marketing and start pages add a 32 px faint grid) | paper `#f7f7f4`, grid lines `#e6e6e0` |
+| `--color-surface` | panels, the plan sheet | white |
+| `--color-ink` / `--color-ink-muted` | text, rules | graphite `#1c1c1a` / `#4a4a45` |
+| `--color-line` / `--color-rule` | light dividers / strong rules (headers, section tops) | `#c9c9c2` / `#1c1c1a` at 1–2 px |
+| `--color-accent` / `--color-accent-ink` | the one primary button, selection, focus, dimension lines | blueprint blue `#1d4ed8` / `#1e3a8a`; tint `#dbe4fb` |
 | `--color-ok` / `--color-warn` / `--color-danger` | fits, over budget, invalid spot | green / amber / red, AA |
-| `--radius-card` / `--radius-control` | | 12 px / 8 px |
-| `--shadow-panel` | floating panels over 3D | soft, one level |
+| `--radius-control` | buttons, inputs, tags | 2 px (no pills; round only colour swatches if at all) |
+| `--shadow-panel` | only panels floating over 3D | a 1 px graphite outline plus a hard 4 px offset at 12% |
 
 - **Light theme only** for the MVP.
-- **Type:** one sans family (Inter from Google Fonts, falling back to the system stack). Body text **16 px** (the current UI uses 14 px `text-sm`, too small for this audience), panel text 14 px minimum, headings 20/24/32 px. Use tabular numbers for prices.
+- **Buttons:** one filled blue button per screen. Secondary actions are underlined text links ("Try a sample apartment →") or a 2 px graphite outline. Toggles (3D | Top view, ft | m) are text tabs with an underline on the selected one.
+- **Type:** Space Grotesk for UI and headings, IBM Plex Mono for measurements, prices, step labels and captions (both Google Fonts, falling back to the system stack). Body text **16–17 px** (the current UI uses 14 px `text-sm`, too small for this audience), panel text 14 px minimum. Headings are large and tight (`letter-spacing: -0.02em` to `-0.035em`): 24/32/64 px. Prices use the mono face with tabular numbers.
+- **Plan-sheet details:** dimension lines with end ticks for sizes (`├ 7′ 5″ ┤`), room names and figure captions in mono caps ("FIG. 1 · LIVING ROOM"), numbered lists set as rows between rules.
 - **Components:** shadcn/ui, as `PLAN.md` §4 already lists (copied into `apps/web/src/ui/kit/`): Button, Dialog, Sheet, Tabs, Slider, Tooltip, Toast, DropdownMenu, Popover. Icons from `lucide-react`. Add nothing heavier.
 - **Room-type icons:** one per `RoomType`, from lucide (sofa, bed-double, utensils, monitor, cooking-pot, bath, door-open, shirt, washing-machine, sun, square).
 - **Motion:** short (150–250 ms) ease-out for panels and item snap-back; camera moves ≤ 600 ms. Respect `prefers-reduced-motion` (cut instead of animate).
@@ -439,7 +444,7 @@ Reading and furnishing are states of the Check and Workspace pages, not routes o
 | Result | `Layout` with `placements`, plus a per-placement reason for "Why here?" |
 | Regenerate one room | same as start, with one `roomId` and the other rooms' placements kept |
 | Swap options | products of a category that fit a given placement, with price |
-| Save, list homes | M6 routes |
+| Sign in, daily limit | M6: LLM routes need a session token and refuse at the limit with a reason code |
 
 Reason codes from the API and from `validateLayout()` map to the user sentences in §4.6 in one table in `copy.ts`.
 
@@ -486,7 +491,7 @@ Each phase is its own small PR, matched to `PLAN.md` milestones.
 | B | M3 | workspace shell (top bar, room rail, context panel, view controls, top view), add-furniture sheet, drag and rotate with live validation, item card, shopping list |
 | C | M4 | preferences page, furnishing progress and per-room failures, "Why here?" |
 | D | M5 | swap drawer, remove with undo toast, try another layout for a room, workspace undo and redo |
-| E | M6 | save dialog, sign-in, account homes on the landing page |
+| E | M6 | sign-in dialog before AI steps, daily-limit message |
 
 ---
 
