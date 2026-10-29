@@ -1,8 +1,16 @@
-import { type LayoutProblem, snapPlacement, turn, validateLayout } from '@roomie/geometry';
+import {
+  type FurnitureScores,
+  type LayoutProblem,
+  scoreFurniture,
+  snapPlacement,
+  turn,
+  validateLayout,
+} from '@roomie/geometry';
 import type { Floorplan, HomeFurnishing, Placement, Product, RoomIntent } from '@roomie/schema';
 import { useMemo } from 'react';
 import { useFloorplan } from './stores/floorplan';
 import { type Preview, useFurnish } from './stores/furnish';
+import { useIntents } from './stores/intents';
 import { useProducts } from './stores/products';
 
 // Furnishing by hand: what the layout looks like mid-drag, what's wrong with it, and the edits
@@ -60,6 +68,63 @@ export function useLayoutProblems(plan: Floorplan): Problems {
     }
     return { all, byItem };
   }, [walls, openings, rooms, obstacles, furniture, armed, preview, products, missing]);
+}
+
+/**
+ * How many problems each room has: those of the items standing in it, and its walkways'. A
+ * problem between items in two rooms counts in both.
+ */
+export function problemsByRoom(
+  problems: readonly LayoutProblem[],
+  furniture: readonly Pick<Placement, 'id' | 'roomId'>[],
+): ReadonlyMap<string, number> {
+  const roomOf = new Map(furniture.map((f) => [f.id, f.roomId]));
+  const counts = new Map<string, number>();
+  for (const problem of problems) {
+    const rooms = new Set(problem.ids.flatMap((id) => roomOf.get(id) ?? []));
+    if (problem.roomId) rooms.add(problem.roomId);
+    for (const roomId of rooms) counts.set(roomId, (counts.get(roomId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export type Scores = {
+  now: FurnitureScores;
+  /** Each room's score as it was last furnished, before the edits since. */
+  furnished: ReadonlyMap<string, number>;
+};
+
+/**
+ * How good the furniture is as saved, each room and the home, next to how good each room was
+ * when it was furnished. Worked out when an edit lands, not while an item is dragged.
+ */
+export function useScores(plan: Floorplan): Scores {
+  const products = useProducts((s) => s.byArticle);
+  const furnishing = useIntents((s) => s.furnishing);
+  const { walls, openings, rooms, obstacles, furniture } = plan;
+  const options = useMemo(
+    () => ({
+      intents: furnishing?.rooms.map((r) => r.intent),
+      style: furnishing?.style ?? undefined,
+      budgetCad: furnishing?.budgetCad ?? undefined,
+    }),
+    [furnishing],
+  );
+  const furnished = useMemo(() => {
+    const shapes = { walls, openings, rooms, obstacles };
+    const scores = new Map<string, number>();
+    for (const room of furnishing?.rooms ?? []) {
+      const scored = scoreFurniture(shapes, room.placements, products, options);
+      const score = scored.rooms.get(room.roomId)?.score;
+      if (score !== undefined) scores.set(room.roomId, score);
+    }
+    return scores;
+  }, [walls, openings, rooms, obstacles, furnishing, products, options]);
+  const now = useMemo(
+    () => scoreFurniture({ walls, openings, rooms, obstacles }, furniture, products, options),
+    [walls, openings, rooms, obstacles, furniture, products, options],
+  );
+  return { now, furnished };
 }
 
 /**

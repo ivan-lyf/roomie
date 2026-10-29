@@ -33,8 +33,14 @@ export function HomePage({ id }: { id: string }) {
   const [roomId, setRoomId] = useState(
     () => new URLSearchParams(location.search).get('room') ?? undefined,
   );
-  // The products the furniture needs, saved homes holding items the catalog has since dropped.
-  useProductsFor(plan?.furniture.map((f) => f.articleNo) ?? []);
+  // The products the furniture needs, saved homes holding items the catalog has since dropped,
+  // and those it was furnished with, to score each room as it was.
+  const planned = useIntents((s) => s.furnishing);
+  useProductsFor(
+    [...(plan?.furniture ?? []), ...(planned?.rooms.flatMap((r) => r.placements) ?? [])].map(
+      (f) => f.articleNo,
+    ),
+  );
   const [cutaway, setCutaway] = useState(true);
   const [ceilings, setCeilings] = useState(false);
 

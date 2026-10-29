@@ -18,7 +18,7 @@ import {
   parseLength,
   ROOM_TYPES,
 } from '../format';
-import { removeItem, rotateItem, useLayoutProblems, whyOf } from '../furnishing';
+import { removeItem, rotateItem, useLayoutProblems, useScores, whyOf } from '../furnishing';
 import { redo, undo } from '../stores/floorplan';
 import { useFurnish } from '../stores/furnish';
 import { useIntents } from '../stores/intents';
@@ -274,6 +274,10 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
   const item = plan.furniture.find((f) => f.id === selected);
   const product = item && products.get(item.articleNo);
   const why = useIntents((s) => item && whyOf(item, s.furnishing));
+  const planned = useIntents((s) => s.furnishing?.rooms.find((r) => r.roomId === room.id));
+  const scores = useScores(plan);
+  const score = scores.now.rooms.get(room.id)?.score;
+  const furnished = scores.furnished.get(room.id);
   const total = items.reduce((sum, f) => sum + (products.get(f.articleNo)?.priceCad ?? 0), 0);
   // Problems with the room's walkways that no one item is to blame for.
   const ids = new Set(plan.furniture.map((f) => f.id));
@@ -298,6 +302,14 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
         </span>
       </header>
 
+      {score !== undefined && (
+        <p className="text-xs text-stone-500">
+          Layout score {score.toFixed(2)}
+          {furnished !== undefined && ` (${furnished.toFixed(2)} as furnished)`}
+          {planned?.budgetCad !== undefined &&
+            ` · ${formatPrice(planned.budgetCad)} was set aside for it`}
+        </p>
+      )}
       {items.length === 0 && (
         <p className="text-stone-500">Nothing yet: pick something below to place it.</p>
       )}

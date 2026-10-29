@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { furnitureTotals, liveFurniture, PREVIEW_ID, whyOf } from './furnishing';
+import { furnitureTotals, liveFurniture, PREVIEW_ID, problemsByRoom, whyOf } from './furnishing';
 
 const sofa = { id: 'f1', articleNo: '123.456.78', roomId: 'r2', x: 5, y: 2, rotation: 0 };
 const lamp = { ...sofa, id: 'f2', articleNo: '876.543.21', x: 7 };
@@ -69,5 +69,24 @@ describe('whyOf', () => {
     expect(whyOf({ ...sofa, ref: 'sofa', roomId: 'r1' }, furnishing)).toBeUndefined();
     expect(whyOf(sofa, furnishing)).toBeUndefined();
     expect(whyOf({ ...sofa, ref: 'sofa' }, undefined)).toBeUndefined();
+  });
+});
+
+describe('problemsByRoom', () => {
+  it("counts each room's problems, its walkways' included, and one between rooms in both", () => {
+    const chair = { ...sofa, id: 'f3', roomId: 'r1' };
+    const problems = [
+      { code: 'overlap' as const, message: '', ids: ['f1', 'f2'] },
+      { code: 'overlap' as const, message: '', ids: ['f1', 'f3'] },
+      { code: 'blocks_door' as const, message: '', ids: ['f3', 'o1'] },
+      { code: 'blocks_path' as const, message: '', ids: [], roomId: 'r4' },
+    ];
+    expect(problemsByRoom(problems, [sofa, lamp, chair])).toEqual(
+      new Map([
+        ['r2', 2],
+        ['r1', 2],
+        ['r4', 1],
+      ]),
+    );
   });
 });

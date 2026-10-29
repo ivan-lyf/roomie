@@ -3,8 +3,15 @@ import type { Floorplan } from '@roomie/schema';
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { formatPrice, ROOM_TYPES, squareMeters } from '../format';
-import { furnitureTotals, type Totals } from '../furnishing';
+import {
+  furnitureTotals,
+  problemsByRoom,
+  type Totals,
+  useLayoutProblems,
+  useScores,
+} from '../furnishing';
 import { DEMO_ID } from '../plans';
+import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
 import { FurnishPanel } from './FurnishPanel';
 import { LookControls } from './LookControls';
@@ -26,6 +33,8 @@ export function HomePanel(props: Props) {
   const [tab, setTab] = useState<'home' | 'furnish'>('home');
   const products = useProducts((s) => s.byArticle);
   const { home } = furnitureTotals(plan.furniture, products);
+  const budget = useIntents((s) => s.furnishing?.budgetCad ?? undefined);
+  const score = useScores(plan).now.home.score;
   return (
     <aside className="m-4 flex w-96 shrink-0 flex-col gap-3 overflow-y-auto rounded-xl bg-white p-4 text-sm text-stone-800 shadow-lg">
       <div className="flex items-center justify-between text-xs">
@@ -39,9 +48,17 @@ export function HomePanel(props: Props) {
       <header>
         <h1 className="text-base font-semibold">{plan.name}</h1>
         {home.count > 0 && (
-          <p className="text-stone-500">
-            {furnished(home)} in all · prices from IKEA.ca, check before buying
-          </p>
+          <>
+            <p className="text-stone-500">
+              {furnished(home)} in all
+              {budget !== undefined && ` of a ${formatPrice(budget)} budget`} · prices from IKEA.ca,
+              check before buying
+            </p>
+            {budget !== undefined && home.priceCad > budget && (
+              <p className="text-amber-700">{formatPrice(home.priceCad - budget)} over budget.</p>
+            )}
+            <p className="text-xs text-stone-500">Layout score {score.toFixed(2)}</p>
+          </>
         )}
       </header>
 
@@ -76,6 +93,7 @@ function HomeTab(props: Props) {
   const { plan, roomId, onRoom } = props;
   const products = useProducts((s) => s.byArticle);
   const { byRoom } = furnitureTotals(plan.furniture, products);
+  const problems = problemsByRoom(useLayoutProblems(plan).all, plan.furniture);
   const total = plan.rooms.reduce((sum, room) => sum + area(room.boundary), 0);
   const item = (selected: boolean) =>
     `w-full px-3 py-2 text-left ${selected ? 'bg-stone-100' : 'hover:bg-stone-50'}`;
@@ -101,6 +119,12 @@ function HomeTab(props: Props) {
               <span className="block text-xs text-stone-500">
                 {ROOM_TYPES[room.roomType]} · {squareMeters(area(room.boundary))}
                 {byRoom.has(room.id) && ` · ${furnished(byRoom.get(room.id)!)}`}
+                {problems.has(room.id) && (
+                  <span className="text-red-700">
+                    {' '}
+                    · {problems.get(room.id)} problem{problems.get(room.id) === 1 ? '' : 's'}
+                  </span>
+                )}
               </span>
             </button>
           </li>
