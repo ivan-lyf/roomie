@@ -3,6 +3,7 @@ export * from './room';
 export * from './score';
 export * from './shapes';
 export * from './snap';
+export * from './solve';
 export * from './style';
 export * from './validate';
 export * from './zones';

@@ -157,6 +157,8 @@ export function validateLayout(
   plan: LayoutPlan,
   furniture: readonly Placement[],
   products: ReadonlyMap<string, ProductFit>,
+  /** `paths: false` skips the walkways, the slowest check, for a search to run first. */
+  options: { paths?: boolean } = {},
 ): LayoutProblem[] {
   const fx = fixed(plan);
   const { floors, walls, obstacles, doors } = fx;
@@ -240,7 +242,7 @@ export function validateLayout(
     if (problem) problems.push(problem);
   }
 
-  for (const room of plan.rooms) {
+  for (const room of options.paths === false ? [] : plan.rooms) {
     const inRoom = items.filter((i) => i.placement.roomId === room.id);
     if (!inRoom.some((i) => i.product.category !== 'rug')) continue;
     problems.push(...pathProblems(plan, room, fx, inRoom, items, obstacles));
