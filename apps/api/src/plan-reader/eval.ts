@@ -317,7 +317,7 @@ export async function evalPlan(
 }
 
 /** A floorplan to hold a reading of a plan that only has a truth.json. */
-function emptyPlan(name: string): Floorplan {
+export function emptyPlan(name: string): Floorplan {
   return {
     id: '00000000-0000-4000-8000-000000000000',
     name,
