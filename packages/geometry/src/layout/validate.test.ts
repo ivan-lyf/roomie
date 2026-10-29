@@ -2,6 +2,7 @@ import { type Category, Floorplan, type Placement } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import type { ProductFit } from './shapes';
+import { sampledArea } from './shapes';
 import { validateLayout } from './validate';
 
 const plan = Floorplan.parse(demo);
@@ -262,3 +263,13 @@ function square(x: number, y: number, size: number) {
     { x: x - h, y: y + h },
   ];
 }
+
+describe('sampledArea', () => {
+  it('comes within a few percent of the area where a test holds', () => {
+    const rect = square(1, 1, 2);
+    expect(sampledArea(rect, () => true)).toBeCloseTo(4);
+    // The quarter of the square right of x = 1.5.
+    expect(sampledArea(rect, (p) => p.x > 1.5)).toBeCloseTo(1, 1);
+    expect(sampledArea(rect, () => false)).toBe(0);
+  });
+});

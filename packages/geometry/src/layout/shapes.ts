@@ -1,6 +1,6 @@
 import type { Placement, Product, Vec2 } from '@roomie/schema';
 import polygonClipping, { type Geom, type MultiPolygon } from 'polygon-clipping';
-import { area, bounds } from '../plan/polygon';
+import { area, bounds, contains } from '../plan/polygon';
 import { localToPlan } from '../transform';
 
 // Shapes on the floor, in plan space: what an item covers, and how two shapes meet. Items and
@@ -147,11 +147,44 @@ export function overlaps(a: Shape, b: Shape, tolerance: number): boolean {
     return false;
   }
   if (a.convex && b.convex) return penetration(a.points, b.points) > tolerance;
-  const shared = polygonClipping.intersection(toGeom(a.points), toGeom(b.points));
-  return multiArea(shared) > tolerance * tolerance;
+  let shared: number;
+  try {
+    shared = multiArea(polygonClipping.intersection(toGeom(a.points), toGeom(b.points)));
+  } catch {
+    shared = sampledArea(a.points, (p) => contains(b.points, p));
+  }
+  return shared > tolerance * tolerance;
 }
 
 /** The area of `inner` outside `outer`. */
 export function areaOutside(inner: readonly Vec2[], outer: readonly Vec2[]): number {
-  return multiArea(polygonClipping.difference(toGeom(inner), toGeom(outer)));
+  try {
+    return multiArea(polygonClipping.difference(toGeom(inner), toGeom(outer)));
+  } catch {
+    return sampledArea(inner, (p) => !contains(outer, p));
+  }
+}
+
+/** Points per side of the grid `sampledArea` measures with. */
+const SAMPLES = 12;
+
+/**
+ * Roughly the area of the part of a polygon where `test` holds, from a grid of points over it:
+ * for the rare shapes polygon clipping can't handle (it throws on some near-degenerate rings).
+ */
+export function sampledArea(polygon: readonly Vec2[], test: (p: Vec2) => boolean): number {
+  const { min, max } = bounds(polygon);
+  let [inside, hit] = [0, 0];
+  for (let i = 0; i < SAMPLES; i++) {
+    for (let j = 0; j < SAMPLES; j++) {
+      const p = {
+        x: min.x + ((i + 0.5) / SAMPLES) * (max.x - min.x),
+        y: min.y + ((j + 0.5) / SAMPLES) * (max.y - min.y),
+      };
+      if (!contains(polygon, p)) continue;
+      inside++;
+      if (test(p)) hit++;
+    }
+  }
+  return inside === 0 ? 0 : (hit / inside) * area(polygon);
 }
