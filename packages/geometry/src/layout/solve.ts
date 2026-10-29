@@ -261,6 +261,37 @@ function lookTargets(
   });
 }
 
+/**
+ * The item another one hangs off, if it has one: what it's beside, in front of, around or
+ * under. Such an item only goes next to its anchor, never just anywhere.
+ */
+function anchorOf(ref: string, relations: readonly Relation[]): string | undefined {
+  for (const r of relations) {
+    if ((r.kind === 'beside' || r.kind === 'in_front_of') && r.item === ref) return r.target;
+    if (r.kind === 'around' && r.items.includes(ref)) return r.target;
+    if (r.kind === 'under' && r.item === ref) return r.targets[0];
+  }
+  return undefined;
+}
+
+/** Spots near ones next to an anchor, a little along and across, in case those are taken. */
+function withLeeway(spots: readonly Spot[]): Spot[] {
+  const out: Spot[] = [];
+  for (const spot of spots) {
+    const [f, l] = [frontOf(spot.rotation), leftOf(spot.rotation)];
+    for (const across of [0, -0.05, 0.05, -0.1, 0.1, -0.2, 0.2]) {
+      for (const along of [0, -0.1, 0.1]) {
+        out.push({
+          x: spot.x + l.x * across + f.x * along,
+          y: spot.y + l.y * across + f.y * along,
+          rotation: spot.rotation,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 /** Items that hang off another: placed relative to it, so they move with it. */
 function dependents(ref: string, relations: readonly Relation[]): string[] {
   return relations.flatMap((r) => {
@@ -296,12 +327,25 @@ export function solveRoom(
   }
   const rng = seeded(options.seed);
   const relations = intent.relations;
-  const items: Item[] = intent.items
+  const byCategory: Item[] = intent.items
     .flatMap((i) => {
       const product = products.get(i.articleNo);
       return product ? [{ ref: i.ref, articleNo: i.articleNo, product }] : [];
     })
     .sort((a, b) => ORDER.indexOf(a.product.category) - ORDER.indexOf(b.product.category));
+  // Each item's dependents go in straight after it, before other items can take their spots.
+  const items: Item[] = [];
+  const emit = (item: Item) => {
+    if (items.includes(item)) return;
+    items.push(item);
+    for (const d of byCategory) if (anchorOf(d.ref, relations) === item.ref) emit(d);
+  };
+  for (const item of byCategory) {
+    const anchor = anchorOf(item.ref, relations);
+    if (anchor === undefined || !byCategory.some((i) => i.ref === anchor)) emit(item);
+  }
+  // Anything left in a loop of anchors goes in last.
+  for (const item of byCategory) emit(item);
   const unplaced: RoomSolution['unplaced'] = intent.items
     .filter((i) => !products.has(i.articleNo))
     .map((i) => ({ ref: i.ref, reason: `Product ${i.articleNo} isn't in the catalog.` }));
@@ -331,15 +375,20 @@ export function solveRoom(
     scoreRoom(ctx, pieces, { relations, walkway }).score;
 
   for (const item of items) {
-    const spots: Spot[] = [
-      ...relativeSpots(item, relations, placed),
-      ...(AGAINST_WALL.has(item.product.category)
-        ? wallSpots(item, ctx, item.product.category === 'bed' && item.product.dims.w < 1.4)
-        : []),
-      ...(FREE_STANDING.has(item.product.category) || !AGAINST_WALL.has(item.product.category)
-        ? floorSpots(ctx, lookTargets(item, relations, placed, ctx))
-        : []),
-    ];
+    // An item that hangs off one already placed goes next to it or not at all.
+    const anchor = anchorOf(item.ref, relations);
+    const anchored = anchor !== undefined && placed.has(anchor);
+    const spots: Spot[] = anchored
+      ? withLeeway(relativeSpots(item, relations, placed))
+      : [
+          ...relativeSpots(item, relations, placed),
+          ...(AGAINST_WALL.has(item.product.category)
+            ? wallSpots(item, ctx, item.product.category === 'bed' && item.product.dims.w < 1.4)
+            : []),
+          ...(FREE_STANDING.has(item.product.category) || !AGAINST_WALL.has(item.product.category)
+            ? floorSpots(ctx, lookTargets(item, relations, placed, ctx))
+            : []),
+        ];
     const others = [...placed.values()];
     const ranked: { spot: Spot; score: number }[] = spots
       .map((spot) => ({
@@ -378,11 +427,20 @@ export function solveRoom(
     }
     const noun = ITEM_NOUNS[item.product.category];
     const size = `${item.product.dims.w.toFixed(2)} × ${item.product.dims.d.toFixed(2)} m`;
+    if (anchored) {
+      const by = ITEM_NOUNS[placed.get(anchor!)!.product.category];
+      unplaced.push({
+        ref: item.ref,
+        reason: `There's no room for the ${size} ${noun} by the ${by} in the ${ctx.room.name}.`,
+      });
+      continue;
+    }
     unplaced.push({
       ref: item.ref,
       reason: fitsAlone
         ? `The ${size} ${noun} has no spot left in the ${ctx.room.name} once the rest is in.`
-        : `The ${size} ${noun} doesn't fit anywhere in the ${ctx.room.name} with the space it needs.`,
+        : `The ${size} ${noun} doesn't fit anywhere in the ${ctx.room.name} ` +
+          'with the space it needs.',
     });
   }
 
@@ -397,10 +455,14 @@ export function solveRoom(
     const others = new Map([...placed].filter(([r]) => r !== ref));
     let to: Spot;
     if (rng() < 0.5) {
-      const spots = [
-        ...relativeSpots(item, relations, others),
-        ...(AGAINST_WALL.has(item.product.category) ? wallSpots(item, ctx, false) : []),
-      ];
+      const anchor = anchorOf(ref, relations);
+      const spots =
+        anchor !== undefined && others.has(anchor)
+          ? withLeeway(relativeSpots(item, relations, others))
+          : [
+              ...relativeSpots(item, relations, others),
+              ...(AGAINST_WALL.has(item.product.category) ? wallSpots(item, ctx, false) : []),
+            ];
       if (spots.length === 0) continue;
       to = spots[Math.floor(rng() * spots.length)]!;
     } else {

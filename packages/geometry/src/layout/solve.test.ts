@@ -5,6 +5,8 @@ import demoIntent from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import studioIntent from '../../../../fixtures/plans/01-demo-studio-metric/intent.json';
 import studio from '../../../../fixtures/plans/01-demo-studio-metric/floorplan.json';
+import { roomContext } from './room';
+import { relationScore } from './score';
 import { solveRoom } from './solve';
 import { validateLayout } from './validate';
 
@@ -80,4 +82,34 @@ describe('solveRoom', () => {
     expect(second.unplaced).toEqual([]);
     expect(validateLayout(open, [...others, ...second.placements], products)).toEqual([]);
   });
+
+  it.each([
+    ['the demo one-bedroom', demo, demoIntent],
+    ['the L-shaped studio', studio, studioIntent],
+  ])(
+    'keeps items next to what they hang off in %s, or leaves them out',
+    (_, planJson, intentJson) => {
+      const plan = Floorplan.parse(planJson);
+      for (const room of LayoutIntent.parse(intentJson).rooms) {
+        const ctx = roomContext(plan, room.roomId)!;
+        for (let seed = 1; seed <= 6; seed++) {
+          const solved = solveRoom(plan, room, products, { seed, steps: 60 });
+          const pieces = new Map(
+            solved.placements.map((p) => [
+              p.id,
+              { ref: p.id, placement: p, product: products.get(p.articleNo)! },
+            ]),
+          );
+          for (const r of room.relations) {
+            if (r.kind !== 'beside' && r.kind !== 'in_front_of') continue;
+            if (!pieces.has(r.item)) continue;
+            expect(
+              relationScore(r, pieces, ctx),
+              `${r.kind} ${r.item}, seed ${seed}`,
+            ).toBeGreaterThan(0.5);
+          }
+        }
+      }
+    },
+  );
 });
