@@ -28,6 +28,8 @@ const CATALOG = {
   table: item('dining_table', 1.2, 0.8),
   roundTable: item('dining_table', 1.0, 1.0, 'round'),
   chair: item('dining_chair', 0.45, 0.5),
+  shelf: item('shelving', 2.74, 0.2),
+  shortShelf: item('shelving', 1.7, 0.2),
 } satisfies Record<string, ProductFit>;
 type Name = keyof typeof CATALOG;
 const names = Object.keys(CATALOG) as Name[];
@@ -207,6 +209,46 @@ describe('validateLayout', () => {
       // A round table needs space all round: not against the north wall.
       expect(codes([put('t', 'roundTable', 'r2', 6, 2.5)])).toEqual([]);
       expect(codes([put('t', 'roundTable', 'r2', 6, 1.1)])).toEqual(['no_clearance']);
+    });
+  });
+
+  describe('blocks_path', () => {
+    it('flags an item no 75 cm path comes to', () => {
+      // A long shelf from the east wall across the bedroom, below the bed, 60 cm short of the
+      // west wall: the door's side can't get round it to the bed.
+      const shelf = put('shelf', 'shelf', 'r1', 2.57, 2.85);
+      const [problem] = validate([put('bed', 'queenBed', 'r1', 2.3, 1.65), shelf]);
+      expect(problem).toMatchObject({ code: 'blocks_path', ids: ['bed'], roomId: 'r1' });
+      expect(problem!.message).toBe("There's no 75 cm path to the bed.");
+    });
+
+    it('leaves alone a room too tight to walk through even empty', () => {
+      // The bedroom walled down to 58 cm across: no path from its door, with or without a TV
+      // unit (whose own clearance still fails).
+      const P = (x: number, y: number) => ({ x, y });
+      const wall = { id: 'w99', a: P(3.3, 0.5), b: P(3.3, 4), thickness: 0.12 };
+      const corners = [P(3.3, 0.5), P(4, 0.5), P(4, 4), P(3.3, 4)];
+      const narrow = {
+        ...plan,
+        walls: [...plan.walls, wall],
+        rooms: plan.rooms.map((r) => (r.id === 'r1' ? { ...r, boundary: corners } : r)),
+      };
+      expect(codes([put('tv', 'tvUnit', 'r1', 3.56, 2, Q)], narrow)).toEqual(['no_clearance']);
+    });
+
+    it('flags a door cut off from the rest of the room', () => {
+      // The sofa above the bedroom door and a shelf beside it, down to the open side: the
+      // door's clear zone is boxed in, 69 cm wide.
+      const sofa = put('sofa', 'sofa', 'r2', 4.51, 1.8, Q);
+      const shelf = put('shelf', 'shortShelf', 'r2', 4.85, 3.75, Q);
+      expect(validate([sofa, shelf])).toEqual([
+        {
+          code: 'blocks_path',
+          message: 'The way to the door to the Bedroom is narrower than 75 cm.',
+          ids: ['o2'],
+          roomId: 'r2',
+        },
+      ]);
     });
   });
 });

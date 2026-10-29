@@ -15,7 +15,7 @@ type Props = { plan: Floorplan; problems: Problems };
 
 /**
  * Marks on the floor: the footprint of the item selected or being placed, with the space it
- * needs to be used, and in red every item with a problem and every doorway it blocks.
+ * needs to be used, and in red every item with a problem and every doorway blocked or cut off.
  */
 export function Marks({ plan, problems }: Props) {
   const products = useProducts((s) => s.byArticle);
@@ -24,8 +24,11 @@ export function Marks({ plan, problems }: Props) {
   const selected = useFurnish((s) => s.selected);
   const live = liveFurniture(plan.furniture, armed, preview);
   const doors = useMemo(() => doorZones(plan), [plan]);
+  // Doorways an item stands in, or that furniture cuts off from the rest of the room.
   const blocked = new Set(
-    problems.all.filter((p) => p.code === 'blocks_door').map((p) => p.ids[1]),
+    problems.all.flatMap((p) =>
+      p.code === 'blocks_door' ? [p.ids[1]] : p.code === 'blocks_path' ? p.ids : [],
+    ),
   );
 
   return (

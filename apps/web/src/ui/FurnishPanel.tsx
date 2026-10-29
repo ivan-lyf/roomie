@@ -251,6 +251,11 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
   const item = plan.furniture.find((f) => f.id === selected);
   const product = item && products.get(item.articleNo);
   const total = items.reduce((sum, f) => sum + (products.get(f.articleNo)?.priceCad ?? 0), 0);
+  // Problems with the room's walkways that no one item is to blame for.
+  const ids = new Set(plan.furniture.map((f) => f.id));
+  const roomProblems = problems.all.filter(
+    (p) => p.roomId === room.id && !p.ids.some((id) => ids.has(id)),
+  );
 
   return (
     <section className="space-y-2">
@@ -272,6 +277,11 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
       {items.length === 0 && (
         <p className="text-stone-500">Nothing yet: pick something below to place it.</p>
       )}
+      {roomProblems.map((p, i) => (
+        <p key={i} className="text-red-700">
+          {p.message}
+        </p>
+      ))}
       {items.length > 0 && (
         <ul className="divide-y divide-stone-200 rounded-md border border-stone-200">
           {items.map((f) => {
