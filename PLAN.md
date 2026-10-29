@@ -256,7 +256,7 @@ Out of M3: swapping items (M5), regenerating rooms (M4/M5), walkways and scores 
 **Done when:** 100% of outputs are valid on the test set and ≥ 60% pass your quality bar.
 
 - [x] 100% valid: 16/16 test homes with Haiku 5.5, 4/4 with Opus 5.5 (2026-10-29)
-- [ ] ≥ 60% rated "I'd live with this" on the contact sheets in `data/eval/layouts-*.html`
+- [ ] ≥ 60% rated "I'd live with this" on the contact sheets in `data/eval/layouts-*.html` (to do: Ivan rates them later today, 2026-10-29; not blocking M5)
 
 #### M4 in detail
 
