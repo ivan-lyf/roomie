@@ -157,7 +157,7 @@ function readAnswer(message: Anthropic.Message, size: ImageSize) {
   return { raw: plan, plan: toRawPlan(plan, size) };
 }
 
-const usageOf = (message: Anthropic.Message): ReaderUsage => ({
+export const usageOf = (message: Anthropic.Message): ReaderUsage => ({
   inputTokens:
     message.usage.input_tokens +
     (message.usage.cache_read_input_tokens ?? 0) +
@@ -166,7 +166,7 @@ const usageOf = (message: Anthropic.Message): ReaderUsage => ({
 });
 
 /** The SDK's errors as reader errors: a busy or rate-limited model can be tried again later. */
-function readerError(e: unknown, model: string): ReaderError {
+export function readerError(e: unknown, model: string): ReaderError {
   if (e instanceof ReaderError) return e;
   if (e instanceof Anthropic.APIConnectionTimeoutError) {
     return new ReaderError("Claude didn't answer in time.", 504);

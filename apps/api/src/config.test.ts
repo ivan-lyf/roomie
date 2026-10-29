@@ -20,7 +20,19 @@ describe('loadConfig', () => {
       plansStorage: undefined,
       reader: undefined,
       readers: {},
+      layout: undefined,
     });
+  });
+
+  it('furnishes homes with Claude on the same key, with a model of its own', () => {
+    expect(loadConfig({ CLAUDE_API_KEY: 'c' }).layout).toEqual({
+      apiKey: 'c',
+      model: 'claude-opus-5-5',
+      effort: 'medium',
+    });
+    const set = { CLAUDE_API_KEY: 'c', LAYOUT_MODEL: 'claude-sonnet-5-5', LAYOUT_EFFORT: 'low' };
+    expect(loadConfig(set).layout).toMatchObject({ model: 'claude-sonnet-5-5', effort: 'low' });
+    expect(loadConfig({ GEMINI_API_KEY: 'g' }).layout).toBeUndefined();
   });
 
   it('reads plans with Gemini when there is a key, unless told not to', () => {

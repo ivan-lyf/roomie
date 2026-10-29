@@ -160,7 +160,8 @@ export function candidatesText(candidates: Candidates): string {
         ...products.map(
           (p) =>
             `- ${p.articleNo} | ${shortName(p.name)} | $${p.priceCad.toFixed(2)} | ` +
-            `${cm(p.dims.w)} × ${cm(p.dims.d)} × ${cm(p.dims.h)} cm${p.shape === 'round' ? ' round' : ''}` +
+            `${cm(p.dims.w)} × ${cm(p.dims.d)} × ${cm(p.dims.h)} cm` +
+            `${p.shape === 'round' ? ' round' : ''}` +
             ` | ${p.color ?? '?'} | ${p.material ?? '?'}`,
         ),
       ].join('\n'),

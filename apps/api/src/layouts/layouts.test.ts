@@ -24,7 +24,8 @@ describe('describeHome', () => {
     const text = describeHome(plan, ['r1', 'r2']);
     expect(text).toContain('Room r1: Bedroom (bedroom), 3.34 m east-west × 3.34 m north-south');
     expect(text).toContain(
-      '- east wall, 3.34 m long (measured from its north end): door 0.80 m wide to Living at 2.40 m–3.20 m.',
+      '- east wall, 3.34 m long (measured from its north end): ' +
+        'door 0.80 m wide to Living at 2.40 m–3.20 m.',
     );
     expect(text).toContain('- south side, 4.34 m: no wall, open to Kitchen.');
     expect(text).toContain('Other rooms, left as they are: Kitchen (kitchen)');
@@ -55,7 +56,8 @@ describe('pickCandidates', () => {
     ).toEqual(['900.000.10', '900.000.11']);
     expect(offered.has('dining_table')).toBe(false);
     expect(candidatesText(offered)).toContain(
-      '- 900.000.15 | TEST Three-seat sofa | $899.00 | 220 × 90 × 85 cm | beige | Synthetic fibers',
+      '- 900.000.15 | TEST Three-seat sofa | $899.00 | 220 × 90 × 85 cm | beige | ' +
+        'Synthetic fibers',
     );
   });
 

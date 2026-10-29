@@ -57,7 +57,8 @@ export function describeRoom(plan: Floorplan, room: Room): string {
       const to = other ? `to ${other.name}` : 'out of the home';
       const kind = o.kind === 'passage' ? 'open doorway' : 'door';
       notes.push(
-        `${kind} ${m(o.width)} wide ${to} at ${m(Math.max(0, along[0]!))}–${m(Math.min(face.length, along[1]!))}`,
+        `${kind} ${m(o.width)} wide ${to} at ` +
+          `${m(Math.max(0, along[0]!))}–${m(Math.min(face.length, along[1]!))}`,
       );
     }
     const what = notes.length > 0 ? `: ${notes.join('; ')}` : ', plain';
@@ -86,14 +87,15 @@ export function describeRoom(plan: Floorplan, room: Room): string {
     if (roomAt([room], c)) {
       const b = bounds(o.polygon);
       lines.push(
-        `- A built-in ${o.kind}, ${m(b.max.x - b.min.x)} × ${m(b.max.y - b.min.y)}, near the ${compass({ x: c.x - ctx.center.x, y: c.y - ctx.center.y })} of the room.`,
+        `- A built-in ${o.kind}, ${m(b.max.x - b.min.x)} × ${m(b.max.y - b.min.y)}, near the ` +
+          `${compass({ x: c.x - ctx.center.x, y: c.y - ctx.center.y })} of the room.`,
       );
     }
   }
   return lines.join('\n');
 }
 
-/** The rooms to furnish in detail, and the others in a line each, so the layout of the home is clear. */
+/** The rooms to furnish in detail, and the others in a line, so the home's layout is clear. */
 export function describeHome(plan: Floorplan, roomIds: readonly string[]): string {
   const furnish = plan.rooms.filter((r) => roomIds.includes(r.id) && furnishable(r));
   const others = plan.rooms.filter((r) => !furnish.includes(r));
@@ -104,7 +106,8 @@ export function describeHome(plan: Floorplan, roomIds: readonly string[]): strin
   ];
   if (others.length > 0) {
     parts.push(
-      `Other rooms, left as they are: ${others.map((r) => `${r.name} (${r.roomType})`).join(', ')}.`,
+      `Other rooms, left as they are: ` +
+        `${others.map((r) => `${r.name} (${r.roomType})`).join(', ')}.`,
     );
   }
   return parts.join('\n\n');

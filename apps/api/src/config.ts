@@ -14,6 +14,9 @@ export const DEFAULT_GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash'];
 /** The Claude model that reads plans when CLAUDE_MODEL doesn't name one. */
 export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5';
 
+/** The Claude model that furnishes homes when LAYOUT_MODEL doesn't name one. */
+export const DEFAULT_LAYOUT_MODEL = 'claude-opus-5-5';
+
 /** Treat empty values in .env as unset. */
 const unsetIfEmpty = <T extends z.ZodType>(schema: T) =>
   z.preprocess((v) => (v === '' ? undefined : v), schema);
@@ -45,6 +48,9 @@ const Env = z.object({
   ANTHROPIC_API_KEY: optional(),
   CLAUDE_MODEL: unsetIfEmpty(z.string().default(DEFAULT_CLAUDE_MODEL)),
   CLAUDE_EFFORT: unsetIfEmpty(z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium')),
+  /** The Claude model that furnishes homes (PLAN.md M4), on the same key. */
+  LAYOUT_MODEL: unsetIfEmpty(z.string().default(DEFAULT_LAYOUT_MODEL)),
+  LAYOUT_EFFORT: unsetIfEmpty(z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium')),
 });
 
 export type GeminiReaderConfig = { provider: 'gemini'; apiKey: string; models: string[] };
@@ -56,6 +62,8 @@ export type ClaudeReaderConfig = {
 };
 /** Which vision model reads plans, and how to reach it. */
 export type ReaderConfig = GeminiReaderConfig | ClaudeReaderConfig;
+/** The model that furnishes homes. */
+export type LayoutConfig = Omit<ClaudeReaderConfig, 'provider'>;
 
 export type Config = {
   port: number;
@@ -69,6 +77,8 @@ export type Config = {
   reader: ReaderConfig | undefined;
   /** Every reader there's a key for, for `plans:eval --provider`. */
   readers: { gemini?: GeminiReaderConfig; claude?: ClaudeReaderConfig };
+  /** Without a Claude key, homes are furnished by hand. */
+  layout: LayoutConfig | undefined;
 };
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
@@ -90,6 +100,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       ...(gemini && { gemini }),
       ...(claude && { claude }),
     },
+    layout: claude && { apiKey: claude.apiKey, model: e.LAYOUT_MODEL, effort: e.LAYOUT_EFFORT },
   };
 }
 
