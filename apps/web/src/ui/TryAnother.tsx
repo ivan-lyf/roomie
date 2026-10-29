@@ -7,12 +7,15 @@ import {
 } from '@roomie/schema';
 import { useState } from 'react';
 import { startRoomAgain } from '../api';
+import { supabase } from '../auth';
 import { CATEGORIES, STYLES } from '../format';
 import { roomBudget } from '../furnishing';
 import { runFurnishing } from '../generation';
+import { useAccount } from '../stores/account';
 import { useFurnish } from '../stores/furnish';
 import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
+import { SignIn } from './SignIn';
 
 type Props = { plan: Floorplan; room: Room };
 
@@ -29,6 +32,9 @@ export function TryAnother({ plan, room }: Props) {
   const planned = useIntents((s) => s.furnishing);
   const busy = useFurnish((s) => s.busy);
   const [asking, setAsking] = useState<Asking>();
+  // New pieces need sign-in (PLAN.md M6); a rearrange doesn't.
+  const signedOut = useAccount((s) => supabase !== undefined && s.email === null);
+  const [signingIn, setSigningIn] = useState(false);
   const items = plan.furniture.filter((f) => f.roomId === room.id);
   // The last furnishing started, if it was of this room.
   const furnishing = useFurnish((s) =>
@@ -45,6 +51,7 @@ export function TryAnother({ plan, room }: Props) {
 
   const rearrange = () => again(() => startRoomAgain(plan.id, room.id, { mode: 'rearrange' }));
   const choose = () => {
+    if (signedOut) return setSigningIn(true);
     const kinds = new Set(items.flatMap((f) => products.get(f.articleNo)?.category ?? []));
     setAsking({
       budget: String(roomBudget(planned, plan.furniture, products, room.id)),
@@ -85,6 +92,7 @@ export function TryAnother({ plan, room }: Props) {
         </button>
       </div>
 
+      {signingIn && signedOut && <SignIn what="choose new pieces for this room" />}
       {asking && (
         <fieldset className="space-y-2 rounded-md bg-stone-50 p-2">
           <div className="flex gap-2">

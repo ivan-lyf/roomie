@@ -2,6 +2,7 @@ import type { GenerationJob } from '@roomie/schema';
 import { useEffect } from 'react';
 import { fetchGeneration } from './api';
 import { saveNow } from './autosave';
+import { useAccount } from './stores/account';
 import { useFloorplan } from './stores/floorplan';
 import { useFurnish } from './stores/furnish';
 import { useIntents } from './stores/intents';
@@ -70,6 +71,8 @@ export function useFurnishingProgress() {
           setFurnishing({ roomId, job: next });
           if (next.status === 'running') return;
           setBusy(false);
+          // What it cost, in the account line.
+          void useAccount.getState().refresh();
           if (next.status === 'done') apply(next, roomId);
         })
         .catch((e: unknown) => {

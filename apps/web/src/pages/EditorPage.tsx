@@ -14,6 +14,7 @@ import { ProblemsPanel } from '../ui/editor/ProblemsPanel';
 import { RoomsPanel } from '../ui/editor/RoomsPanel';
 import { ScalePanel } from '../ui/editor/ScalePanel';
 import { TOOLS, Toolbar } from '../ui/editor/Toolbar';
+import { SignIn } from '../ui/SignIn';
 
 const SAVE_LABELS: Record<SaveState, string> = {
   saved: 'Saved',
@@ -178,6 +179,16 @@ export function EditorPage({ id }: { id: string }) {
               id === DEMO_ID ? demoImage : plan.image ? floorplanImageUrl(plan.id) : undefined
             }
           />
+          {reader.read.state === 'signIn' && (
+            <div className="absolute inset-x-4 top-4 flex items-start gap-3 rounded-lg bg-white px-4 py-3 shadow">
+              <div className="flex-1">
+                <SignIn what="read your plan" />
+              </div>
+              <button type="button" onClick={reader.dismiss} className="underline">
+                Trace it by hand
+              </button>
+            </div>
+          )}
           {reader.read.state === 'failed' && (
             <div className="absolute inset-x-4 top-4 flex items-start gap-3 rounded-lg bg-amber-50 px-4 py-3 text-amber-900 shadow">
               <p className="flex-1">

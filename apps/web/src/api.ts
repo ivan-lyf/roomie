@@ -112,35 +112,39 @@ export async function saveFloorplan(plan: Floorplan, signal?: AbortSignal): Prom
 }
 
 /**
- * Has the plan reader read the plan's image (up to a few minutes). A plan already traced is
- * only read again with `replace`, which replaces what was traced.
+ * Has the plan reader read the plan's image (up to a few minutes), signed in. A plan already
+ * traced is only read again with `replace`, which replaces what was traced.
  */
 export async function readFloorplan(id: string, replace = false): Promise<Floorplan> {
   const query = replace ? '?replace=1' : '';
   const res = await fetch(`/api/floorplans/${encodeURIComponent(id)}/read${query}`, {
     method: 'POST',
+    headers: await signedIn(),
   });
   if (!res.ok) throw await failure(res, 'POST /api/floorplans/:id/read');
   return Floorplan.parse(await res.json());
 }
 
-/** Starts furnishing a saved home; answers at once with the generation to poll. */
+/** Starts furnishing a saved home, signed in; answers at once with the generation to poll. */
 export async function startFurnishing(id: string, inputs: GenerationInputs): Promise<string> {
   const res = await fetch(`/api/floorplans/${encodeURIComponent(id)}/layouts`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: await signedIn({ 'content-type': 'application/json' }),
     body: JSON.stringify(inputs),
   });
   if (!res.ok) throw await failure(res, 'POST /api/floorplans/:id/layouts');
   return z.object({ generationId: z.uuid() }).parse(await res.json()).generationId;
 }
 
-/** Starts furnishing one room again, the rest kept; answers with the generation to poll. */
+/**
+ * Starts furnishing one room again, the rest kept: new pieces need sign-in, a rearrange doesn't.
+ * Answers with the generation to poll.
+ */
 export async function startRoomAgain(id: string, roomId: string, again: RoomAgain) {
   const url = `/api/floorplans/${encodeURIComponent(id)}/rooms/${encodeURIComponent(roomId)}/layouts`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: await signedIn({ 'content-type': 'application/json' }),
     body: JSON.stringify(again),
   });
   if (!res.ok) throw await failure(res, 'POST /api/floorplans/:id/rooms/:roomId/layouts');

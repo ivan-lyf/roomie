@@ -10,8 +10,11 @@ import { useState } from 'react';
 import { startFurnishing } from '../api';
 import { CATEGORIES, STYLES } from '../format';
 import { BUDGET_PER_ROOM } from '../furnishing';
+import { supabase } from '../auth';
 import { runFurnishing } from '../generation';
+import { useAccount } from '../stores/account';
 import { useFurnish } from '../stores/furnish';
+import { SignIn } from './SignIn';
 
 const STATUS: Record<GenerationJob['rooms'][number]['status'], string> = {
   waiting: 'waiting',
@@ -44,6 +47,8 @@ export function AutoFurnish({ plan, saved }: Props) {
   const job = furnishing?.job;
   const error = invalid ?? furnishing?.error;
   const running = job?.status === 'running';
+  // Signed out, the button is a sign-in instead (PLAN.md M6).
+  const signedOut = useAccount((s) => supabase !== undefined && s.email === null);
 
   if (rooms.length === 0) return null;
   if (!saved) {
@@ -132,14 +137,17 @@ export function AutoFurnish({ plan, saved }: Props) {
             </select>
           </label>
         </div>
-        <button
-          type="button"
-          onClick={furnish}
-          className="w-full rounded-md bg-stone-800 px-3 py-1.5 text-white disabled:opacity-50"
-        >
-          {running ? 'Furnishing…' : 'Furnish my home'}
-        </button>
+        {!signedOut && (
+          <button
+            type="button"
+            onClick={furnish}
+            className="w-full rounded-md bg-stone-800 px-3 py-1.5 text-white disabled:opacity-50"
+          >
+            {running ? 'Furnishing…' : 'Furnish my home'}
+          </button>
+        )}
       </fieldset>
+      {signedOut && <SignIn what="furnish your home" />}
 
       {error && <p className="text-red-700">{error}</p>}
       {job && (
