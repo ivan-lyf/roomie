@@ -107,4 +107,19 @@ describe('generateHome', () => {
       'The TEST Floor lamp was left out to stay within budget.',
     ]);
   });
+
+  it('lets the server answer other requests while it solves', async () => {
+    const { writer } = fakeWriter(intent);
+    let [turns, done] = [0, false];
+    const other = () => {
+      if (done) return;
+      turns++;
+      setImmediate(other);
+    };
+    setImmediate(other);
+    await generateHome(plan, inputs, { writer, catalog: products, seeds: 3 });
+    done = true;
+    // Two rooms, three tries each: a turn before every try.
+    expect(turns).toBeGreaterThanOrEqual(6);
+  });
 });

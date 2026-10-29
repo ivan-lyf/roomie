@@ -77,6 +77,9 @@ export type GenerateDeps = {
   signal?: AbortSignal;
 };
 
+/** Lets other work on the server run before going on. */
+const pause = () => new Promise<void>((resolve) => setImmediate(resolve));
+
 const addUsage = (a: ReaderUsage, b: ReaderUsage): ReaderUsage => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
@@ -118,11 +121,12 @@ export async function generateHome(
     const others: Placement[] = [];
     for (const roomId of inputs.roomIds) {
       const intent = result.intent.rooms.find((r) => r.roomId === roomId);
-      const runs = intent
-        ? Array.from({ length: seeds }, (_, i) =>
-            solveRoom(plan, intent, products, { seed: i + 1, others }),
-          )
-        : [];
+      const runs: RoomSolution[] = [];
+      for (let i = 0; intent && i < seeds; i++) {
+        // Solving takes a moment per try: let the server answer other requests in between.
+        await pause();
+        runs.push(solveRoom(plan, intent, products, { seed: i + 1, others }));
+      }
       solved.set(roomId, runs);
       const best = runs.toSorted(better)[0];
       if (best) others.push(...best.placements.map((p) => ({ ...p, id: `${roomId}:${p.id}` })));
