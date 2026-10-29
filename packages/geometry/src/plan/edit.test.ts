@@ -109,4 +109,10 @@ describe('rescalePlan', () => {
     expect(room(scaled, 'r1').boundary[2]).toEqual({ x: 8, y: 8 });
     expect(scaled.obstacles[0]!.height).toBe(0.9);
   });
+
+  it('moves furniture with the plan, at its own size and turn', () => {
+    const sofa = { id: 'f1', articleNo: '123.456.78', roomId: 'r1', x: 2, y: 3, rotation: 1 };
+    const scaled = rescalePlan({ ...plan, furniture: [sofa] }, 2);
+    expect(scaled.furniture).toEqual([{ ...sofa, x: 4, y: 6 }]);
+  });
 });

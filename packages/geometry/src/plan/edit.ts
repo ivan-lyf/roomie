@@ -154,9 +154,13 @@ export function centeredOffset(wall: Wall, along: number, width: number): number
 
 /**
  * Scales every position and length on the plan by `factor`, for a new scale: plan space is the
- * image's pixels times meters per pixel, so a new scale stretches it all. Heights stay.
+ * image's pixels times meters per pixel, so a new scale stretches it all. Heights stay, and so
+ * does furniture's size.
  */
-export function rescalePlan<P extends PlanShapes>(plan: P, factor: number): P {
+export function rescalePlan<P extends PlanShapes & Partial<Pick<Floorplan, 'furniture'>>>(
+  plan: P,
+  factor: number,
+): P {
   const at = (p: Vec2) => ({ x: p.x * factor, y: p.y * factor });
   return {
     ...plan,
@@ -173,5 +177,7 @@ export function rescalePlan<P extends PlanShapes>(plan: P, factor: number): P {
     })),
     rooms: plan.rooms.map((r) => ({ ...r, boundary: r.boundary.map(at) })),
     obstacles: plan.obstacles.map((o) => ({ ...o, polygon: o.polygon.map(at) })),
+    // Furniture keeps its size: only where it stands moves.
+    ...(plan.furniture && { furniture: plan.furniture.map((f) => ({ ...f, ...at(f) })) }),
   };
 }

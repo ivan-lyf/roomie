@@ -24,6 +24,7 @@ import type {
 } from '@roomie/schema';
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   index,
   integer,
   jsonb,
@@ -59,6 +60,9 @@ export const floorplans = pgTable('floorplans', {
   ceilingHeightSource: text('ceiling_height_source').$type<CeilingHeightSource>().notNull(),
   materials: jsonb('materials').$type<Materials>().notNull(),
   reading: jsonb('reading').$type<PlanReading>(),
+  furniture: jsonb('furniture').$type<Placement[]>().notNull().default(sql`'[]'::jsonb`),
+  /** The generated layout the furniture was copied from, if any. */
+  furnishedFrom: uuid('furnished_from').references((): AnyPgColumn => layouts.id),
   editSeconds: integer('edit_seconds').notNull().default(0),
   createdAt: createdAt(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

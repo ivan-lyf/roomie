@@ -50,6 +50,13 @@
       "when": 1792641496109,
       "tag": "0006_floorplans",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793243312949,
+      "tag": "0007_floorplan_furniture",
+      "breakpoints": true
     }
   ]
 }

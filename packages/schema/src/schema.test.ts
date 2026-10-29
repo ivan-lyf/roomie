@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Layout, Opening, PlanReading, Product } from './index';
+import demo from '../../../fixtures/plans/00-demo-1br/floorplan.json';
+import { Floorplan, Layout, Opening, PlanReading, Product } from './index';
 
 describe('Product', () => {
   const sofa = {
@@ -59,7 +60,7 @@ describe('Layout', () => {
       floorplanId: '00000000-0000-4000-8000-000000000002',
       generationId: '00000000-0000-4000-8000-000000000003',
       inputs: { roomIds: ['r1'], budgetCad: 2000, style: 'modern', mustHaves: { r1: ['bed'] } },
-      placements: [{ articleNo: '123.456.78', roomId: 'r1', x: 1, y: 2, rotation: 0 }],
+      placements: [{ id: 'f1', articleNo: '123.456.78', roomId: 'r1', x: 1, y: 2, rotation: 0 }],
       score: 1.2,
       scoreBreakdown: {},
       llmIntent: null,
@@ -91,5 +92,14 @@ describe('PlanReading', () => {
     });
     expect(reading.scaleCandidates).toEqual([]);
     expect(reading.draft.openings[0]).not.toHaveProperty('height');
+  });
+});
+
+describe('Floorplan', () => {
+  it('reads a plan saved before it had furniture as an empty home', () => {
+    const older: Record<string, unknown> = { ...demo };
+    delete older.furniture;
+    delete older.furnishedFrom;
+    expect(Floorplan.parse(older)).toMatchObject({ furniture: [], furnishedFrom: null });
   });
 });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Meters, PositiveMeters, Vec2 } from './geometry';
+import { Placement } from './layout';
 
 // Plan space is meters, with the origin at the top-left of the source image and x/y along its
 // axes: a pixel times `Scale.metersPerPixel` is a point in plan space (see CLAUDE.md).
@@ -290,6 +291,12 @@ export const Floorplan = z.object({
   /** The whole home's materials; rooms can override them. */
   materials: Materials,
   reading: PlanReading.nullable(),
+  /**
+   * The furniture in the home now, as the user left it. Generated layouts stay as they were
+   * logged; a chosen one is copied here, and `furnishedFrom` says which.
+   */
+  furniture: z.array(Placement).default([]),
+  furnishedFrom: z.uuid().nullable().default(null),
   /** Time spent correcting the plan in the editor, to check PLAN.md's correction targets. */
   editSeconds: z.number().int().nonnegative(),
   createdAt: z.coerce.date(),
@@ -309,12 +316,13 @@ export type FloorplanSummary = z.infer<typeof FloorplanSummary>;
 
 /**
  * What a save can change: everything but the identity, the uploaded image, what the reader
- * returned, and the timestamps, which the server keeps.
+ * returned, the layout the furniture came from, and the timestamps, which the server keeps.
  */
 export const FloorplanEdit = Floorplan.omit({
   id: true,
   image: true,
   reading: true,
+  furnishedFrom: true,
   createdAt: true,
   updatedAt: true,
 });

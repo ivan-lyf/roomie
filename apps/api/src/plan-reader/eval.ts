@@ -337,6 +337,8 @@ function emptyPlan(name: string): Floorplan {
       light: { warmthK: 3000, intensity: 0.7 },
     },
     reading: null,
+    furniture: [],
+    furnishedFrom: null,
     editSeconds: 0,
     createdAt: new Date(0),
     updatedAt: new Date(0),

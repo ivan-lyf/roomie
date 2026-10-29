@@ -100,7 +100,14 @@ describe('floorplans', () => {
 
   it('saves edits but keeps the id, image and timestamps its own', async () => {
     const plan = await uploaded();
-    const edit = { ...Floorplan.parse(demo), id: 'ignored', image: null };
+    const sofa = { id: 'f1', articleNo: '123.456.78', roomId: 'r1', x: 2, y: 3, rotation: 0 };
+    const edit = {
+      ...Floorplan.parse(demo),
+      id: 'ignored',
+      image: null,
+      furniture: [sofa],
+      furnishedFrom: '00000000-0000-4000-8000-000000000001',
+    };
     const res = await app().request(`/api/floorplans/${plan.id}`, {
       method: 'PUT',
       body: JSON.stringify(edit),
@@ -114,6 +121,8 @@ describe('floorplans', () => {
       status: 'ready',
     });
     expect(saved.rooms).toEqual(edit.rooms);
+    expect(saved.furniture).toEqual([sofa]);
+    expect(saved.furnishedFrom).toBeNull();
     expect(saved.createdAt).toEqual(plan.createdAt);
     expect(saved.updatedAt.getTime()).toBeGreaterThan(plan.updatedAt.getTime());
   });

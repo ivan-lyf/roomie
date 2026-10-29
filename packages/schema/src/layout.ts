@@ -18,7 +18,10 @@ export const GenerationInputs = z.object({
 });
 export type GenerationInputs = z.infer<typeof GenerationInputs>;
 
+/** One item standing in a room: its footprint's center, in plan space, and which way it faces. */
 export const Placement = z.object({
+  /** Unique within the floorplan or layout: two identical chairs are two placements. */
+  id: z.string().min(1),
   articleNo: ArticleNo,
   /** The room the item stands in. */
   roomId: z.string().min(1),

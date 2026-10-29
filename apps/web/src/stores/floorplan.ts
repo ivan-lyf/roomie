@@ -100,6 +100,7 @@ const allIds = (plan: Floorplan) => [
   ...plan.openings.map((o) => o.id),
   ...plan.rooms.map((r) => r.id),
   ...plan.obstacles.map((o) => o.id),
+  ...plan.furniture.map((f) => f.id),
 ];
 
 /** "Bedroom", then "Bedroom 2" and so on. */
