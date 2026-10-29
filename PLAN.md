@@ -37,7 +37,7 @@ Measured against a fixed test set of 10–15 real floor plans (e.g. Vancouver re
 - Wall color, floor material, and lighting controls
 - Click an item to open its link, delete it, or swap it
 - Internal pairwise rating page and layout logging
-- Sign in to save rooms and layouts and reopen them later (M6)
+- Sign in before any step that calls an LLM (reading a plan, furnishing), so token use is limited per account (M6)
 
 **Out of scope**
 - Multi-storey homes (one floor per plan)
@@ -259,16 +259,18 @@ Out of M3: swapping items (M5), regenerating rooms (M4/M5), walkways and scores 
 - [ ] Re-validate and re-score after every edit (the edited room, plus the whole-home checks)
 - [ ] Regenerate a single room while keeping the others
 - [ ] Undo/redo
+- [ ] Shopping list: the home's final items from the current layout, grouped by product with quantities, article numbers, prices, links and the total; flag items discontinued since the last scrape; copy article numbers, export CSV, print
 
 ### M6 — Accounts (1 week)
-- [ ] Sign in with Supabase Auth (Google or an email link), asked for only when saving; everything else works signed out
-- [ ] The API verifies the Supabase session token on account routes
-- [ ] `ownerId` on floorplans and layouts; users only ever see their own homes
-- [ ] Save a home with its current layout, rename it, delete it (a status flag, never a hard delete)
-- [ ] "My homes" page that reopens a saved home exactly as it was left
+Sign-in exists only to limit token use per account.
+- [ ] Sign in with Supabase Auth (Google or an email link), asked for only before a step that calls an LLM: reading a plan, furnishing, trying another layout for a room. Everything else works signed out
+- [ ] The API verifies the Supabase session token on every route that calls an LLM
+- [ ] A `usage` row per LLM call: account, route, model, input and output tokens, cost. Cached readings cost nothing
+- [ ] A daily spending allowance per account, from config. At the limit, LLM routes refuse with a reason code; manual editing keeps working
+- Homes aren't tied to accounts: they autosave as they do today.
 - The browser still talks only to our API, so the tables stay closed to Supabase's public Data API (RLS on, no policies).
 
-**Done when:** you can save a furnished home, sign in on another device, and reopen it unchanged.
+**Done when:** signed out, no step can call an LLM; an account at its allowance is refused until the next day, while editing still works.
 
 ### M7 — Feedback loop (1 week)
 - [ ] Capture canvas screenshots (3 angles per furnished room, plus a top-down view of the home) after generation, upload to Supabase Storage
@@ -291,6 +293,7 @@ Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holod
 ## 8. Future goals (post-MVP)
 
 - **L-shaped, T-shaped and corner furniture.** Corner and chaise sofas (about half of IKEA's sofas), L-shaped desks, KALLAX desk combinations, corner wardrobes and bookcases. They need non-rectangular footprints in `packages/schema` and `packages/geometry`, left- and right-hand variants, and models to match. Revisit once M4 meets the quality bar with rectangular footprints.
+- **One-click IKEA cart.** Add the shopping list to the user's own IKEA.ca cart. IKEA has no public cart API, and its cart needs IKEA's session tokens, so the API never calls it (no credentials, §Scraper in `CLAUDE.md`). Instead, a browser extension or bookmarklet runs on ikea.ca in the user's own session and adds the items there. It breaks when IKEA's site changes, so the shopping list stays the fallback. Check IKEA's terms first.
 
 ## 9. Risks
 
@@ -299,7 +302,7 @@ Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holod
 | Captured GLBs have inconsistent scale, orientation, or size | Normalize everything in M1; procedural fallback so no product is blocked |
 | Layouts are valid but ugly | Scorer and ratings exist for this; iterate on scoring rules more than prompts |
 | Vision extraction fails on some plan styles | The correction editor is the safety net; don't chase full automation |
-| Reading plans costs money (Opus, about $0.09 a plan) | Readings are cached by image, model and prompt; `plans:eval` prices every run; Gemini's free tier is the fallback |
+| Reading plans costs money (Opus, about $0.09 a plan) | Readings are cached by image, model and prompt; `plans:eval` prices every run; Gemini's free tier is the fallback; sign-in and a daily allowance per account (M6) |
 | Room boundaries are ambiguous in open-plan homes | Ask the model for the boundary between labels; the editor makes splitting and merging rooms quick |
 | Wrong scale silently ruins every clearance check | Plausibility checks on units, a stored residual for every scale, and labels always checked against calibration (§5.1) |
 | Listed areas include walls, closets, or balconies | The area calibration UI asks what the figure covers; area plus a side catches the mismatch |
