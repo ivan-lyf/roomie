@@ -55,6 +55,7 @@ describe('whyOf', () => {
           items: [{ ref: 'sofa', articleNo: '123.456.78', why: 'Seats three, facing the TV.' }],
           relations: [],
         },
+        placements: [],
       },
     ],
   };

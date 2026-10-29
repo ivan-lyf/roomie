@@ -3,11 +3,17 @@ import {
   type HomeFurnishing,
   type Layout,
   LoggedIntent,
+  Placement,
   type RoomFurnishing,
 } from '@roomie/schema';
+import { z } from 'zod';
 
-/** A winning layout, as the database holds it: inputs and intent are JSONB, checked here. */
-export type WinnerRow = Pick<Layout, 'id' | 'createdAt'> & { inputs: unknown; llmIntent: unknown };
+/** A winning layout as the database holds it: its JSONB columns are checked here. */
+export type WinnerRow = Pick<Layout, 'id' | 'createdAt'> & {
+  inputs: unknown;
+  llmIntent: unknown;
+  placements: unknown;
+};
 
 /**
  * What each room was last furnished from: going back through the home's winning layouts, newest
@@ -23,7 +29,8 @@ export function furnishingOf(
   for (const row of winners.toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime())) {
     const inputs = GenerationInputs.safeParse(row.inputs);
     const logged = LoggedIntent.safeParse(row.llmIntent);
-    if (!inputs.success || !logged.success) continue;
+    const placements = z.array(Placement).safeParse(row.placements);
+    if (!inputs.success || !logged.success || !placements.success) continue;
     const { intent, mode } = logged.data;
     if (mode === 'home' && furnishing.budgetCad === null) {
       furnishing.budgetCad = inputs.data.budgetCad;
@@ -34,7 +41,12 @@ export function furnishingOf(
       if (!room || found.has(roomId) || !roomIds.has(roomId)) continue;
       found.add(roomId);
       const budgetCad = intent.budget.find((b) => b.roomId === roomId)?.cad;
-      const entry: RoomFurnishing = { roomId, layoutId: row.id, intent: room };
+      const entry: RoomFurnishing = {
+        roomId,
+        layoutId: row.id,
+        intent: room,
+        placements: placements.data.filter((p) => p.roomId === roomId),
+      };
       if (budgetCad !== undefined) entry.budgetCad = budgetCad;
       furnishing.rooms.push(entry);
     }

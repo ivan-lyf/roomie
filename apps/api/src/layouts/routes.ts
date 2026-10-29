@@ -83,6 +83,7 @@ export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
         id: layouts.id,
         inputs: layouts.inputs,
         llmIntent: layouts.llmIntent,
+        placements: layouts.placements,
         createdAt: layouts.createdAt,
       })
       .from(layouts)

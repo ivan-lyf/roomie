@@ -9,6 +9,7 @@ import {
   Layout,
   LayoutIntent,
   type LoggedIntent,
+  type Placement,
   Product,
 } from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -133,7 +134,11 @@ describe('GET /api/floorplans/:id/furnishing', () => {
     usage: { inputTokens: 0, outputTokens: 0 },
     repairs: 0,
   });
-  type Fields = Pick<typeof layouts.$inferInsert, 'inputs' | 'llmIntent' | 'status'>;
+  type Fields = Pick<typeof layouts.$inferInsert, 'inputs' | 'llmIntent' | 'status'> & {
+    placements?: Placement[];
+  };
+  const bed = { id: 'f1', articleNo: '900.000.10', roomId: 'r1', x: 1, y: 1, rotation: 0 };
+  const sofa = { ...bed, id: 'f2', articleNo: '900.000.15', roomId: 'r2', ref: 'sofa' };
   const row = (floorplanId: string, at: string, fields: Fields) => ({
     floorplanId,
     generationId: randomUUID(),
@@ -163,6 +168,7 @@ describe('GET /api/floorplans/:id/furnishing', () => {
           inputs: { ...inputs, roomIds: ['r1'], budgetCad: 900 },
           llmIntent: logged(again, 'new_pieces'),
           status: 'winner',
+          placements: [bed, sofa],
         }),
         // Candidates that didn't win, and a layout logged before modes, newest of all.
         row(plan.id, '2026-10-29T11:00:00Z', {
@@ -183,6 +189,7 @@ describe('GET /api/floorplans/:id/furnishing', () => {
       roomId: 'r1',
       layoutId: room!.id,
       intent: bedroom,
+      placements: [bed],
       budgetCad: 900,
     });
     expect(byRoom.get('r2')).toMatchObject({

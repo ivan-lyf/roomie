@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { StylePreset } from './layout';
+import { Placement, StylePreset } from './layout';
 import { ArticleNo } from './product';
 
 // What the LLM decides when it furnishes a home (PLAN.md M4): which products go in each room and
@@ -98,6 +98,8 @@ export const RoomFurnishing = z.object({
   /** The winning layout that furnished it. */
   layoutId: z.uuid(),
   intent: RoomIntent,
+  /** The room's items as that layout placed them, to score against the room as it is now. */
+  placements: z.array(Placement),
   /** What the intent set aside for the room, in CAD. */
   budgetCad: z.number().nonnegative().optional(),
 });
