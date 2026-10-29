@@ -296,6 +296,15 @@ Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holod
 
 - **L-shaped, T-shaped and corner furniture.** Corner and chaise sofas (about half of IKEA's sofas), L-shaped desks, KALLAX desk combinations, corner wardrobes and bookcases. They need non-rectangular footprints in `packages/schema` and `packages/geometry`, left- and right-hand variants, and models to match. Revisit once M4 meets the quality bar with rectangular footprints.
 - **One-click IKEA cart.** Add the shopping list to the user's own IKEA.ca cart. IKEA has no public cart API, and its cart needs IKEA's session tokens, so the API never calls it (no credentials, §Scraper in `CLAUDE.md`). Instead, a browser extension or bookmarklet runs on ikea.ca in the user's own session and adds the items there. It breaks when IKEA's site changes, so the shopping list stays the fallback. Check IKEA's terms first.
+- **Pricing and payment.** Only after a public launch is cleared: charging money needs IKEA's permission or a licensed product and model source, since today's catalog is for personal and portfolio use. Price per home, not per token or per month, since people furnish a home once and then not for years:
+
+  | Tier | What you get | Price (CAD) |
+  |---|---|---|
+  | Free | 1 home: one plan reading, a few furnishings, unlimited editing and shopping list | $0 |
+  | Home pass | 1 home for 60 days: more furnishings and "try another layout" per room | ~$9–15 one-time |
+  | Pro (later) | Realtors, stagers, property managers: a number of listings a month, clean renders for listings | ~$30–60/month |
+
+  Set the free allowance and the pass price from M6's `usage` costs per home once M4 runs. Payments through **Stripe Checkout**: the API creates a Checkout Session for the account and home, Stripe's hosted page takes the card (card data never reaches our servers), and a signature-verified webhook records the purchase. A `purchases` table (account, home, tier, Stripe ids, status, never deleted) grants the pass, and the M6 allowance check reads it. A pass is per home, so a paid home gets an `ownerId`; homes stay unowned until then (M6). Pro uses Stripe subscriptions and the Customer Portal. Prices and keys come from config; build and test only with Stripe's test-mode keys until launch.
 
 ## 9. Risks
 
