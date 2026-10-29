@@ -7,6 +7,7 @@ import studioIntent from '../../../../fixtures/plans/01-demo-studio-metric/inten
 import studio from '../../../../fixtures/plans/01-demo-studio-metric/floorplan.json';
 import { roomContext } from './room';
 import { relationScore } from './score';
+import { turn } from './snap';
 import { solveRoom } from './solve';
 import { validateLayout } from './validate';
 
@@ -55,6 +56,44 @@ describe('solveRoom', () => {
       reason: 'The 1.60 × 2.10 m bed has no spot left in the Bedroom once the rest is in.',
     });
     expect(validateLayout(plan, solved.placements, products)).toEqual([]);
+  });
+
+  it('moves the pieces it must, to rearrange a room', () => {
+    const plan = Floorplan.parse(demo);
+    const room = LayoutIntent.parse(demoIntent).rooms[0]!;
+    const first = solveRoom(plan, room, products, { seed: 1 });
+    const bed = first.placements.find((p) => p.id === 'bed')!;
+    for (const seed of [1, 2, 3]) {
+      const again = solveRoom(plan, room, products, { seed, avoid: [bed] });
+      const moved = again.placements.find((p) => p.id === 'bed')!;
+      const turned = Math.abs(turn(moved.rotation, -bed.rotation)) > 0.01;
+      expect(turned || Math.hypot(moved.x - bed.x, moved.y - bed.y) >= 0.5).toBe(true);
+      expect(validateLayout(plan, again.placements, products)).toEqual([]);
+    }
+  });
+
+  it('finds every item a spot when it must, even away from the item it goes by', () => {
+    const plan = Floorplan.parse(demo);
+    const nightstand = { articleNo: '900.000.12', why: '' };
+    const room = {
+      roomId: 'r1',
+      items: [
+        { ref: 'bed', articleNo: '900.000.10', why: '' },
+        ...['ns_a', 'ns_b', 'ns_c'].map((ref) => ({ ...nightstand, ref })),
+      ],
+      relations: ['ns_a', 'ns_b', 'ns_c'].map((item) => ({
+        kind: 'beside' as const,
+        item,
+        target: 'bed',
+        side: 'either' as const,
+      })),
+    };
+    // A bed has two sides: the third nightstand has no room by it.
+    const strict = solveRoom(plan, room, products, { seed: 1 });
+    expect(strict.unplaced.map((u) => u.ref)).toEqual(['ns_c']);
+    const all = solveRoom(plan, room, products, { seed: 1, placeAll: true });
+    expect(all.unplaced).toEqual([]);
+    expect(validateLayout(plan, all.placements, products)).toEqual([]);
   });
 
   it("keeps clear of the furniture in a room it's open to", () => {

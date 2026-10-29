@@ -61,6 +61,8 @@ const FLOOR_STEP = 0.3;
 const DRAW = 3;
 /** How much worse than the best a spot can score and still be drawn, roughly. */
 const DRAW_SPREAD = 0.03;
+/** A spot this close to one to avoid, in meters, and facing the same way, counts as that one. */
+const STAY = 0.5;
 
 export type SolveOptions = {
   seed: number;
@@ -71,6 +73,17 @@ export type SolveOptions = {
    * to each other share walkways. Their ids must differ from this room's refs.
    */
   others?: readonly Placement[];
+  /**
+   * Where items stand now, by ref, which they must leave: rearranging a room means its main
+   * pieces move (M5).
+   */
+  avoid?: readonly Pick<Placement, 'id' | 'x' | 'y' | 'rotation'>[];
+  /**
+   * Every item gets a valid spot if there's one anywhere: one that hangs off another goes
+   * elsewhere when there's no room by it, rather than being left out. For items the room
+   * already has, which no repair can swap for smaller ones.
+   */
+  placeAll?: boolean;
 };
 
 export type RoomSolution = {
@@ -265,7 +278,7 @@ function lookTargets(
  * The item another one hangs off, if it has one: what it's beside, in front of, around or
  * under. Such an item only goes next to its anchor, never just anywhere.
  */
-function anchorOf(ref: string, relations: readonly Relation[]): string | undefined {
+export function anchorOf(ref: string, relations: readonly Relation[]): string | undefined {
   for (const r of relations) {
     if ((r.kind === 'beside' || r.kind === 'in_front_of') && r.item === ref) return r.target;
     if (r.kind === 'around' && r.items.includes(ref)) return r.target;
@@ -374,31 +387,35 @@ export function solveRoom(
         );
   const score = (pieces: Piece[], walkway = false) =>
     scoreRoom(ctx, pieces, { relations, walkway }).score;
+  // Spots an item must leave: where it stands now, when the room is being rearranged.
+  const leaves = (ref: string, spot: Spot) =>
+    !(options.avoid ?? []).some(
+      (a) =>
+        a.id === ref &&
+        Math.hypot(a.x - spot.x, a.y - spot.y) < STAY &&
+        Math.abs(turn(spot.rotation, -a.rotation)) < 0.01,
+    );
+  /** Spots anywhere in the room an item could go, not only by an item it hangs off. */
+  const anywhere = (item: Item) => [
+    ...relativeSpots(item, relations, placed),
+    ...(AGAINST_WALL.has(item.product.category)
+      ? wallSpots(item, ctx, item.product.category === 'bed' && item.product.dims.w < 1.4)
+      : []),
+    ...(FREE_STANDING.has(item.product.category) || !AGAINST_WALL.has(item.product.category)
+      ? floorSpots(ctx, lookTargets(item, relations, placed, ctx))
+      : []),
+  ];
 
-  for (const item of items) {
-    // An item that hangs off one already placed goes next to it or not at all.
-    const anchor = anchorOf(item.ref, relations);
-    const anchored = anchor !== undefined && placed.has(anchor);
-    const spots: Spot[] = anchored
-      ? withLeeway(relativeSpots(item, relations, placed))
-      : [
-          ...relativeSpots(item, relations, placed),
-          ...(AGAINST_WALL.has(item.product.category)
-            ? wallSpots(item, ctx, item.product.category === 'bed' && item.product.dims.w < 1.4)
-            : []),
-          ...(FREE_STANDING.has(item.product.category) || !AGAINST_WALL.has(item.product.category)
-            ? floorSpots(ctx, lookTargets(item, relations, placed, ctx))
-            : []),
-        ];
+  /** One of the best few valid spots, drawn the likelier the better, and whether any fit alone. */
+  const pick = (item: Item, spots: Spot[]) => {
     const others = [...placed.values()];
     const ranked: { spot: Spot; score: number }[] = spots
+      .filter((spot) => leaves(item.ref, spot))
       .map((spot) => ({
         spot,
         score: score([...others, { ref: item.ref, placement: spot, product: item.product }]),
       }))
       .sort((a, b) => b.score - a.score);
-
-    // The best few valid spots, then one drawn among them, the better the likelier.
     const current = placements();
     const alone = (spot: Spot) => valid([toPlacement(item, spot)], false);
     let fitsAlone = false;
@@ -409,19 +426,31 @@ export function solveRoom(
       if (valid([...current, toPlacement(item, r.spot)], false)) good.push(r);
       if (good.length >= DRAW * 3) break;
     }
-    let chosen: Spot | undefined;
     while (good.length > 0) {
       const pool = good.slice(0, DRAW);
       const weights = pool.map((g) => Math.exp((g.score - pool[0]!.score) / DRAW_SPREAD));
-      let pick = rng() * weights.reduce((a, b) => a + b, 0);
+      let draw = rng() * weights.reduce((a, b) => a + b, 0);
       let k = 0;
-      while (k < pool.length - 1 && (pick -= weights[k]!) > 0) k++;
+      while (k < pool.length - 1 && (draw -= weights[k]!) > 0) k++;
       const [candidate] = good.splice(k, 1);
       if (valid([...current, toPlacement(item, candidate!.spot)], true)) {
-        chosen = candidate!.spot;
-        break;
+        return { chosen: candidate!.spot, fitsAlone };
       }
     }
+    return { chosen: undefined, fitsAlone };
+  };
+
+  for (const item of items) {
+    // An item that hangs off one already placed goes next to it, or else not at all, unless
+    // every item must be placed.
+    const anchor = anchorOf(item.ref, relations);
+    const anchored = anchor !== undefined && placed.has(anchor);
+    let { chosen, fitsAlone } = pick(
+      item,
+      anchored ? withLeeway(relativeSpots(item, relations, placed)) : anywhere(item),
+    );
+    if (!chosen && anchored && options.placeAll)
+      ({ chosen, fitsAlone } = pick(item, anywhere(item)));
     if (chosen) {
       placed.set(item.ref, { ref: item.ref, placement: chosen, product: item.product });
       continue;
@@ -491,10 +520,14 @@ export function solveRoom(
         },
       });
     }
+    if (![...moved].every(([r, p]) => leaves(r, p.placement))) continue;
     const next = score([...moved.values()]);
     if (next <= best + 1e-9) continue;
     const layout = [...moved.values()].map((p) =>
-      toPlacement(items.find((i) => i.ref === p.ref)!, p.placement),
+      toPlacement(
+        items.find((i) => i.ref === p.ref)!,
+        p.placement,
+      ),
     );
     if (!valid(layout, false) || !valid(layout, true)) continue;
     for (const [r, p] of moved) placed.set(r, p);
