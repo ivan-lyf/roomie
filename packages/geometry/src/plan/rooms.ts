@@ -108,13 +108,13 @@ export function roomWalls(
 
 /**
  * How far into a room each edge's walls reach: half their thickness, averaged along the edge
- * (an edge with a wall along half of it reaches in half as far). `walls` only need `a`, `b` and
- * `thickness`, in the outline's units.
+ * (an edge with a wall along half of it reaches in half as far); 0 on a side open to the next
+ * room. `walls` only need `a`, `b` and `thickness`, in the outline's units.
  */
-function edgeInsets(
+export function edgeInsets(
   boundary: readonly Vec2[],
   walls: readonly Pick<Wall, 'a' | 'b' | 'thickness'>[],
-  tolerance: number,
+  tolerance = 0.05,
 ): number[] {
   const n = boundary.length;
   return boundary.map((a, i) => {
