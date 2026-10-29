@@ -122,6 +122,18 @@ describe('POST /api/floorplans/:id/read', () => {
     expect(result).toMatchObject({ name: 'Renamed meanwhile', status: 'ready' });
   });
 
+  it('reads an image read before from the cache, and asks afresh to read it again', async () => {
+    const [first, second] = [await uploaded(), await uploaded()];
+    const { reader, images } = fakeReader();
+    await read(first.id, { reader });
+    const cached = Floorplan.parse(await (await read(second.id, { reader })).json());
+    expect(images).toHaveLength(1);
+    expect(cached.rooms).toHaveLength(6);
+    expect(cached.reading).toMatchObject({ model: 'fake-1', usage: { inputTokens: 10 } });
+    expect((await read(second.id, { reader }, '?replace=1')).status).toBe(200);
+    expect(images).toHaveLength(2);
+  });
+
   it('only replaces a traced plan when asked to', async () => {
     const plan = await uploaded();
     await read(plan.id, fakeReader());

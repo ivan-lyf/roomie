@@ -8,6 +8,7 @@ import {
   ReaderError,
   type ReaderResult,
   type ReaderUsage,
+  spent,
 } from './reader';
 
 // Gemini reads the plan (PLAN.md §5). It answers in its own convention: points [y, x] and boxes
@@ -259,30 +260,34 @@ export function geminiReader(options: GeminiOptions): PlanReader {
     ];
     const usage: ReaderUsage = { inputTokens: 0, outputTokens: 0 };
     let problem = '';
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const answer = await generate(model, contents, signal);
-      usage.inputTokens += answer.usage.inputTokens;
-      usage.outputTokens += answer.usage.outputTokens;
-      try {
-        if (answer.finishReason === 'MAX_TOKENS') throw new Error('the answer was cut off');
-        const plan = parseAnswer(answer.text);
-        return { raw: plan, plan: toRawPlan(plan, image), usage };
-      } catch (e) {
-        problem = e instanceof Error ? e.message : String(e);
-        // Once more, with the answer and what was wrong with it.
-        contents.push(answer.content, {
-          role: 'user',
-          parts: [
-            {
-              text:
-                `That answer doesn't match the response schema: ${problem}\n` +
-                'Answer again with the complete plan as JSON that matches it.',
-            },
-          ],
-        });
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const answer = await generate(model, contents, signal);
+        usage.inputTokens += answer.usage.inputTokens;
+        usage.outputTokens += answer.usage.outputTokens;
+        try {
+          if (answer.finishReason === 'MAX_TOKENS') throw new Error('the answer was cut off');
+          const plan = parseAnswer(answer.text);
+          return { raw: plan, plan: toRawPlan(plan, image), usage };
+        } catch (e) {
+          problem = e instanceof Error ? e.message : String(e);
+          // Once more, with the answer and what was wrong with it.
+          contents.push(answer.content, {
+            role: 'user',
+            parts: [
+              {
+                text:
+                  `That answer doesn't match the response schema: ${problem}\n` +
+                  'Answer again with the complete plan as JSON that matches it.',
+              },
+            ],
+          });
+        }
       }
+      throw new ReaderError(`Gemini's answer wasn't a usable plan, twice: ${problem}`, 502);
+    } catch (e) {
+      throw spent(e, usage);
     }
-    throw new ReaderError(`Gemini's answer wasn't a usable plan, twice: ${problem}`, 502);
   }
 
   return {

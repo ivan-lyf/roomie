@@ -4,14 +4,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { demoPlan, demoRawPlan } from '../test/fixtures';
 import type { PlanDraft } from '@roomie/schema';
-import {
-  type EvalPlan,
-  evalPlan,
-  formatReport,
-  LabelTruth,
-  ReadingCache,
-  scoreFit,
-} from './eval';
+import { type EvalPlan, evalPlan, formatReport, LabelTruth, scoreFit } from './eval';
+import { ReadingCache } from './cache';
 import type { PlanReader } from './reader';
 
 let dir: string;

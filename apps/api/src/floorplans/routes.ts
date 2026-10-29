@@ -9,6 +9,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { Db } from '../db/client';
 import { floorplans } from '../db/schema';
+import { ReadingCache } from '../plan-reader/cache';
 import { type PlanReader, ReaderError } from '../plan-reader/reader';
 import type { Storage } from '../storage';
 import { readImageInfo } from './image';
@@ -43,6 +44,8 @@ export type FloorplanOptions = {
 export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions) {
   const app = new Hono<{ Variables: { db: Db } }>();
   const localPath = (key: string) => path.join(dataDir, 'uploads', 'plans', key);
+  // The readings `plans:eval` keeps too, by image, model and prompt version.
+  const readings = new ReadingCache(path.join(dataDir, 'cache', 'plan-reader'));
 
   app.use(async (c, next) => {
     if (!db) return c.json({ error: 'DATABASE_URL is not set' }, 503);
@@ -141,7 +144,9 @@ export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions
 
   /**
    * Reads the plan's image with the plan reader. A plan that's already traced is only read again
-   * with `?replace=1`, since the reading replaces what was traced.
+   * with `?replace=1`, since the reading replaces what was traced. A first reading of an image
+   * read before, by the same model and prompt, comes from the cache and costs nothing; reading
+   * again always asks afresh, since another reading is the point of it.
    */
   app.post('/:id/read', async (c) => {
     if (!reader) {
@@ -150,22 +155,30 @@ export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions
     const plan = await load(c.var.db, c.req.param('id'));
     if (!plan) return c.json({ error: 'No such floor plan.' }, 404);
     if (!plan.image) return c.json({ error: 'The plan has no image to read.' }, 400);
-    if (isTraced(plan) && c.req.query('replace') !== '1') {
+    const replace = c.req.query('replace') === '1';
+    if (isTraced(plan) && !replace) {
       return c.json({ error: 'The plan is already traced: read it again with replace=1.' }, 409);
     }
     const { key, width, height } = plan.image;
     const bytes = plans
       ? await plans.get(key)
-      : await readFile(localPath(key)).then((b) => new Uint8Array(b), () => undefined);
+      : await readFile(localPath(key)).then(
+          (b) => new Uint8Array(b),
+          () => undefined,
+        );
     if (!bytes) return c.json({ error: 'The image file is missing.' }, 404);
 
-    let result;
-    try {
-      const mimeType = key.endsWith('.png') ? CONTENT_TYPES.png : CONTENT_TYPES.jpeg;
-      result = await reader.read({ bytes, mimeType, width, height }, c.req.raw.signal);
-    } catch (e) {
-      if (e instanceof ReaderError) return c.json({ error: e.message }, e.status);
-      throw e;
+    const mimeType = key.endsWith('.png') ? CONTENT_TYPES.png : CONTENT_TYPES.jpeg;
+    const image = { bytes, mimeType, width, height };
+    let result = replace ? undefined : await readings.get(image, reader);
+    if (!result) {
+      try {
+        result = await reader.read(image, c.req.raw.signal);
+      } catch (e) {
+        if (e instanceof ReaderError) return c.json({ error: e.message }, e.status);
+        throw e;
+      }
+      await readings.put(image, reader, result);
     }
     // Reading takes minutes: the plan as saved now keeps anything saved meanwhile (its name, a
     // scale the user measured), and the reading replaces only what was traced.

@@ -126,7 +126,11 @@ describe('geminiReader', () => {
     const reader = geminiReader({ apiKey: 'key', models: ['m'], fetch: gemini.fetch });
     const error = await reader.read(image).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ReaderError);
-    expect(error).toMatchObject({ status: 502, message: expect.stringMatching(/twice: not JSON/) });
+    expect(error).toMatchObject({
+      status: 502,
+      message: expect.stringMatching(/twice: not JSON/),
+      usage: { inputTokens: 2000, outputTokens: 500 },
+    });
   });
 
   it('says when a model is over its rate limit', async () => {

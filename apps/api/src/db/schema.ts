@@ -5,6 +5,7 @@ import type {
   FloorplanStatus,
   GenerationInputs,
   LayoutStatus,
+  LlmRoute,
   Materials,
   ModelSource,
   Obstacle,
@@ -20,11 +21,13 @@ import type {
   RatingStatus,
   Room,
   Scale,
+  Usage,
   Wall,
 } from '@roomie/schema';
 import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
+  boolean,
   index,
   integer,
   jsonb,
@@ -60,7 +63,10 @@ export const floorplans = pgTable('floorplans', {
   ceilingHeightSource: text('ceiling_height_source').$type<CeilingHeightSource>().notNull(),
   materials: jsonb('materials').$type<Materials>().notNull(),
   reading: jsonb('reading').$type<PlanReading>(),
-  furniture: jsonb('furniture').$type<Placement[]>().notNull().default(sql`'[]'::jsonb`),
+  furniture: jsonb('furniture')
+    .$type<Placement[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   /** The generated layout the furniture was copied from, if any. */
   furnishedFrom: uuid('furnished_from').references((): AnyPgColumn => layouts.id),
   editSeconds: integer('edit_seconds').notNull().default(0),
@@ -133,3 +139,23 @@ export const ratings = pgTable('ratings', {
   status: text('status').$type<RatingStatus>().notNull().default('active'),
   createdAt: createdAt(),
 }).enableRLS();
+
+/** Each request that called an LLM, by account, for the daily allowance (PLAN.md M6). */
+export const usage = pgTable(
+  'usage',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // A Supabase Auth user; auth.users lives in another schema, and not in tests' database.
+    accountId: uuid('account_id').notNull(),
+    route: text('route').$type<LlmRoute>().notNull(),
+    floorplanId: uuid('floorplan_id').references(() => floorplans.id),
+    model: text('model'),
+    inputTokens: integer('input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    costUsd: numeric('cost_usd', { precision: 10, scale: 6, mode: 'number' }),
+    cached: boolean('cached').notNull().default(false),
+    status: text('status').$type<Usage['status']>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('usage_account_created_idx').on(t.accountId, t.createdAt)],
+).enableRLS();

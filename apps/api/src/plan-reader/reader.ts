@@ -49,6 +49,9 @@ export interface PlanReader {
  * model too busy or out of its quota, which another model might not be.
  */
 export class ReaderError extends Error {
+  /** What the calls made before it failed used: a failure still costs that (PLAN.md M6). */
+  usage: ReaderUsage | undefined;
+
   constructor(
     message: string,
     readonly status: 429 | 502 | 504,
@@ -57,4 +60,10 @@ export class ReaderError extends Error {
     super(message);
     this.name = 'ReaderError';
   }
+}
+
+/** A `ReaderError` with what was used before it; other errors as they are. */
+export function spent(e: unknown, usage: ReaderUsage): unknown {
+  if (e instanceof ReaderError) e.usage = { ...usage };
+  return e;
 }

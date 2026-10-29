@@ -169,11 +169,16 @@ describe('claudeReader', () => {
     expect(requests[1]!.messages[2]!.content).toMatch(/no rooms/);
   });
 
-  it('gives up cleanly after a second malformed answer', async () => {
+  it('gives up cleanly after a second malformed answer, saying what it used', async () => {
     const { client } = fakeClaude(message('not json'), message('{"walls": 1}'));
-    await expect(claudeReader(options(client)).read(image)).rejects.toThrow(
-      /wasn't a usable plan, twice/,
-    );
+    const error = await claudeReader(options(client))
+      .read(image)
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ReaderError);
+    expect(error).toMatchObject({
+      message: expect.stringMatching(/wasn't a usable plan, twice/),
+      usage: { inputTokens: 10_000, outputTokens: 40_000 },
+    });
   });
 
   it('says when Claude declines, without asking again', async () => {

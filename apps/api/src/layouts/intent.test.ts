@@ -123,9 +123,15 @@ describe('claudeIntentWriter', () => {
     expect(result.problems).toEqual(["Living (r2) wasn't furnished."]);
   });
 
-  it('fails cleanly after two unusable answers', async () => {
+  it('fails cleanly after two unusable answers, saying what they used', async () => {
     const { client } = fakeClaude(message('{"rooms":', 'max_tokens'), message('not json'));
-    await expect(writer(client).write(request)).rejects.toThrow(/wasn't a usable intent, twice/);
+    const error = await writer(client)
+      .write(request)
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      message: expect.stringMatching(/wasn't a usable intent, twice/),
+      usage: { inputTokens: 18_000, outputTokens: 6000 },
+    });
   });
 
   it('asks for a repair in the same conversation', async () => {

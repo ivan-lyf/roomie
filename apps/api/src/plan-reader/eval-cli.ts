@@ -15,15 +15,8 @@ import { Floorplan, SourceUnit } from '@roomie/schema';
 import { z } from 'zod';
 import { loadConfig } from '../config';
 import { readImageInfo } from '../floorplans/image';
-import {
-  type EvalPlan,
-  type EvalResult,
-  evalPlan,
-  formatReport,
-  imageId,
-  LabelTruth,
-  ReadingCache,
-} from './eval';
+import { type EvalPlan, type EvalResult, evalPlan, formatReport, LabelTruth } from './eval';
+import { imageId, ReadingCache } from './cache';
 import { ClaudeEffort, claudeBatch, claudeReader, readingCost } from './claude';
 import { geminiReader } from './gemini';
 import { ReaderError } from './reader';

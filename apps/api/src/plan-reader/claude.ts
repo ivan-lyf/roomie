@@ -11,6 +11,7 @@ import {
   ReaderError,
   type ReaderResult,
   type ReaderUsage,
+  spent,
 } from './reader';
 
 // Claude reads the plan (PLAN.md §5) in pixels of the image it's sent. Plans are shrunk to the
@@ -269,29 +270,33 @@ export function claudeReader(options: ClaudeOptions): PlanReader {
       const params = await planRequest(image, options);
       const usage: ReaderUsage = { inputTokens: 0, outputTokens: 0 };
       let problem = '';
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const message = await readOnce(params, both);
-        usage.inputTokens += usageOf(message).inputTokens;
-        usage.outputTokens += usageOf(message).outputTokens;
-        try {
-          const read = readAnswer(message, image);
-          return { ...read, model: options.model, usage, durationMs: Date.now() - started };
-        } catch (e) {
-          if (e instanceof ReaderError) throw e;
-          problem = e instanceof Error ? e.message : String(e);
-          // Once more, with the answer and what was wrong with it.
-          params.messages.push(
-            { role: 'assistant', content: message.content },
-            {
-              role: 'user',
-              content:
-                `That answer isn't usable: ${problem}\n` +
-                'Answer again with the complete plan as JSON that matches the schema.',
-            },
-          );
+      try {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const message = await readOnce(params, both);
+          usage.inputTokens += usageOf(message).inputTokens;
+          usage.outputTokens += usageOf(message).outputTokens;
+          try {
+            const read = readAnswer(message, image);
+            return { ...read, model: options.model, usage, durationMs: Date.now() - started };
+          } catch (e) {
+            if (e instanceof ReaderError) throw e;
+            problem = e instanceof Error ? e.message : String(e);
+            // Once more, with the answer and what was wrong with it.
+            params.messages.push(
+              { role: 'assistant', content: message.content },
+              {
+                role: 'user',
+                content:
+                  `That answer isn't usable: ${problem}\n` +
+                  'Answer again with the complete plan as JSON that matches the schema.',
+              },
+            );
+          }
         }
+        throw new ReaderError(`Claude's answer wasn't a usable plan, twice: ${problem}`, 502);
+      } catch (e) {
+        throw spent(e, usage);
       }
-      throw new ReaderError(`Claude's answer wasn't a usable plan, twice: ${problem}`, 502);
     },
   };
 }

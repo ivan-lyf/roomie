@@ -12,7 +12,7 @@ import {
 } from '@roomie/schema';
 import { z } from 'zod';
 import { type ClaudeEffort, readerError, usageOf } from '../plan-reader/claude';
-import { ReaderError, type ReaderUsage } from '../plan-reader/reader';
+import { ReaderError, type ReaderUsage, spent } from '../plan-reader/reader';
 import { type Candidates, candidatesText } from './candidates';
 import { describeHome } from './describe';
 
@@ -226,48 +226,53 @@ export function claudeIntentWriter(options: IntentOptions): IntentWriter {
     const usage: ReaderUsage = { inputTokens: 0, outputTokens: 0 };
     let last: { intent: LayoutIntent; problems: string[] } | undefined;
     let problem = '';
-    for (let attempt = 0; attempt < 2; attempt++) {
-      let message: Anthropic.Message;
-      try {
-        message = await client.messages
-          .stream(
-            {
-              model: options.model,
-              max_tokens: MAX_TOKENS,
-              output_config: { effort: options.effort, format: FORMAT },
-              messages,
-            },
-            { signal: both },
-          )
-          .finalMessage();
-      } catch (e) {
-        if (both.aborted) throw new ReaderError("Claude didn't answer in time.", 504);
-        throw readerError(e, options.model);
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let message: Anthropic.Message;
+        try {
+          message = await client.messages
+            .stream(
+              {
+                model: options.model,
+                max_tokens: MAX_TOKENS,
+                output_config: { effort: options.effort, format: FORMAT },
+                messages,
+              },
+              { signal: both },
+            )
+            .finalMessage();
+        } catch (e) {
+          if (both.aborted) throw new ReaderError("Claude didn't answer in time.", 504);
+          throw readerError(e, options.model);
+        }
+        usage.inputTokens += usageOf(message).inputTokens;
+        usage.outputTokens += usageOf(message).outputTokens;
+        messages.push({ role: 'assistant', content: message.content });
+        try {
+          const intent = readAnswer(message);
+          const problems = intentProblems(intent, request);
+          last = { intent, problems };
+          if (problems.length === 0) break;
+          problem = problems.join('\n');
+        } catch (e) {
+          if (e instanceof ReaderError) throw e;
+          problem = e instanceof Error ? e.message : String(e);
+        }
+        if (attempt === 0) {
+          messages.push({
+            role: 'user',
+            content:
+              `That answer has problems:\n${problem}\n` +
+              'Answer again with the whole home, as JSON that matches the schema.',
+          });
+        }
       }
-      usage.inputTokens += usageOf(message).inputTokens;
-      usage.outputTokens += usageOf(message).outputTokens;
-      messages.push({ role: 'assistant', content: message.content });
-      try {
-        const intent = readAnswer(message);
-        const problems = intentProblems(intent, request);
-        last = { intent, problems };
-        if (problems.length === 0) break;
-        problem = problems.join('\n');
-      } catch (e) {
-        if (e instanceof ReaderError) throw e;
-        problem = e instanceof Error ? e.message : String(e);
-      }
-      if (attempt === 0) {
-        messages.push({
-          role: 'user',
-          content:
-            `That answer has problems:\n${problem}\n` +
-            'Answer again with the whole home, as JSON that matches the schema.',
-        });
-      }
+      if (!last)
+        throw new ReaderError(`Claude's answer wasn't a usable intent, twice: ${problem}`, 502);
+    } catch (e) {
+      // What was used before it failed still costs that.
+      throw spent(e, usage);
     }
-    if (!last)
-      throw new ReaderError(`Claude's answer wasn't a usable intent, twice: ${problem}`, 502);
     return { ...last, model: options.model, usage, durationMs: Date.now() - started, messages };
   }
 
