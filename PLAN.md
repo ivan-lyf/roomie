@@ -394,7 +394,7 @@ Out of M5: sign-in and allowances (M6), the rating page and learned weights (M7)
 
 ### M6 — Accounts (1 week)
 Sign-in exists only to limit token use per account.
-- [ ] Sign in with Supabase Auth (Google or an email link), asked for only before a step that calls an LLM: reading a plan, furnishing, trying another layout for a room. Everything else works signed out
+- [ ] Sign in with Supabase Auth (Google or an email link), asked for only before a step that calls an LLM: reading a plan, furnishing, new pieces for a room. Everything else works signed out, rearranging a room included (it makes no LLM call)
 - [ ] The API verifies the Supabase session token on every route that calls an LLM
 - [ ] A `usage` row per LLM call: account, route, model, input and output tokens, cost. Cached readings cost nothing
 - [ ] A daily spending allowance per account, from config. At the limit, LLM routes refuse with a reason code; manual editing keeps working
@@ -402,6 +402,44 @@ Sign-in exists only to limit token use per account.
 - The browser still talks only to our API, so the tables stay closed to Supabase's public Data API (RLS on, no policies).
 
 **Done when:** signed out, no step can call an LLM; an account at its allowance is refused until the next day, while editing still works.
+
+#### M6 in detail
+
+**What calls an LLM today.** Reading a plan (`POST /floorplans/:id/read`, which the app starts by itself after an upload), furnishing a home (`POST /floorplans/:id/layouts`), and new pieces for a room (`POST /floorplans/:id/rooms/:roomId/layouts` with `new_pieces`). A rearrange, uploading, editing, swapping and the shopping list call none, and stay open to everyone. The eval CLIs call the APIs directly, not through these routes, and print their own costs; they aren't accounts and aren't counted.
+
+**Signing in.** In the browser with `@supabase/supabase-js`, from the project's URL and its publishable key (public by design). Two ways: an email link (on by default; Supabase's built-in email sends only a few an hour, enough for a personal project, and a custom SMTP server lifts that later), and Google (an OAuth client from Google Cloud, entered in the Supabase dashboard). supabase-js keeps the session in the browser and refreshes it. The browser talks to Supabase only to sign in: data still goes through our API, and the tables stay closed to Supabase's Data API (RLS on, no policies, as every table has now).
+
+**Checking a session.** The app sends the access token as `Authorization: Bearer …` on the routes above. The API checks it itself with `jose`: signed by one of the project's keys (fetched once from `${SUPABASE_URL}/auth/v1/.well-known/jwks.json` and cached), issuer `${SUPABASE_URL}/auth/v1`, audience `authenticated`, not expired. That needs the project's asymmetric JWT signing keys, the default for new projects; on an older project they're turned on once in the dashboard, and the API says so at startup if the key set is empty. The account is the token's `sub`, a Supabase user id; homes still aren't tied to it. The check is injected like the reader and the writer, so tests run without Supabase. Without `SUPABASE_URL`, those routes are refused, unless `AUTH=off`, for local development only: it's logged at startup, every call counts against one local account, and the API won't start with it in production.
+
+**Usage.** A `usage` table (RLS on, no policies, never deleted): one row per request that calls an LLM, with the account, the route, the floor plan, the model, input and output tokens (a furnishing's repairs included), the cost in dollars, whether it was cached, and whether it succeeded. Readings get the reading cache `plans:eval` already has: a plan's first reading of an image read before, by the same model and prompt, comes from the cache, costs nothing and is logged at $0; "Read it again" always asks afresh, since a second reading is the point of it. A call that fails still costs what it used: the reader's and the writer's errors carry the tokens spent so far. Gemini's free tier is logged with no cost, and costs nothing against the allowance; its own 20 reads a day per model are shared by everyone.
+
+**The allowance.** `DAILY_ALLOWANCE_USD` per account (default $1.00: about ten Opus readings, or four to ten furnishings), counted by calendar day in `ALLOWANCE_TIME_ZONE` (default `America/Vancouver`). A request goes ahead only if what the account spent today, plus what one such request usually costs on the configured model, stays within it, so a day can't run far over. One LLM request per account at a time, so two can't both slip under the limit. The refusals carry a reason code the app turns into words:
+
+| Code | Status | When | The app says |
+|---|---|---|---|
+| `sign_in_required` | 401 | No token, or one that doesn't check out | Sign in to have the AI do this (and it shows how) |
+| `allowance_reached` | 429 | Today's spend plus one more would pass the allowance | You've used today's AI allowance; it's back at midnight. You can still edit by hand |
+| `busy` | 409 | The account has an LLM request running | Wait for the one under way |
+| `auth_unavailable` | 503 | Sign-in isn't set up on the server | AI steps aren't available here |
+
+`GET /me` (signed in) answers the account's email and today's spend, allowance and reset time, for the app to show.
+
+**In the app** (plain screens, as before): a sign-in panel with an email field and a Google button, shown in place of an AI step's button when signed out: in the editor after an upload ("Sign in to have the plan read for you, or trace it yourself"), in Furnish for me, and in New pieces. An email link or Google brings the user back to the same page, signed in, and the step can go ahead; an upload waiting to be read is read then. A line in the home panel and on the plans page: "Signed in as … · AI today: $0.12 of $1.00 · Sign out". Vite reads the repo's `.env` (`envDir`), where only the `VITE_` settings reach the browser.
+
+**Setup, yours, once** (written into `.env.example`): in the Supabase dashboard, Authentication: Email on, Google added with an OAuth client from Google Cloud, the site URL `http://localhost:5173` and the redirect URL `http://localhost:5173/**`; JWT signing keys on if they aren't. Then `SUPABASE_URL`, `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in `.env`.
+
+**Steps,** each one commit, and demoable:
+
+1. **Settings:** the config (`SUPABASE_URL`, `AUTH`, `DAILY_ALLOWANCE_USD`, `ALLOWANCE_TIME_ZONE`), the web's `VITE_` settings and `envDir`, and `.env.example` with the setup above. Commit `chore: settings for sign-in and the ai allowance`.
+2. **Checking a session:** `apps/api/src/auth.ts`, the `jose` check and middleware that sets the account or refuses with `sign_in_required`. Tested against a key pair made in the test, served as a local key set: a good token, an expired one, one from another issuer, a tampered one, none. Commit `feat(api): check supabase sessions`.
+3. **Usage:** the `usage` table and migration, `recordUsage`, the reader's and writer's errors carrying their usage, and the reading cache in the read route. Commit `feat(api): log what every llm call costs`.
+4. **The allowance:** the start of the day in a time zone (tested across the change to and from daylight time), today's spend, the estimate per route, one request at a time, the refusals, and `GET /me`. Commit `feat(api): a daily ai allowance per account`.
+5. **The routes:** reading, furnishing and new pieces need an account, are checked against the allowance, and log their usage, failures included; a rearrange stays open. Tests with a fake reader and writer that count their calls: signed out, none is called. Commit `feat(api): sign in before anything that calls an llm`.
+6. **Signing in:** `auth.ts` in the app (the client, the session, sign in by email or Google, sign out), the sign-in panel and the account line. Commit `feat(web): sign in with an email link or google`.
+7. **AI steps signed in:** the token on the LLM calls, the sign-in panel in place of each AI step when signed out, an upload's reading held until sign-in, and each refusal in words. Commit `feat(web): ask to sign in before ai steps`.
+8. **Done check:** you sign in once by email link and once by Google, in your browser. In headless Chromium, signed out: uploading, editing, furnishing by hand, swapping, rearranging and the shopping list all work, each AI step shows the sign-in panel, and the API logs no usage. Signed in (if you add a secret key to `.env` for the check, a sign-in link made with Supabase's admin API, else in your browser): a reading with Gemini (free) and new pieces for a room with `LAYOUT_MODEL=claude-haiku-5-5` (under a cent) each log a usage row with its tokens and cost, and the account line shows them. With `DAILY_ALLOWANCE_USD=0`, every AI step is refused with `allowance_reached` while editing still works; the next day's reset is covered by the tests with a fixed clock.
+
+Out of M6: homes tied to accounts (they stay unowned until a pass is bought, §8), payments, password sign-in, a page to see everyone's usage, rate limits beyond the allowance, and deploying (CORS, production redirect URLs).
 
 ### M7 — Feedback loop (1 week)
 - [ ] Capture canvas screenshots (3 angles per furnished room, plus a top-down view of the home) after generation, upload to Supabase Storage
