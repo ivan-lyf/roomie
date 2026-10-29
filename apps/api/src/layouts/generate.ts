@@ -1,4 +1,5 @@
 import {
+  type LayoutProblem,
   roomContext,
   type RoomSolution,
   type Scored,
@@ -7,27 +8,40 @@ import {
   solveRoom,
   validateLayout,
 } from '@roomie/geometry';
-import type {
-  Category,
-  Floorplan,
-  GenerationInputs,
-  LayoutIntent,
-  Placement,
-  Product,
-  RoomProgress,
+import {
+  type Category,
+  type Floorplan,
+  type FurnishMode,
+  type GenerationInputs,
+  type IntentItem,
+  type LayoutIntent,
+  type Placement,
+  type Product,
+  type Relation,
+  relationRefs,
+  type RoomIntent,
+  type RoomProgress,
 } from '@roomie/schema';
 import type { ReaderUsage } from '../plan-reader/reader';
 import { pickCandidates, shortName } from './candidates';
-import type { IntentRequest, IntentResult, IntentWriter } from './intent';
+import {
+  type IntentRequest,
+  type IntentResult,
+  type IntentWriter,
+  LAYOUT_ROOM_PROMPT,
+} from './intent';
 
-// One furnishing of a home (PLAN.md M4): the LLM's intent, each room solved with N seeds, failed
-// rooms sent back for repair at most twice, then the best of each room combined into the winner.
-// Nothing invalid comes out: what still doesn't fit is left out, and said so.
+// One furnishing (PLAN.md M4, M5): the LLM's intent, each room solved with N seeds, failed rooms
+// sent back for repair at most twice, then the best of each room combined into the winner.
+// Nothing invalid comes out: what still doesn't fit is left out, and said so. Some rooms can be
+// furnished again around the rest of the home as it stands, or only rearranged, with no LLM.
 
 /** Solver seeds per room: the best-of-N. */
 export const SEEDS = 8;
 /** How many times failed rooms go back to the LLM. */
 export const REPAIRS = 2;
+/** A rearranged room counts as another layout once an item moves this far, in meters, or turns. */
+const MOVED = 0.1;
 
 /** What goes first when a home is over budget: the least needed. */
 const DROP_FIRST: Category[] = [
@@ -54,27 +68,42 @@ export type RoomStatus = RoomProgress;
 export type HomeCandidate = { placements: Placement[] } & Scored;
 
 export type Generation = {
+  mode: FurnishMode;
   intent: LayoutIntent;
-  model: string;
+  /** The LLM that wrote the intent; none for a rearrange. */
+  model: string | null;
   promptVersion: string;
   usage: ReaderUsage;
   repairs: number;
-  /** Every candidate, one per seed, for the log. */
+  /** The solver seeds tried. */
+  seeds: number[];
+  /** Every candidate, one per seed, for the log: the whole home, rooms kept included. */
   candidates: HomeCandidate[];
-  /** Each room's best, combined: what the home gets. */
+  /** Each room's best, combined with the rooms kept: what the home gets. */
   winner: HomeCandidate;
   rooms: RoomStatus[];
 };
 
-export type GenerateDeps = {
-  writer: IntentWriter;
-  /** The active catalog. */
+type SolveDeps = {
+  /**
+   * The active catalog to choose from, and the products of the furniture already in place,
+   * whatever their status: only active ones are offered.
+   */
   catalog: readonly Product[];
   seeds?: number;
   onProgress?: (rooms: RoomStatus[]) => void;
+  signal?: AbortSignal;
+  /**
+   * The furniture of every room not being furnished, which they're solved around and which
+   * doesn't change (M5). Without it, the whole home is furnished afresh.
+   */
+  keep?: readonly Placement[];
+};
+
+export type GenerateDeps = SolveDeps & {
+  writer: IntentWriter;
   /** Each intent as it comes, to log if what follows fails. */
   onIntent?: (intent: LayoutIntent) => void;
-  signal?: AbortSignal;
 };
 
 /** Lets other work on the server run before going on. */
@@ -89,12 +118,49 @@ const addUsage = (a: ReaderUsage, b: ReaderUsage): ReaderUsage => ({
 const better = (a: RoomSolution, b: RoomSolution) =>
   a.unplaced.length - b.unplaced.length || b.score - a.score;
 
+/** Gives a solved item, whose id is its ref, its id in the home and the ref it keeps. */
+type Identify = (placement: Placement) => Pick<Placement, 'id' | 'ref'>;
+
 /**
- * Placements from several rooms, with ids unique in the home (f1, f2, and so on), each keeping
- * the intent's ref it was solved under.
+ * Ids for new items, unique in the home: f1, f2, and so on, or, furnishing some rooms again,
+ * after the highest the home has used, so no id comes back meaning another item. Each item
+ * keeps the intent's ref it was solved under.
  */
-function numbered(rooms: readonly RoomSolution[]): Placement[] {
-  return rooms.flatMap((r) => r.placements).map((p, i) => ({ ...p, id: `f${i + 1}`, ref: p.id }));
+function newIds(plan: Floorplan, again: boolean): () => Identify {
+  const used = plan.furniture.map((f) => Number(/^f(\d+)$/.exec(f.id)?.[1] ?? 0));
+  const first = again ? Math.max(0, ...used) + 1 : 1;
+  return () => {
+    let n = first;
+    return (p) => ({ id: `f${n++}`, ref: p.id });
+  };
+}
+
+/** Each room with every seed, one after another, each around what's chosen before it. */
+async function solveRooms(
+  plan: Floorplan,
+  intent: LayoutIntent,
+  roomIds: readonly string[],
+  products: ReadonlyMap<string, Product>,
+  seeds: readonly number[],
+  keep: readonly Placement[],
+): Promise<Map<string, RoomSolution[]>> {
+  const solved = new Map<string, RoomSolution[]>();
+  // Rooms open to each other share walkways, so each is solved around the rooms kept and the
+  // best of the rooms before it, with ids marked so they can't pass for its refs.
+  const others: Placement[] = keep.map((p) => ({ ...p, id: `kept:${p.id}` }));
+  for (const roomId of roomIds) {
+    const room = intent.rooms.find((r) => r.roomId === roomId);
+    const runs: RoomSolution[] = [];
+    for (const seed of room ? seeds : []) {
+      // Solving takes a moment per try: let the server answer other requests in between.
+      await pause();
+      runs.push(solveRoom(plan, room!, products, { seed, others }));
+    }
+    solved.set(roomId, runs);
+    const best = runs.toSorted(better)[0];
+    if (best) others.push(...best.placements.map((p) => ({ ...p, id: `${roomId}:${p.id}` })));
+  }
+  return solved;
 }
 
 export async function generateHome(
@@ -103,14 +169,22 @@ export async function generateHome(
   deps: GenerateDeps,
 ): Promise<Generation> {
   const products = new Map(deps.catalog.map((p) => [p.articleNo, p]));
+  const again = deps.keep !== undefined;
+  const keep = deps.keep ?? [];
   const request: IntentRequest = {
     plan,
     inputs,
     candidates: pickCandidates(plan, deps.catalog, inputs),
+    ...(again && {
+      again: {
+        kept: keep,
+        now: plan.furniture.filter((f) => inputs.roomIds.includes(f.roomId)),
+        products,
+      },
+    }),
   };
-  const seeds = deps.seeds ?? SEEDS;
-  const rooms: RoomStatus[] = inputs.roomIds.map((roomId) => ({ roomId, status: 'waiting' }));
-  deps.onProgress?.(rooms);
+  const seeds = Array.from({ length: deps.seeds ?? SEEDS }, (_, i) => i + 1);
+  deps.onProgress?.(inputs.roomIds.map((roomId) => ({ roomId, status: 'waiting' })));
 
   let result: IntentResult = await deps.writer.write(request, deps.signal);
   let usage = result.usage;
@@ -118,22 +192,7 @@ export async function generateHome(
   let solved: Map<string, RoomSolution[]>;
   deps.onIntent?.(result.intent);
   for (;;) {
-    solved = new Map();
-    // One room after another, each around the best of the rooms before it: rooms open to each
-    // other share walkways.
-    const others: Placement[] = [];
-    for (const roomId of inputs.roomIds) {
-      const intent = result.intent.rooms.find((r) => r.roomId === roomId);
-      const runs: RoomSolution[] = [];
-      for (let i = 0; intent && i < seeds; i++) {
-        // Solving takes a moment per try: let the server answer other requests in between.
-        await pause();
-        runs.push(solveRoom(plan, intent, products, { seed: i + 1, others }));
-      }
-      solved.set(roomId, runs);
-      const best = runs.toSorted(better)[0];
-      if (best) others.push(...best.placements.map((p) => ({ ...p, id: `${roomId}:${p.id}` })));
-    }
+    solved = await solveRooms(plan, result.intent, inputs.roomIds, products, seeds, keep);
     const feedback = problemsOf(plan, inputs, solved, products);
     if (feedback.length === 0 || repairs >= REPAIRS) break;
     repairs++;
@@ -142,10 +201,140 @@ export async function generateHome(
     deps.onIntent?.(result.intent);
   }
 
+  const outcome = combine(plan, inputs, result.intent, solved, products, keep, newIds(plan, again));
+  deps.onProgress?.(outcome.rooms);
+  return {
+    mode: again ? 'new_pieces' : 'home',
+    intent: result.intent,
+    model: result.model,
+    promptVersion: again
+      ? `${deps.writer.promptVersion}+${LAYOUT_ROOM_PROMPT.version}`
+      : deps.writer.promptVersion,
+    usage,
+    repairs,
+    seeds,
+    ...outcome,
+  };
+}
+
+export type RearrangeDeps = SolveDeps & {
+  keep: readonly Placement[];
+  /** The first of the seeds to try: drawn at random, so each rearrange is another. */
+  firstSeed: number;
+  /** The intent the room was last furnished from, if it was. */
+  intent?: RoomIntent;
+  /** That intent's prompt version, logged with the layout. */
+  promptVersion?: string;
+};
+
+/**
+ * The intent to rearrange a room by: the items it holds now, by the refs they kept (items
+ * placed by hand get one made up), and the relations of its last intent that still apply.
+ */
+export function rearrangeIntent(
+  roomId: string,
+  items: readonly Placement[],
+  last: RoomIntent | undefined,
+): { intent: RoomIntent; byRef: Map<string, Placement> } {
+  const byRef = new Map<string, Placement>();
+  const chosen: IntentItem[] = [];
+  for (const item of items) {
+    const ref = item.ref && !byRef.has(item.ref) ? item.ref : `item_${item.id}`.toLowerCase();
+    byRef.set(ref, item);
+    const why = last?.items.find((i) => i.ref === ref && i.articleNo === item.articleNo)?.why;
+    chosen.push({ ref, articleNo: item.articleNo, why: why ?? '' });
+  }
+  const relations: Relation[] = (last?.relations ?? []).filter((r) =>
+    relationRefs(r).every((ref) => byRef.has(ref)),
+  );
+  return { intent: { roomId, items: chosen, relations }, byRef };
+}
+
+/** How far apart two turns are, in radians. */
+const turnBetween = (a: number, b: number) =>
+  Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+
+/**
+ * Lays a room's items out afresh (M5): the same items, solved again with new seeds, keeping the
+ * relations its intent asked for, around the rest of the home as it stands. No LLM, so it costs
+ * nothing. A try that leaves every item where it stands doesn't count as another layout.
+ */
+export async function rearrangeRoom(
+  plan: Floorplan,
+  inputs: GenerationInputs,
+  deps: RearrangeDeps,
+): Promise<Generation> {
+  const products = new Map(deps.catalog.map((p) => [p.articleNo, p]));
+  const roomId = inputs.roomIds[0]!;
+  const now = plan.furniture.filter((f) => f.roomId === roomId);
+  const { intent: room, byRef } = rearrangeIntent(roomId, now, deps.intent);
+  const intent: LayoutIntent = {
+    rooms: [room],
+    budget: [{ roomId, cad: inputs.budgetCad }],
+    notes: '',
+  };
+  const seeds = Array.from({ length: deps.seeds ?? SEEDS }, (_, i) => deps.firstSeed + i);
+  deps.onProgress?.([{ roomId, status: 'waiting' }]);
+
+  const solved = await solveRooms(plan, intent, [roomId], products, seeds, deps.keep);
+  const moved = (run: RoomSolution) =>
+    run.placements.some((p) => {
+      const was = byRef.get(p.id)!;
+      return (
+        Math.hypot(p.x - was.x, p.y - was.y) > MOVED || turnBetween(p.rotation, was.rotation) > 0.01
+      );
+    });
+  const others = solved.get(roomId)!.filter(moved);
+  if (others.length > 0) solved.set(roomId, others);
+
+  // Rearranged items stay the items they were: their ids and refs don't change.
+  const identify = () => (p: Placement) => {
+    const { id, ref } = byRef.get(p.id)!;
+    return ref === undefined ? { id } : { id, ref };
+  };
+  const outcome = combine(plan, inputs, intent, solved, products, deps.keep, identify);
+  if (others.length === 0) {
+    const status = outcome.rooms[0]!;
+    status.reasons = [...(status.reasons ?? []), 'No other arrangement fits as well as this one.'];
+  }
+  deps.onProgress?.(outcome.rooms);
+  return {
+    mode: 'rearrange',
+    intent,
+    model: null,
+    promptVersion: deps.promptVersion ?? 'none',
+    usage: { inputTokens: 0, outputTokens: 0 },
+    repairs: 0,
+    seeds,
+    ...outcome,
+  };
+}
+
+/** A problem, to know the same one before and after the rooms furnished join the home. */
+const problemKey = (p: LayoutProblem) => `${p.code}|${p.ids.join(',')}|${p.roomId ?? ''}`;
+
+/**
+ * The rooms furnished, chosen and combined with those kept: the best of each room, trimmed to
+ * the budget, checked whole. Problems the rooms kept already had don't count against it; only
+ * those the rooms furnished bring do.
+ */
+function combine(
+  plan: Floorplan,
+  inputs: GenerationInputs,
+  intent: LayoutIntent,
+  solved: Map<string, RoomSolution[]>,
+  products: ReadonlyMap<string, Product>,
+  keep: readonly Placement[],
+  ids: () => Identify,
+): Pick<Generation, 'candidates' | 'winner' | 'rooms'> {
+  const before = new Set(validateLayout(plan, keep, products).map(problemKey));
+  const brought = (placements: readonly Placement[]) =>
+    validateLayout(plan, placements, products).filter((p) => !before.has(problemKey(p)));
   const bestOf = (roomId: string) => solved.get(roomId)!.toSorted(better)[0];
   const area = (roomId: string) => roomContext(plan, roomId)?.area ?? 0;
   const homeOf = (chosen: readonly RoomSolution[]): HomeCandidate => {
-    const placements = numbered(chosen);
+    const identify = ids();
+    const placed = chosen.flatMap((r) => r.placements).map((p) => ({ ...p, ...identify(p) }));
     const scored = scoreHome({
       rooms: chosen.map((r) => ({
         roomId: r.roomId,
@@ -160,20 +349,21 @@ export async function generateHome(
     for (const r of chosen) {
       for (const [k, v] of Object.entries(r.breakdown)) breakdown[`${r.roomId}.${k}`] = v;
     }
-    return { placements, score: scored.score, breakdown };
+    return { placements: [...keep, ...placed], score: scored.score, breakdown };
   };
 
   // Each seed's rooms together, as long as they stand together: only valid layouts are logged.
-  const candidates = Array.from({ length: seeds }, (_, i) =>
+  const tries = Math.max(0, ...[...solved.values()].map((runs) => runs.length));
+  const candidates = Array.from({ length: tries }, (_, i) =>
     homeOf(inputs.roomIds.flatMap((id) => solved.get(id)![i] ?? [])),
-  ).filter((c) => validateLayout(plan, c.placements, products).length === 0);
+  ).filter((c) => brought(c.placements).length === 0);
   let chosen = inputs.roomIds.flatMap((id) => bestOf(id) ?? []);
   const dropped = trimToBudget(chosen, inputs.budgetCad, products);
   // A room that lost items to the budget is scored again as it now stands.
   chosen = dropped.rooms.map((room, i) => {
     if (room.placements.length === chosen[i]!.placements.length) return room;
     const ctx = roomContext(plan, room.roomId)!;
-    const relations = result.intent.rooms.find((r) => r.roomId === room.roomId)?.relations;
+    const relations = intent.rooms.find((r) => r.roomId === room.roomId)?.relations;
     const pieces = room.placements.map((p) => ({
       ref: p.id,
       placement: p,
@@ -183,32 +373,24 @@ export async function generateHome(
   });
   const winner = homeOf(chosen);
   // Rooms are solved apart, but the whole home is checked once more before it ships.
-  const problems = validateLayout(plan, winner.placements, products);
+  const problems = brought(winner.placements);
   if (problems.length > 0) {
     throw new Error(`The combined layout isn't valid: ${problems.map((p) => p.message).join(' ')}`);
   }
 
-  for (const status of rooms) {
-    const best = bestOf(status.roomId);
+  const rooms = inputs.roomIds.map((roomId): RoomStatus => {
+    const best = bestOf(roomId);
     const reasons = [
       ...(best ? best.unplaced.map((u) => u.reason) : ["It wasn't furnished."]),
-      ...dropped.reasons.filter((d) => d.roomId === status.roomId).map((d) => d.reason),
+      ...dropped.reasons.filter((d) => d.roomId === roomId).map((d) => d.reason),
     ];
-    status.status = best && best.placements.length > 0 ? 'done' : 'failed';
-    if (reasons.length > 0) status.reasons = reasons;
-  }
-  deps.onProgress?.(rooms);
-
-  return {
-    intent: result.intent,
-    model: result.model,
-    promptVersion: deps.writer.promptVersion,
-    usage,
-    repairs,
-    candidates,
-    winner,
-    rooms,
-  };
+    return {
+      roomId,
+      status: best && best.placements.length > 0 ? 'done' : 'failed',
+      ...(reasons.length > 0 && { reasons }),
+    };
+  });
+  return { candidates, winner, rooms };
 }
 
 /** What to tell the LLM went wrong: items the solver couldn't place, and a budget overrun. */

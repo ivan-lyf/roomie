@@ -19,6 +19,20 @@ export const GenerationInputs = z.object({
 });
 export type GenerationInputs = z.infer<typeof GenerationInputs>;
 
+/** Furnishing one room again, the rest of the home kept as it stands (M5). */
+export const RoomAgain = z.discriminatedUnion('mode', [
+  /** The same items laid out afresh, with no LLM. */
+  z.object({ mode: z.literal('rearrange') }),
+  /** New pieces, chosen by the LLM for this room alone, within its own budget. */
+  z.object({
+    mode: z.literal('new_pieces'),
+    budgetCad: z.number().positive(),
+    style: StylePreset,
+    mustHaves: z.array(Category),
+  }),
+]);
+export type RoomAgain = z.infer<typeof RoomAgain>;
+
 /** One item standing in a room: its footprint's center, in plan space, and which way it faces. */
 export const Placement = z.object({
   /** Unique within the floorplan or layout: two identical chairs are two placements. */

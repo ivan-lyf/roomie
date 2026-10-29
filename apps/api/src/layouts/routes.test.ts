@@ -209,3 +209,74 @@ describe('GET /api/floorplans/:id/furnishing', () => {
     expect(none.status).toBe(404);
   });
 });
+
+describe('POST /api/floorplans/:id/rooms/:roomId/layouts', () => {
+  /** Polls a generation on the app that started it until it's over. */
+  async function finished(served: ReturnType<typeof app>, res: Response): Promise<GenerationJob> {
+    const { generationId } = (await res.json()) as { generationId: string };
+    let job: GenerationJob | undefined;
+    for (let i = 0; i < 200 && job?.status !== 'done' && job?.status !== 'failed'; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      job = (await (
+        await served.request(`/api/generations/${generationId}`)
+      ).json()) as GenerationJob;
+    }
+    return job!;
+  }
+  const post = (served: ReturnType<typeof app>, url: string, body: object) =>
+    served.request(url, { method: 'POST', body: JSON.stringify(body) });
+
+  it('rearranges a room for free around the rest, logs it, and keeps the home budget', async () => {
+    const plan = await savedDemo();
+    const served = app(writer);
+    const whole = await finished(
+      served,
+      await post(served, `/api/floorplans/${plan.id}/layouts`, inputs),
+    );
+    expect(whole.status).toBe('done');
+
+    const res = await post(served, `/api/floorplans/${plan.id}/rooms/r1/layouts`, {
+      mode: 'rearrange',
+    });
+    expect(res.status).toBe(202);
+    const job = await finished(served, res);
+    expect(job).toMatchObject({ status: 'done', costUsd: 0, rooms: [{ roomId: 'r1' }] });
+    const living = (fs: Placement[]) => fs.filter((f) => f.roomId === 'r2');
+    expect(living(job.furniture!)).toEqual(living(whole.furniture!));
+
+    const rows = Layout.array().parse(await db.select().from(layouts));
+    const winner = rows.find((r) => r.id === job.layoutId)!;
+    expect(winner.inputs.roomIds).toEqual(['r1']);
+    expect(winner.llmIntent).toMatchObject({ mode: 'rearrange', model: null, repairs: 0 });
+    expect(winner.promptVersion).toBe('layout-intent.v1');
+    const saved = Floorplan.parse(await (await app().request(`/api/floorplans/${plan.id}`)).json());
+    expect(saved.furnishedFrom).toBe(job.layoutId);
+    expect(saved.furniture).toEqual(job.furniture);
+
+    const furnishing = HomeFurnishing.parse(
+      await (await app().request(`/api/floorplans/${plan.id}/furnishing`)).json(),
+    );
+    expect(furnishing.budgetCad).toBe(3000);
+    expect(furnishing.rooms.find((r) => r.roomId === 'r1')!.layoutId).toBe(job.layoutId);
+  });
+
+  it('says why it can’t: nothing to rearrange, no writer for new pieces, or busy', async () => {
+    const plan = await savedDemo();
+    const url = `/api/floorplans/${plan.id}/rooms/r1/layouts`;
+    const empty = await post(app(writer), url, { mode: 'rearrange' });
+    expect(empty.status).toBe(400);
+    expect(await empty.json()).toEqual({ error: "There's nothing in the room to rearrange." });
+    const pieces = { mode: 'new_pieces', budgetCad: 800, style: 'modern', mustHaves: ['bed'] };
+    expect((await post(app(), url, pieces)).status).toBe(503);
+    expect((await post(app(writer), url, { mode: 'paint' })).status).toBe(400);
+    const kitchen = await post(app(writer), `/api/floorplans/${plan.id}/rooms/r3/layouts`, pieces);
+    expect(kitchen.status).toBe(400);
+
+    const served = app(writer);
+    const first = await post(served, `/api/floorplans/${plan.id}/layouts`, inputs);
+    expect(first.status).toBe(202);
+    const second = await post(served, url, pieces);
+    expect(second.status).toBe(409);
+    expect((await finished(served, first)).status).toBe('done');
+  });
+});

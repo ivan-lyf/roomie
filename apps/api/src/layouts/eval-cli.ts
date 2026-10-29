@@ -154,7 +154,7 @@ for (const { name, plan } of homes) {
     leftOut: home.rooms.flatMap((r) => r.reasons ?? []),
     intentSeconds: intentMs / 1000,
     solveSeconds: (Date.now() - started - intentMs) / 1000,
-    costUsd: readingCost(home.model, home.usage),
+    costUsd: home.model === null ? 0 : readingCost(home.model, home.usage),
     cached: !fresh,
     svg: homeSvg(plan, home.winner.placements, products),
   };

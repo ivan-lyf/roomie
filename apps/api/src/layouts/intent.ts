@@ -7,6 +7,7 @@ import {
   type GenerationInputs,
   intentErrors,
   LayoutIntent,
+  type Placement,
   type Product,
 } from '@roomie/schema';
 import { z } from 'zod';
@@ -24,6 +25,12 @@ import { describeHome } from './describe';
 export const LAYOUT_INTENT_PROMPT = {
   version: 'layout-intent.v1',
   text: readFileSync(new URL('../prompts/layout-intent.v1.md', import.meta.url), 'utf8'),
+};
+
+/** Added to it to furnish one room again around the rest of the home (M5). */
+export const LAYOUT_ROOM_PROMPT = {
+  version: 'layout-room.v1',
+  text: readFileSync(new URL('../prompts/layout-room.v1.md', import.meta.url), 'utf8'),
 };
 
 /** An intent runs a few thousand tokens, plus the model's reasoning. */
@@ -47,6 +54,12 @@ export type IntentRequest = {
   plan: Floorplan;
   inputs: GenerationInputs;
   candidates: Candidates;
+  /** Furnishing rooms again: what the other rooms keep, and what these rooms hold now. */
+  again?: {
+    kept: readonly Placement[];
+    now: readonly Placement[];
+    products: ReadonlyMap<string, Product>;
+  };
 };
 
 export type IntentResult = {
@@ -158,16 +171,41 @@ function readAnswer(message: Anthropic.Message): LayoutIntent {
 
 /** The first message: the prompt, the home, what was asked for, and the catalog to pick from. */
 export function intentMessage(request: IntentRequest): string {
-  const { plan, inputs, candidates } = request;
+  const { plan, inputs, candidates, again } = request;
   return [
     LAYOUT_INTENT_PROMPT.text,
+    ...(again ? [LAYOUT_ROOM_PROMPT.text] : []),
     '# The home',
     describeHome(plan, inputs.roomIds),
     '# What the person asked for',
     inputsText(plan, inputs),
+    ...(again
+      ? [
+          '# Kept as they are',
+          furnitureText(plan, again.kept, again.products),
+          '# In the room now',
+          furnitureText(plan, again.now, again.products),
+        ]
+      : []),
     '# The catalog',
     candidatesText(candidates),
   ].join('\n\n');
+}
+
+/** Furniture by room: each product's name, colour and material. */
+export function furnitureText(
+  plan: Floorplan,
+  furniture: readonly Placement[],
+  products: ReadonlyMap<string, Product>,
+): string {
+  const lines = plan.rooms.flatMap((room) => {
+    const items = furniture.flatMap((f) => {
+      const p = f.roomId === room.id ? products.get(f.articleNo) : undefined;
+      return p ? [[p.name, p.color, p.material].filter(Boolean).join(', ')] : [];
+    });
+    return items.length > 0 ? [`- ${room.name} (${room.id}): ${items.join('; ')}.`] : [];
+  });
+  return lines.length > 0 ? lines.join('\n') : 'Nothing.';
 }
 
 /**

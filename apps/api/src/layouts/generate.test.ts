@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import catalog from '../../../../fixtures/catalog/products.json';
 import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
-import { generateHome } from './generate';
-import type { IntentResult, IntentWriter } from './intent';
+import { generateHome, rearrangeIntent, rearrangeRoom } from './generate';
+import { intentMessage, type IntentRequest, type IntentResult, type IntentWriter } from './intent';
 
 const plan = Floorplan.parse(demo);
 const products = Product.array().parse(catalog);
@@ -21,6 +21,7 @@ const inputs = {
 /** A writer answering each call with the next intent, keeping the feedback it got. */
 function fakeWriter(...intents: LayoutIntent[]) {
   const feedback: string[] = [];
+  const requests: IntentRequest[] = [];
   const answer = (i: LayoutIntent): IntentResult => ({
     intent: i,
     problems: [],
@@ -32,13 +33,16 @@ function fakeWriter(...intents: LayoutIntent[]) {
   const writer: IntentWriter = {
     model: 'claude-test',
     promptVersion: 'layout-intent.v1',
-    write: async () => answer(intents.shift()!),
+    write: async (request) => {
+      requests.push(request);
+      return answer(intents.shift()!);
+    },
     repair: async (_, __, text) => {
       feedback.push(text);
       return answer(intents.shift()!);
     },
   };
-  return { writer, feedback };
+  return { writer, feedback, requests };
 }
 
 describe('generateHome', () => {
@@ -124,5 +128,104 @@ describe('generateHome', () => {
     done = true;
     // Two rooms, three tries each: a turn before every try.
     expect(turns).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe('one room again', () => {
+  // The demo home furnished whole, as the pipeline leaves it.
+  const furnished = async () => {
+    const { writer } = fakeWriter(intent);
+    const home = await generateHome(plan, inputs, { writer, catalog: products, seeds: 2 });
+    return { ...plan, furniture: home.winner.placements };
+  };
+  const bedroom = intent.rooms.find((r) => r.roomId === 'r1')!;
+  const living = intent.rooms.find((r) => r.roomId === 'r2')!;
+
+  it('gets new pieces for one room around the rest, which stays as it is', async () => {
+    const home = await furnished();
+    const keep = home.furniture.filter((f) => f.roomId === 'r2');
+    const { writer, requests } = fakeWriter({
+      rooms: [{ ...bedroom, items: bedroom.items.slice(0, 1), relations: [] }],
+      budget: [{ roomId: 'r1', cad: 600 }],
+      notes: '',
+    });
+    const again = await generateHome(
+      home,
+      { ...inputs, roomIds: ['r1'], budgetCad: 600 },
+      { writer, catalog: products, seeds: 2, keep },
+    );
+    expect(again.mode).toBe('new_pieces');
+    expect(again.promptVersion).toBe('layout-intent.v1+layout-room.v1');
+    const message = intentMessage(requests[0]!);
+    expect(message).toContain('# Kept as they are');
+    expect(message).toContain('- Living (r2): TEST Three-seat sofa');
+    expect(message).toMatch(/# In the room now\n\n- Bedroom \(r1\): TEST/);
+
+    const placed = again.winner.placements;
+    expect(placed.filter((f) => f.roomId === 'r2')).toEqual(keep);
+    const fresh = placed.filter((f) => f.roomId === 'r1');
+    expect(fresh.map((f) => [f.id, f.ref])).toEqual([[`f${home.furniture.length + 1}`, 'bed']]);
+    expect(new Set(placed.map((f) => f.id)).size).toBe(placed.length);
+    expect(validateLayout(home, placed, byArticle)).toEqual([]);
+    for (const c of again.candidates) expect(c.placements.slice(0, keep.length)).toEqual(keep);
+  });
+
+  it("isn't failed by a problem left in a room kept", async () => {
+    const home = await furnished();
+    const keep = home.furniture.filter((f) => f.roomId === 'r2');
+    // Two of the living room's items left standing on each other.
+    const [a, b] = keep;
+    const crowded = [{ ...a!, x: b!.x, y: b!.y }, ...keep.slice(1)];
+    const { writer } = fakeWriter({ rooms: [bedroom], budget: [], notes: '' });
+    const again = await generateHome(
+      { ...home, furniture: [...crowded, ...home.furniture.filter((f) => f.roomId === 'r1')] },
+      { ...inputs, roomIds: ['r1'] },
+      { writer, catalog: products, seeds: 2, keep: crowded },
+    );
+    const problems = validateLayout(plan, again.winner.placements, byArticle);
+    expect(problems.length).toBeGreaterThan(0);
+    const kept = new Set(crowded.map((f) => f.id));
+    for (const p of problems)
+      expect(p.ids.filter((id) => id.startsWith('f')).every((id) => kept.has(id))).toBe(true);
+  });
+
+  it('rearranges a room without the LLM, its items keeping their ids and refs', async () => {
+    const home = await furnished();
+    const keep = home.furniture.filter((f) => f.roomId === 'r1');
+    const now = home.furniture.filter((f) => f.roomId === 'r2');
+    const again = await rearrangeRoom(
+      home,
+      { ...inputs, roomIds: ['r2'] },
+      { catalog: products, keep, seeds: 3, firstSeed: 1000, intent: living },
+    );
+    expect(again).toMatchObject({ mode: 'rearrange', model: null, repairs: 0 });
+    expect(again.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(again.seeds).toEqual([1000, 1001, 1002]);
+    const placed = again.winner.placements;
+    expect(placed.filter((f) => f.roomId === 'r1')).toEqual(keep);
+    const after = placed.filter((f) => f.roomId === 'r2');
+    const strip = (fs: typeof now) =>
+      fs
+        .map(({ id, ref, articleNo }) => ({ id, ref, articleNo }))
+        .sort((x, y) => x.id.localeCompare(y.id));
+    expect(strip(after)).toEqual(strip(now));
+    const moved = after.some((f) => {
+      const was = now.find((n) => n.id === f.id)!;
+      return Math.hypot(f.x - was.x, f.y - was.y) > 0.1 || f.rotation !== was.rotation;
+    });
+    expect(moved).toBe(true);
+    expect(validateLayout(plan, placed, byArticle)).toEqual([]);
+  });
+
+  it('rearranges items placed by hand under made-up refs, with the relations that still apply', () => {
+    const sofa = { id: 'f7', articleNo: '900.000.15', roomId: 'r2', x: 1, y: 1, rotation: 0 };
+    const tv = { ...sofa, id: 'f8', articleNo: '900.000.18', ref: 'tv' };
+    const { intent: room, byRef } = rearrangeIntent('r2', [sofa, tv], living);
+    expect(room.items.map((i) => i.ref)).toEqual(['item_f7', 'tv']);
+    expect(room.items[1]!.why).toBe(living.items.find((i) => i.ref === 'tv')!.why);
+    // Only relations about the TV alone hold: the sofa it was planned with isn't there by name.
+    expect(room.relations.length).toBeGreaterThan(0);
+    for (const r of room.relations) expect(JSON.stringify(r)).not.toContain('"sofa"');
+    expect(byRef.get('item_f7')).toBe(sofa);
   });
 });

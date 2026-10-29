@@ -87,7 +87,7 @@ export const LoggedIntent = z.object({
   model: z.string().nullable(),
   usage: z.object({ inputTokens: z.number(), outputTokens: z.number() }),
   repairs: z.number().int().nonnegative(),
-  /** The solver seeds tried, when they weren't 1 to N. */
+  /** The solver seeds tried; layouts logged before M5 tried 1 to N. */
   seeds: z.array(z.number().int()).optional(),
 });
 export type LoggedIntent = z.infer<typeof LoggedIntent>;
