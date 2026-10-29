@@ -59,3 +59,24 @@ export function pickVariant(
   }
   return best;
 }
+
+/** What to show when furnishing. Sizes in meters; a limit left out is no limit. */
+export type ProductFilter = {
+  maxPrice?: number;
+  maxWidth?: number;
+  maxDepth?: number;
+  /** The room's floor, width by depth: hides products that fit it neither way round. */
+  room?: { w: number; d: number };
+};
+
+export function matchesFilter(product: Product, filter: ProductFilter): boolean {
+  const { w, d } = product.dims;
+  if (filter.maxPrice !== undefined && product.priceCad > filter.maxPrice) return false;
+  if (filter.maxWidth !== undefined && w > filter.maxWidth) return false;
+  if (filter.maxDepth !== undefined && d > filter.maxDepth) return false;
+  if (filter.room) {
+    const { w: across, d: down } = filter.room;
+    if (!((w <= across && d <= down) || (w <= down && d <= across))) return false;
+  }
+  return true;
+}

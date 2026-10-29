@@ -1,6 +1,6 @@
 import type { Product } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
-import { groupFamilies, optionChoices, pickVariant } from './catalog';
+import { groupFamilies, matchesFilter, optionChoices, pickVariant } from './catalog';
 
 const product = (
   articleNo: string,
@@ -75,5 +75,22 @@ describe('pickVariant', () => {
 
   it('finds no variant for a value nobody has', () => {
     expect(pickVariant(malm, queenWhite, 'Color', 'Black')).toBeUndefined();
+  });
+});
+
+describe('matchesFilter', () => {
+  const bed = product('100.000.01', '100.000.01', 'MALM Bed frame', 399);
+
+  it('keeps products within the price and size limits', () => {
+    expect(matchesFilter(bed, {})).toBe(true);
+    expect(matchesFilter(bed, { maxPrice: 399, maxWidth: 1.6, maxDepth: 2.1 })).toBe(true);
+    expect(matchesFilter(bed, { maxPrice: 300 })).toBe(false);
+    expect(matchesFilter(bed, { maxWidth: 1.5 })).toBe(false);
+    expect(matchesFilter(bed, { maxDepth: 2 })).toBe(false);
+  });
+
+  it('keeps products that fit the room either way round', () => {
+    expect(matchesFilter(bed, { room: { w: 2.5, d: 1.8 } })).toBe(true);
+    expect(matchesFilter(bed, { room: { w: 1.5, d: 3.0 } })).toBe(false);
   });
 });

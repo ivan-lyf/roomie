@@ -1,5 +1,5 @@
 import { FOOT, INCH, parseArea, parseDimension, SQUARE_FOOT } from '@roomie/geometry';
-import type { RoomType, SourceUnit } from '@roomie/schema';
+import type { Category, RoomType, SourceUnit } from '@roomie/schema';
 
 // Lengths are meters everywhere else; this is where they meet the user's units.
 
@@ -17,6 +17,30 @@ export const ROOM_TYPES: Record<RoomType, string> = {
   balcony: 'Balcony',
   other: 'Other',
 };
+
+/** Each category's name, as a heading or a filter. */
+export const CATEGORIES: Record<Category, string> = {
+  bed: 'Beds',
+  sofa: 'Sofas',
+  armchair: 'Armchairs',
+  coffee_table: 'Coffee tables',
+  dining_table: 'Dining tables',
+  dining_chair: 'Dining chairs',
+  desk: 'Desks',
+  desk_chair: 'Desk chairs',
+  shelving: 'Shelving',
+  wardrobe: 'Wardrobes',
+  dresser: 'Dressers',
+  nightstand: 'Nightstands',
+  tv_unit: 'TV units',
+  rug: 'Rugs',
+  floor_lamp: 'Floor lamps',
+};
+
+const cad = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' });
+
+/** A price in Canadian dollars: `$1,249.00`. */
+export const formatPrice = (cadAmount: number) => cad.format(cadAmount);
 
 export const squareMeters = (m2: number) =>
   `${m2.toFixed(1)} m² · ${Math.round(m2 / SQUARE_FOOT)} sq ft`;

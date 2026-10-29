@@ -1,3 +1,4 @@
+import { turn } from '@roomie/geometry';
 import type { Floorplan } from '@roomie/schema';
 import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
@@ -5,8 +6,13 @@ import { floorplanImageUrl } from '../api';
 import { useAutosave } from '../autosave';
 import { usePlan } from '../plans';
 import { HomeScene } from '../scene/home/HomeScene';
+import { useFurnish } from '../stores/furnish';
 import { useProductsFor } from '../stores/products';
 import { HomePanel } from '../ui/HomePanel';
+
+/** R turns an item a quarter, Shift+R by 15°. */
+const STEP = Math.PI / 2;
+const STEP_FINE = Math.PI / 12;
 
 export function HomePage({ id }: { id: string }) {
   const { plan, error } = usePlan(id);
@@ -28,14 +34,26 @@ export function HomePage({ id }: { id: string }) {
     history.replaceState(null, '', params.size > 0 ? `?${params}` : location.pathname);
   }, [roomId]);
 
-  // Escape goes back to the whole home.
+  // Escape stops placing, else lets go of the item, else goes back to the whole home. R turns
+  // what's being placed.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setRoomId(undefined);
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      const furnish = useFurnish.getState();
+      if (e.key === 'Escape') {
+        if (furnish.armed) furnish.arm(undefined);
+        else if (furnish.selected) furnish.select(undefined);
+        else setRoomId(undefined);
+      } else if ((e.key === 'r' || e.key === 'R') && furnish.armed) {
+        furnish.turnArmed(turn(furnish.armed.rotation, e.shiftKey ? STEP_FINE : STEP));
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // Picking and placing start afresh on each home.
+  useEffect(() => () => useFurnish.getState().reset(), [id]);
 
   if (error) {
     return (

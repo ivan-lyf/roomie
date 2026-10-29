@@ -9,7 +9,8 @@ import { Object3D, Vector3 } from 'three';
 import { Ceilings } from './Ceilings';
 import { CUTAWAY_HEIGHT } from './cutaway';
 import { Floors } from './Floors';
-import { Furniture } from './Furniture';
+import { useFurnish } from '../../stores/furnish';
+import { Furniture, useFloorEvents } from './Furniture';
 import { preloadFloors } from './floorTextures';
 import { Obstacles } from './Obstacles';
 import { Openings, placedOpenings } from './Openings';
@@ -45,6 +46,7 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
   const home = useMemo(() => extentOf(plan.walls.flatMap((w) => [w.a, w.b])), [plan]);
   const room = plan.rooms.find((r) => r.id === roomId);
   const focus = useMemo(() => (room ? extentOf(room.boundary) : home), [room, home]);
+  const floorEvents = useFloorEvents(plan, onRoom);
   useEffect(preloadFloors, []);
   return (
     <Canvas
@@ -52,7 +54,10 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
       frameloop="demand"
       dpr={[1, 2]}
       camera={{ fov: 40, far: 300 }}
-      onPointerMissed={() => onRoom(undefined)}
+      onPointerMissed={() => {
+        onRoom(undefined);
+        useFurnish.getState().select(undefined);
+      }}
     >
       <color attach="background" args={[BACKGROUND]} />
       <Suspense fallback={null}>
@@ -60,7 +65,7 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
       </Suspense>
       <Daylight home={home} />
       <RoomLights plan={plan} />
-      <Floors plan={plan} onRoom={onRoom} />
+      <Floors plan={plan} {...floorEvents} />
       <CutAway
         plan={plan}
         boxes={boxes}

@@ -1,5 +1,6 @@
 import { Category, type Dims, type Product } from '@roomie/schema';
 import { type Family, optionChoices, pickVariant } from '../catalog';
+import { CATEGORIES, formatPrice } from '../format';
 import { type Size, sizeError } from '../scene/size';
 
 type Props = {
@@ -13,24 +14,6 @@ type Props = {
   onSelect: (articleNo: string) => void;
 };
 
-const LABELS: Record<Category, string> = {
-  bed: 'Beds',
-  sofa: 'Sofas',
-  armchair: 'Armchairs',
-  coffee_table: 'Coffee tables',
-  dining_table: 'Dining tables',
-  dining_chair: 'Dining chairs',
-  desk: 'Desks',
-  desk_chair: 'Desk chairs',
-  shelving: 'Shelving',
-  wardrobe: 'Wardrobes',
-  dresser: 'Dressers',
-  nightstand: 'Nightstands',
-  tv_unit: 'TV units',
-  rug: 'Rugs',
-  floor_lamp: 'Floor lamps',
-};
-
 const SOURCE_LABELS: Record<Product['modelSource'], string> = {
   ikea: 'IKEA model',
   ikea_variant: 'IKEA model of another variant',
@@ -40,7 +23,6 @@ const SOURCE_LABELS: Record<Product['modelSource'], string> = {
 /** A model within this many meters of its listed dims counts as true to size. */
 const TOLERANCE_M = 0.01;
 
-const cad = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' });
 const meters = (values: number[]) => `${values.map((v) => v.toFixed(2)).join(' × ')} m`;
 const listed = (dims: Dims) => meters([dims.w, dims.h, dims.d]);
 const footprint = (dims: Dims) => `${Math.round(dims.w * 100)}×${Math.round(dims.d * 100)} cm`;
@@ -62,7 +44,7 @@ export function CatalogPanel(props: Props) {
               c === category ? 'bg-stone-800 text-white' : 'bg-stone-100 hover:bg-stone-200'
             }`}
           >
-            {LABELS[c]}
+            {CATEGORIES[c]}
           </button>
         ))}
       </nav>
@@ -86,7 +68,7 @@ export function CatalogPanel(props: Props) {
               <span className="block font-medium">{f.name}</span>
               <span className="block text-xs text-stone-500">
                 {f.variants.length} variant{f.variants.length === 1 ? '' : 's'} · from{' '}
-                {cad.format(f.variants[0]!.priceCad)} · {footprint(f.variants[0]!.dims)}
+                {formatPrice(f.variants[0]!.priceCad)} · {footprint(f.variants[0]!.dims)}
                 {f.variants.some((v) => v.modelSource === 'ikea' && v.modelUrl) && ' · IKEA model'}
               </span>
             </button>
@@ -133,7 +115,7 @@ function Details({ product, measured }: { product: Product; measured: Size | und
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
       <dt className="text-stone-500">Price</dt>
-      <dd>{cad.format(product.priceCad)}</dd>
+      <dd>{formatPrice(product.priceCad)}</dd>
       <dt className="text-stone-500">Listed</dt>
       <dd>{listed(product.dims)}</dd>
       <dt className="text-stone-500">Model</dt>
