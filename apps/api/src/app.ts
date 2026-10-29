@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { modelPath } from './catalog/store';
 import type { Db } from './db/client';
 import { floorplanRoutes } from './floorplans/routes';
+import type { IntentWriter } from './layouts/intent';
+import { layoutRoutes } from './layouts/routes';
 import { products } from './db/schema';
 import type { PlanReader } from './plan-reader/reader';
 import type { Storage } from './storage';
@@ -20,16 +22,22 @@ export type AppOptions = {
   plans?: Pick<Storage, 'put' | 'get' | 'signedUrl'>;
   /** Reads uploaded plans; without one, they're traced by hand. */
   reader?: PlanReader;
+  /** Furnishes homes; without one, they're furnished by hand. */
+  layoutWriter?: IntentWriter;
+  /** Solver seeds per room, fewer in tests. */
+  layoutSeeds?: number;
 };
 
 const ProductList = z.array(Product);
 
-export function createApp({ dataDir, db, storage, plans, reader }: AppOptions) {
+export function createApp(options: AppOptions) {
+  const { dataDir, db, storage, plans, reader } = options;
   const app = new Hono().basePath('/api');
 
   app.get('/health', (c) => c.json({ ok: true }));
 
   app.route('/floorplans', floorplanRoutes({ db, plans, dataDir, reader }));
+  app.route('/', layoutRoutes({ db, writer: options.layoutWriter, seeds: options.layoutSeeds }));
 
   /**
    * The catalog's active products, or one category's. With `articleNo` (comma-separated), those
@@ -39,7 +47,10 @@ export function createApp({ dataDir, db, storage, plans, reader }: AppOptions) {
     const query = c.req.query('category');
     const category = query === undefined ? undefined : Category.safeParse(query);
     if (category && !category.success) return c.json({ error: `unknown category: ${query}` }, 400);
-    const wanted = c.req.queries('articleNo')?.flatMap((q) => q.split(',')).filter(Boolean);
+    const wanted = c.req
+      .queries('articleNo')
+      ?.flatMap((q) => q.split(','))
+      .filter(Boolean);
     const bad = wanted?.find((a) => !ArticleNo.safeParse(a).success);
     if (bad !== undefined) return c.json({ error: `not an article number: ${bad}` }, 400);
     if (!db) return c.json({ error: 'DATABASE_URL is not set' }, 503);
