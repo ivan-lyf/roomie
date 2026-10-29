@@ -245,15 +245,18 @@ Footprints are rectangles from `dims` and `rotation`. Round products (71) are 24
 Out of M3: swapping items (M5), regenerating rooms (M4/M5), walkways and scores (M4), wall-mounted items, and instancing beyond shared geometry, unless the demo home drops below 60 fps.
 
 ### M4 — Auto layout (3–4 weeks)
-- [ ] **Scorer:** hard constraints (pass/fail) plus soft scores (focal point facing, wall alignment, circulation path from door to each zone, bed access, desk near window, symmetry, budget use)
-- [ ] **Whole-home checks:** a clear path from the entrance through every interior door to each room; style consistency across rooms; total within budget
-- [ ] **Solver:** turns relational intent into coordinates (greedy placement plus local random search), one room at a time; rooms only interact through shared doors, so they can be solved in parallel
-- [ ] **LLM intent:** a home summary (rooms, types, sizes, how they connect), inputs, and the filtered catalog in; per room, a product list plus relational constraints out (zod-validated). One call plans the whole home, so it splits the budget and keeps the style consistent
-- [ ] **Repair loop:** solver failures go back to the LLM, which picks smaller substitutes or moves budget between rooms
-- [ ] **Best-of-N:** generate N candidates, return the top score
-- [ ] Log every candidate (not just the winner)
+- [x] **Scorer:** hard constraints (pass/fail) plus soft scores (focal point facing, wall alignment, circulation path from door to each zone, bed access, desk near window, symmetry, budget use)
+- [x] **Whole-home checks:** a clear path from the entrance through every interior door to each room; style consistency across rooms; total within budget
+- [x] **Solver:** turns relational intent into coordinates (greedy placement plus local random search), one room at a time; rooms meet at doors and at sides open to each other, so each is solved around the furniture already in the rooms before it
+- [x] **LLM intent:** a home summary (rooms, types, sizes, how they connect), inputs, and the filtered catalog in; per room, a product list plus relational constraints out (zod-validated). One call plans the whole home, so it splits the budget and keeps the style consistent
+- [x] **Repair loop:** solver failures go back to the LLM, which picks smaller substitutes or moves budget between rooms
+- [x] **Best-of-N:** generate N candidates, return the top score
+- [x] Log every candidate (not just the winner)
 
 **Done when:** 100% of outputs are valid on the test set and ≥ 60% pass your quality bar.
+
+- [x] 100% valid: 16/16 test homes with Haiku 5.5, 4/4 with Opus 5.5 (2026-10-29)
+- [ ] ≥ 60% rated "I'd live with this" on the contact sheets in `data/eval/layouts-*.html`
 
 #### M4 in detail
 
@@ -289,7 +292,7 @@ Unfurnished rooms are empty, so a home whose furnished rooms all pass has a clea
 
 **The scorer** (`packages/geometry/src/layout/score.ts`): soft scores in [0, 1], each logged in `scoreBreakdown`, weighted by `packages/geometry/weights.json` (new: hand-set weights to start, replaced by M7's fitted ones). Per room: relations met (with partial credit by distance and angle), items against walls flush, seating facing its focal point, walkway width beyond the 75 cm minimum, beds with their heads to a wall, desks near a window, symmetry of pairs, tall items kept clear of windows, and furniture spread over the room. Per home: style agreement across rooms (colours and materials) and budget use (70–100% of it scores best; over budget is a hard fail).
 
-**The solver** (`packages/geometry/src/layout/solve.ts`), one room at a time, rooms in parallel, with an injected seed:
+**The solver** (`packages/geometry/src/layout/solve.ts`), one room at a time, each around the furniture already chosen for rooms open to it, with an injected seed:
 
 1. Anchors first (bed, sofa, desk, dining table, wardrobe, TV unit), then the items that hang off them (nightstands, coffee table, chairs, rug, lamps).
 2. For each item, candidate spots: along each wall face every 10 cm (via M3's snapping), in corners, relative to an item already placed (in front of, beside, around), or on the open floor for free-standing items. Spots that break a hard rule are dropped; the best-scoring one is kept.
@@ -310,13 +313,15 @@ Intents are cached by home, inputs, model and prompt version, like readings, so 
 1. **Walkways:** `blocks_path` in `validateLayout`, with tests on the demo home (a sofa that walls off the bedroom door's path fails), and drawn red in the M3 marks.
 2. **Intent schema:** `LayoutIntent` and its relations in `packages/schema`, with hand-written intents for the two fixture homes (made-up products, like M3's tests).
 3. **Scorer:** each feature with a test, `weights.json`, and `scoreLayout` returning a score and its breakdown.
-4. **Solver:** `solveRoom(plan, room, intent, products, seed)`. Tests: the fixture intents solve to valid layouts that meet their relations, the same seed gives the same layout, and an impossible room fails with a reason.
+4. **Solver:** `solveRoom(plan, intent, products, { seed, others })`. Tests: the fixture intents solve to valid layouts that meet their relations, the same seed gives the same layout, and an impossible room fails with a reason.
 5. **Candidates:** the catalog filter per room, the style tables, and the budget split, with tests.
 6. **Intent call:** the prompt, the Claude call (structured output, one retry, refusal and limit errors as in the plan reader), the intent cache, and config. Tests with a fake client.
 7. **Pipeline:** the route, best-of-N, whole-home checks, the repair loop, logging every candidate, and copying the winner into the plan. Tests with a fake LLM.
 8. **Furnish for me:** in the Furnish tab, the inputs (rooms, budget, style, must-haves, all with defaults), progress per room, and the result as one edit to undo. Plain UI, as in M3.
 9. **`pnpm layouts:eval`:** furnishes each test home (the fixtures plus the Opus readings of the eval plans) with fixed inputs from cached intents. It reports validity (must be 100%), scores, seconds per room and per home (goals: under 60 s and 3 min), and cost, and renders a top-down picture of each home on one contact sheet.
 10. **Done check:** 100% valid on the test set, and at least 60% of the contact sheet's homes rated "I'd live with this" by you.
+
+    Run on 2026-10-29. Every winner passed `validateLayout`: 16/16 homes with `claude-haiku-5-5` (mean score 0.88, slowest home 37 s, $0.06 for all 16) and 4/4 with `claude-opus-5-5` on the demo one-bedroom, the studio, fr-12 and fr-27 (mean 0.90, slowest 66 s, $0.55, $0.08–0.27 a home). One real furnishing through the web app, of fr-56 as Opus read it, took $0.08 and gave 11 valid items for $2,054 of a $2,400 budget. Two things the runs changed: rooms open to each other share walkways, so rooms are solved one after another, each around the furniture already chosen next door, not in parallel; and polygon clipping, which throws on a rare near-degenerate shape, falls back to a sampled area. Seen on the sheets: layouts are sensible on the whole (beds against walls with nightstands either side, a sofa, coffee table and rug together), with misses still to tune: a nightstand left away from its bed, a coffee table placed away from the sofa, a TV on a side wall where the room has no wall facing the sofa, and fr-54's séjour, open on two sides, losing three items after two repairs. The scores look generous next to the sheets: the hand-set weights are M7's to fit. Haiku's layouts look close to Opus's at a thirtieth of the cost; `LAYOUT_MODEL` stays Opus until the ratings say otherwise.
 
 Out of M4: swapping and regenerating one room (M5), sign-in and allowances (M6), the rating page and learned weights (M7), and L-shaped or corner furniture (§8).
 
@@ -382,7 +387,7 @@ Prior work to read: 3D-FRONT dataset (research license), ATISS, LayoutGPT, Holod
 | Room boundaries are ambiguous in open-plan homes | Ask the model for the boundary between labels; the editor makes splitting and merging rooms quick |
 | Wrong scale silently ruins every clearance check | Plausibility checks on units, a stored residual for every scale, and labels always checked against calibration (§5.1) |
 | Listed areas include walls, closets, or balconies | The area calibration UI asks what the figure covers; area plus a side catches the mismatch |
-| Multi-room plans make generation slow or expensive | One intent call for the home, then rooms solved in parallel; regenerate one room at a time when editing |
+| Multi-room plans make generation slow or expensive | One intent call for the home (about $0.08–0.27 on Opus, under $0.01 on Haiku), then rooms solved in seconds; regenerate one room at a time when editing |
 | IKEA.ca structure changes and breaks the scraper | Prefer JSON endpoints; snapshot tests on saved responses; alert on scrape failures |
 | IKEA terms of service and model licensing | Personal and portfolio use only; revisit before any public launch |
 | Multi-room work delays a usable studio flow | Build and test M2–M4 on studios first, then multi-room plans; studios stay a first-class case |
