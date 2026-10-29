@@ -269,7 +269,8 @@ function anchorOf(ref: string, relations: readonly Relation[]): string | undefin
   for (const r of relations) {
     if ((r.kind === 'beside' || r.kind === 'in_front_of') && r.item === ref) return r.target;
     if (r.kind === 'around' && r.items.includes(ref)) return r.target;
-    if (r.kind === 'under' && r.item === ref) return r.targets[0];
+    // A rug goes in once everything it lies under is in.
+    if (r.kind === 'under' && r.item === ref) return r.targets.at(-1);
   }
   return undefined;
 }
