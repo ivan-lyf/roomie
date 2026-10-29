@@ -255,6 +255,71 @@ Out of M3: swapping items (M5), regenerating rooms (M4/M5), walkways and scores 
 
 **Done when:** 100% of outputs are valid on the test set and ≥ 60% pass your quality bar.
 
+#### M4 in detail
+
+**Who does what.** The LLM picks the products and says how they relate ("sofa against the longest wall without windows, facing the TV unit"), as a closed set of relations, never coordinates. `packages/geometry` turns that into positions with a seeded solver, scores every candidate, and ships only layouts that pass `validateLayout`. Everything but the LLM call is pure code, testable without spending anything.
+
+**Walkways**, the hard rule M3 left out, become a check in `validateLayout`:
+
+| Code | Fails when |
+|---|---|
+| `blocks_path` | In a furnished room, a door can't be reached from another of the room's doors, or an item's use zone can't be reached from a door, along a path at least 75 cm wide. Rugs don't block. The floor is a 5 cm grid, eroded by 37.5 cm, then searched breadth-first from each door's clear zone |
+
+Unfurnished rooms are empty, so a home whose furnished rooms all pass has a clear path from the entrance to every room: the whole-home path check reduces to this one.
+
+**The intent** (`packages/schema`, `LayoutIntent`), one LLM answer per home:
+
+- Per room: items, each with a `ref` ("sofa", "ns_left"), an `articleNo` from the candidates sent, and a one-line reason (kept for M5's "Why here?").
+- Per room: relations between them, from a closed list the solver knows how to meet and the scorer how to measure:
+
+  | Relation | Meaning |
+  |---|---|
+  | `against_wall` | back to a wall: the longest, the longest without windows, the one opposite the door, or any |
+  | `facing` | turned to an item, a window, or the room's middle |
+  | `in_front_of` | in front of an item, at a normal or a close distance (a coffee table before a sofa) |
+  | `beside` | beside an item, on its left, right or either side (nightstands by the bed's head) |
+  | `around` | chairs around a table |
+  | `under` | a rug under some items |
+  | `in_corner`, `near_window`, `away_from_door` | where it stands in the room |
+  | `pair` | two items mirrored about a third (nightstands about a bed) |
+
+- How the budget was split between rooms.
+
+**Candidates for the prompt** (`apps/api`): the catalog is too big to send (2,937 products, 1,106 families). Per room, the categories that suit its type, then per category up to 12 families that fit the room (M3's filter), sit in the room's share of the budget, and match the style. The catalog has no style tags, only IKEA's colour and material words, so each style preset is a table of the colours and materials it likes (light wood, white and beige for `scandinavian`; black, grey and metal for `modern`; oak, brown and natural fibres for `warm_minimal`), in one place to tune. About 150 lines of candidates per home.
+
+**The scorer** (`packages/geometry/src/layout/score.ts`): soft scores in [0, 1], each logged in `scoreBreakdown`, weighted by `packages/geometry/weights.json` (new: hand-set weights to start, replaced by M7's fitted ones). Per room: relations met (with partial credit by distance and angle), items against walls flush, seating facing its focal point, walkway width beyond the 75 cm minimum, beds with their heads to a wall, desks near a window, symmetry of pairs, tall items kept clear of windows, and furniture spread over the room. Per home: style agreement across rooms (colours and materials) and budget use (70–100% of it scores best; over budget is a hard fail).
+
+**The solver** (`packages/geometry/src/layout/solve.ts`), one room at a time, rooms in parallel, with an injected seed:
+
+1. Anchors first (bed, sofa, desk, dining table, wardrobe, TV unit), then the items that hang off them (nightstands, coffee table, chairs, rug, lamps).
+2. For each item, candidate spots: along each wall face every 10 cm (via M3's snapping), in corners, relative to an item already placed (in front of, beside, around), or on the open floor for free-standing items. Spots that break a hard rule are dropped; the best-scoring one is kept.
+3. Local random search: nudge, slide along a wall, swap walls, mirror, for a fixed number of steps, keeping only moves that stay valid and score higher.
+4. An item with no valid spot fails the room, with a reason ("the 1.8 m bed doesn't fit Bedroom 2 with 60 cm on both sides").
+
+**The pipeline** (`POST /floorplans/:id/layouts` with `GenerationInputs`, then `GET` for progress per room):
+
+1. One intent call for the home: prompt `layout-intent.v1`, structured output checked with zod, the model and effort from config (`LAYOUT_MODEL`, `LAYOUT_EFFORT`). On a malformed answer or an article number that wasn't sent, ask once more with the error, then fail cleanly.
+2. Best-of-N: N = 8 solver seeds per room. A room's candidates are its N layouts; the home's winner combines each room's best, then passes the whole-home checks.
+3. Repair loop, at most twice: rooms that failed go back to the LLM in the same conversation, with the solver's reasons, for smaller substitutes or a new budget split. A room that still fails ships without the items that don't fit, and says so; nothing invalid ships.
+4. Every candidate is logged as a `Layout` row (status `candidate`, the winner `winner`): inputs, intent, placements, score and breakdown, prompt version. The winner's placements are copied into `Floorplan.furniture`, with `furnishedFrom` set, as M3 planned.
+
+Intents are cached by home, inputs, model and prompt version, like readings, so reruns cost nothing. An intent call is about 10k tokens in and 3–5k out: roughly $0.10–0.15 a home on Opus 5.5, $0.06 on Sonnet 5.5, under $0.01 on Haiku 5.5. The Claude key has about $2.25 left, so the solver and scorer are built on hand-written intents, and the model is picked by a small bake-off.
+
+**Steps,** each one commit and demoable:
+
+1. **Walkways:** `blocks_path` in `validateLayout`, with tests on the demo home (a sofa that walls off the bedroom door's path fails), and drawn red in the M3 marks.
+2. **Intent schema:** `LayoutIntent` and its relations in `packages/schema`, with hand-written intents for the two fixture homes (made-up products, like M3's tests).
+3. **Scorer:** each feature with a test, `weights.json`, and `scoreLayout` returning a score and its breakdown.
+4. **Solver:** `solveRoom(plan, room, intent, products, seed)`. Tests: the fixture intents solve to valid layouts that meet their relations, the same seed gives the same layout, and an impossible room fails with a reason.
+5. **Candidates:** the catalog filter per room, the style tables, and the budget split, with tests.
+6. **Intent call:** the prompt, the Claude call (structured output, one retry, refusal and limit errors as in the plan reader), the intent cache, and config. Tests with a fake client.
+7. **Pipeline:** the route, best-of-N, whole-home checks, the repair loop, logging every candidate, and copying the winner into the plan. Tests with a fake LLM.
+8. **Furnish for me:** in the Furnish tab, the inputs (rooms, budget, style, must-haves, all with defaults), progress per room, and the result as one edit to undo. Plain UI, as in M3.
+9. **`pnpm layouts:eval`:** furnishes each test home (the fixtures plus the Opus readings of the eval plans) with fixed inputs from cached intents. It reports validity (must be 100%), scores, seconds per room and per home (goals: under 60 s and 3 min), and cost, and renders a top-down picture of each home on one contact sheet.
+10. **Done check:** 100% valid on the test set, and at least 60% of the contact sheet's homes rated "I'd live with this" by you.
+
+Out of M4: swapping and regenerating one room (M5), sign-in and allowances (M6), the rating page and learned weights (M7), and L-shaped or corner furniture (§8).
+
 ### M5 — Editing (1 week)
 - [ ] Swap drawer: same category, footprint within tolerance, budget filter
 - [ ] Delete
