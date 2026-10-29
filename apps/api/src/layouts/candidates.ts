@@ -1,32 +1,16 @@
 import { bounds, floorPolygon, styleMatch } from '@roomie/geometry';
-import type { Category, Floorplan, GenerationInputs, Product, RoomType } from '@roomie/schema';
+import {
+  type Category,
+  type Floorplan,
+  type GenerationInputs,
+  type Product,
+  ROOM_CATEGORIES,
+  type RoomType,
+} from '@roomie/schema';
 
 // What the LLM may choose from: the catalog is too big to send (about 2,900 products), so per
 // category, the families that fit the rooms, sit in their share of the budget, and suit the
 // style (PLAN.md M4).
-
-/** The categories that suit each furnishable room, the essentials first. */
-export const ROOM_CATEGORIES: Partial<Record<RoomType, Category[]>> = {
-  living_room: ['sofa', 'coffee_table', 'tv_unit', 'armchair', 'shelving', 'rug', 'floor_lamp'],
-  bedroom: ['bed', 'nightstand', 'wardrobe', 'dresser', 'rug', 'floor_lamp', 'desk', 'desk_chair'],
-  studio: [
-    'bed',
-    'sofa',
-    'coffee_table',
-    'nightstand',
-    'wardrobe',
-    'dining_table',
-    'dining_chair',
-    'tv_unit',
-    'desk',
-    'desk_chair',
-    'shelving',
-    'rug',
-    'floor_lamp',
-  ],
-  dining_area: ['dining_table', 'dining_chair', 'shelving', 'rug', 'floor_lamp'],
-  den_office: ['desk', 'desk_chair', 'shelving', 'armchair', 'floor_lamp', 'rug'],
-};
 
 /** How a room's share of the budget compares with others, before its size counts. */
 const ROOM_WEIGHT: Partial<Record<RoomType, number>> = {

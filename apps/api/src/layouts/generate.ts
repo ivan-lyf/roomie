@@ -14,9 +14,10 @@ import type {
   LayoutIntent,
   Placement,
   Product,
+  RoomProgress,
 } from '@roomie/schema';
 import type { ReaderUsage } from '../plan-reader/reader';
-import { pickCandidates } from './candidates';
+import { pickCandidates, shortName } from './candidates';
 import type { IntentRequest, IntentResult, IntentWriter } from './intent';
 
 // One furnishing of a home (PLAN.md M4): the LLM's intent, each room solved with N seeds, failed
@@ -47,12 +48,7 @@ const DROP_FIRST: Category[] = [
   'bed',
 ];
 
-export type RoomStatus = {
-  roomId: string;
-  status: 'waiting' | 'done' | 'failed';
-  /** Why a room is missing items, or wasn't furnished. */
-  reasons?: string[];
-};
+export type RoomStatus = RoomProgress;
 
 /** One way to furnish the home: placements with unique ids, and its score. */
 export type HomeCandidate = { placements: Placement[] } & Scored;
@@ -76,6 +72,8 @@ export type GenerateDeps = {
   catalog: readonly Product[];
   seeds?: number;
   onProgress?: (rooms: RoomStatus[]) => void;
+  /** Each intent as it comes, to log if what follows fails. */
+  onIntent?: (intent: LayoutIntent) => void;
   signal?: AbortSignal;
 };
 
@@ -112,6 +110,7 @@ export async function generateHome(
   let usage = result.usage;
   let repairs = 0;
   let solved: Map<string, RoomSolution[]>;
+  deps.onIntent?.(result.intent);
   for (;;) {
     solved = new Map();
     for (const roomId of inputs.roomIds) {
@@ -128,6 +127,7 @@ export async function generateHome(
     repairs++;
     result = await deps.writer.repair(result, request, feedback.join('\n'), deps.signal);
     usage = addUsage(usage, result.usage);
+    deps.onIntent?.(result.intent);
   }
 
   const bestOf = (roomId: string) => solved.get(roomId)!.toSorted(better)[0];
@@ -247,7 +247,9 @@ function trimToBudget(
     total -= price(p);
     reasons.push({
       roomId: room.roomId,
-      reason: `The ${products.get(p.articleNo)!.name} was left out to stay within budget.`,
+      reason:
+        `The ${shortName(products.get(p.articleNo)!.name)} was left out ` +
+        'to stay within budget.',
     });
   }
   return { rooms: kept, reasons };

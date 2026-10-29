@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Radians } from './geometry';
+import type { RoomType } from './floorplan';
 import { ArticleNo, Category } from './product';
 
 // Placeholder presets; revisit once the catalog's style tags are known.
@@ -66,3 +67,51 @@ export const Rating = z.object({
   createdAt: z.coerce.date(),
 });
 export type Rating = z.infer<typeof Rating>;
+
+/** The categories that suit each furnishable room, the essentials first. */
+export const ROOM_CATEGORIES: Partial<Record<RoomType, Category[]>> = {
+  living_room: ['sofa', 'coffee_table', 'tv_unit', 'armchair', 'shelving', 'rug', 'floor_lamp'],
+  bedroom: ['bed', 'nightstand', 'wardrobe', 'dresser', 'rug', 'floor_lamp', 'desk', 'desk_chair'],
+  studio: [
+    'bed',
+    'sofa',
+    'coffee_table',
+    'nightstand',
+    'wardrobe',
+    'dining_table',
+    'dining_chair',
+    'tv_unit',
+    'desk',
+    'desk_chair',
+    'shelving',
+    'rug',
+    'floor_lamp',
+  ],
+  dining_area: ['dining_table', 'dining_chair', 'shelving', 'rug', 'floor_lamp'],
+  den_office: ['desk', 'desk_chair', 'shelving', 'armchair', 'floor_lamp', 'rug'],
+};
+
+/** How one room is going in a furnishing. */
+export const RoomProgress = z.object({
+  roomId: z.string().min(1),
+  status: z.enum(['waiting', 'done', 'failed']),
+  /** Why a room is missing items, or wasn't furnished. */
+  reasons: z.array(z.string()).optional(),
+});
+export type RoomProgress = z.infer<typeof RoomProgress>;
+
+/** A furnishing under way or done, as the browser polls for it. */
+export const GenerationJob = z.object({
+  generationId: z.uuid(),
+  floorplanId: z.uuid(),
+  status: z.enum(['running', 'done', 'failed']),
+  rooms: z.array(RoomProgress),
+  /** Why it failed, in words. */
+  error: z.string().optional(),
+  /** The winning layout, now the home's furniture. */
+  layoutId: z.uuid().optional(),
+  furniture: z.array(Placement).optional(),
+  /** What the LLM calls cost, in dollars, when the model's price is known. */
+  costUsd: z.number().optional(),
+});
+export type GenerationJob = z.infer<typeof GenerationJob>;

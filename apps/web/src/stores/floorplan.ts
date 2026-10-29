@@ -86,6 +86,8 @@ type FloorplanState = {
   addObstacle: (kind: ObstacleKind, polygon: Vec2[]) => string;
   setObstacle: (obstacleId: string, change: Partial<Pick<Obstacle, 'kind' | 'height'>>) => void;
 
+  /** Puts in all new furniture, a furnished layout's, as one edit to undo. */
+  setFurniture: (furniture: Placement[]) => void;
   /** Puts a product in a room, and returns the new item's id. */
   placeItem: (item: Omit<Placement, 'id'>) => string;
   /** Moves or turns an item, and sets the room it now stands in. */
@@ -332,6 +334,7 @@ export const useFloorplan = create<FloorplanState>()(
             }),
           })),
 
+        setFurniture: (furniture) => edit((plan) => ({ ...plan, furniture })),
         placeItem: (item) => {
           const itemId = id('f');
           edit((plan) => ({ ...plan, furniture: [...plan.furniture, { id: itemId, ...item }] }));

@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { Floorplan, Layout, LayoutIntent, Product } from '@roomie/schema';
+import { Floorplan, type GenerationJob, Layout, LayoutIntent, Product } from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import catalog from '../../../../fixtures/catalog/products.json';
 import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
@@ -11,7 +11,6 @@ import { layouts, products } from '../db/schema';
 import { testDb } from '../test/db';
 import { pngHeader } from '../test/fixtures';
 import type { IntentWriter } from './intent';
-import type { GenerationJob } from './routes';
 
 let dataDir: string;
 let db: Awaited<ReturnType<typeof testDb>>;

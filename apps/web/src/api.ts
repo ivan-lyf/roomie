@@ -1,4 +1,12 @@
-import { type Category, Floorplan, FloorplanEdit, FloorplanSummary, Product } from '@roomie/schema';
+import {
+  type Category,
+  Floorplan,
+  FloorplanEdit,
+  FloorplanSummary,
+  type GenerationInputs,
+  GenerationJob,
+  Product,
+} from '@roomie/schema';
 import { z } from 'zod';
 
 const ProductList = z.array(Product);
@@ -84,4 +92,22 @@ export async function readFloorplan(id: string, replace = false): Promise<Floorp
   });
   if (!res.ok) throw await failure(res, 'POST /api/floorplans/:id/read');
   return Floorplan.parse(await res.json());
+}
+
+/** Starts furnishing a saved home; answers at once with the generation to poll. */
+export async function startFurnishing(id: string, inputs: GenerationInputs): Promise<string> {
+  const res = await fetch(`/api/floorplans/${encodeURIComponent(id)}/layouts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(inputs),
+  });
+  if (!res.ok) throw await failure(res, 'POST /api/floorplans/:id/layouts');
+  return z.object({ generationId: z.uuid() }).parse(await res.json()).generationId;
+}
+
+/** How a furnishing is going, and what came of it. */
+export async function fetchGeneration(id: string, signal?: AbortSignal): Promise<GenerationJob> {
+  const res = await fetch(`/api/generations/${encodeURIComponent(id)}`, { signal });
+  if (!res.ok) throw await failure(res, 'GET /api/generations/:id');
+  return GenerationJob.parse(await res.json());
 }

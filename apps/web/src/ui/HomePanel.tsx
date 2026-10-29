@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Link } from 'wouter';
 import { formatPrice, ROOM_TYPES, squareMeters } from '../format';
 import { furnitureTotals, type Totals } from '../furnishing';
+import { DEMO_ID } from '../plans';
 import { useProducts } from '../stores/products';
 import { FurnishPanel } from './FurnishPanel';
 import { LookControls } from './LookControls';
@@ -59,7 +60,7 @@ export function HomePanel(props: Props) {
       </nav>
 
       {tab === 'furnish' ? (
-        <FurnishPanel plan={plan} roomId={roomId} onRoom={onRoom} />
+        <FurnishPanel plan={plan} roomId={roomId} onRoom={onRoom} saved={props.id !== DEMO_ID} />
       ) : (
         <HomeTab {...props} />
       )}

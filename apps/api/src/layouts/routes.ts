@@ -1,28 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { FURNISHABLE, Floorplan, GenerationInputs, type Placement, Product } from '@roomie/schema';
+import {
+  FURNISHABLE,
+  Floorplan,
+  GenerationInputs,
+  type GenerationJob,
+  Product,
+} from '@roomie/schema';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Db } from '../db/client';
 import { floorplans, layouts, products } from '../db/schema';
 import { readingCost } from '../plan-reader/claude';
-import { generateHome, type RoomStatus } from './generate';
+import { generateHome } from './generate';
 import type { IntentWriter } from './intent';
-
-/** A furnishing under way or done, as the browser polls for it. */
-export type GenerationJob = {
-  generationId: string;
-  floorplanId: string;
-  status: 'running' | 'done' | 'failed';
-  rooms: RoomStatus[];
-  /** Why it failed, in words. */
-  error?: string;
-  /** The winning layout, now the home's furniture. */
-  layoutId?: string;
-  furniture?: Placement[];
-  /** What the LLM calls cost, in dollars, when the model's price is known. */
-  costUsd?: number;
-};
 
 export type LayoutOptions = {
   db: Db | undefined;
@@ -97,10 +88,12 @@ async function furnish(
   job: GenerationJob,
   seeds: number | undefined,
 ) {
+  let intent: unknown;
   try {
     const home = await generateHome(plan, inputs, {
       writer,
       catalog,
+      onIntent: (i) => (intent = i),
       ...(seeds !== undefined && { seeds }),
       onProgress: (rooms) => (job.rooms = rooms.map((r) => ({ ...r }))),
     });
@@ -139,5 +132,11 @@ async function furnish(
   } catch (e) {
     job.status = 'failed';
     job.error = e instanceof Error ? e.message : String(e);
+    // Enough to reproduce it offline without paying for the intent again.
+    console.error(
+      `Furnishing ${job.generationId} of ${plan.id} failed:`,
+      e,
+      JSON.stringify({ inputs, intent }),
+    );
   }
 }

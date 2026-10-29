@@ -22,6 +22,7 @@ import { removeItem, rotateItem, useLayoutProblems } from '../furnishing';
 import { redo, undo } from '../stores/floorplan';
 import { useFurnish } from '../stores/furnish';
 import { useProducts } from '../stores/products';
+import { AutoFurnish } from './AutoFurnish';
 
 /** The category a room's furnishing starts on. */
 const FIRST_CATEGORY: Partial<Record<RoomType, Category>> = {
@@ -47,38 +48,59 @@ type Props = {
   plan: Floorplan;
   roomId: string | undefined;
   onRoom: (roomId: string) => void;
+  /** Whether the plan is saved on the server, so it can be furnished automatically. */
+  saved: boolean;
 };
 
 /** Picks products to place in a room, from the catalog filtered by price and size. */
-export function FurnishPanel({ plan, roomId, onRoom }: Props) {
+export function FurnishPanel({ plan, roomId, onRoom, saved }: Props) {
   const room = plan.rooms.find((r) => r.id === roomId);
-  if (!room || !furnishable(room)) {
-    const rooms = plan.rooms.filter(furnishable);
-    return (
-      <section className="space-y-2">
-        <p>{room ? `The ${room.name} doesn't get furniture. ` : ''}Pick a room to furnish:</p>
-        {rooms.length === 0 && (
-          <p className="text-stone-500">
-            No room gets furniture: make one a living room, bedroom, studio, dining area or den.
-          </p>
-        )}
-        <ul className="flex flex-wrap gap-1">
-          {rooms.map((r) => (
-            <li key={r.id}>
-              <button
-                type="button"
-                className="rounded-full bg-stone-100 px-2.5 py-1 text-xs hover:bg-stone-200"
-                onClick={() => onRoom(r.id)}
-              >
-                {r.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    );
-  }
-  return <Catalog key={room.id} plan={plan} room={room} />;
+  return (
+    <>
+      <AutoFurnish plan={plan} saved={saved} />
+      {room && furnishable(room) ? (
+        <Catalog key={room.id} plan={plan} room={room} />
+      ) : (
+        <RoomPicker plan={plan} room={room} onRoom={onRoom} />
+      )}
+    </>
+  );
+}
+
+/** The rooms to pick from, when the one picked doesn't get furniture. */
+function RoomPicker({
+  plan,
+  room,
+  onRoom,
+}: {
+  plan: Floorplan;
+  room: Room | undefined;
+  onRoom: (roomId: string) => void;
+}) {
+  const rooms = plan.rooms.filter(furnishable);
+  return (
+    <section className="space-y-2">
+      <p>{room ? `The ${room.name} doesn't get furniture. ` : ''}Pick a room to furnish:</p>
+      {rooms.length === 0 && (
+        <p className="text-stone-500">
+          No room gets furniture: make one a living room, bedroom, studio, dining area or den.
+        </p>
+      )}
+      <ul className="flex flex-wrap gap-1">
+        {rooms.map((r) => (
+          <li key={r.id}>
+            <button
+              type="button"
+              className="rounded-full bg-stone-100 px-2.5 py-1 text-xs hover:bg-stone-200"
+              onClick={() => onRoom(r.id)}
+            >
+              {r.name}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function Catalog({ plan, room }: { plan: Floorplan; room: Room }) {
