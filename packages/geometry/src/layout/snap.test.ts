@@ -88,7 +88,11 @@ describe('snapPlacement', () => {
     // Further from the doorway, it snaps, however the room was outlined.
     expect(snap(nightstand, 2.0, 0.15, 0, 'r1', square)).toEqual({ x: 2.0, y: 0.25, rotation: 0 });
     const reversed = { ...square, rooms: [{ ...room, boundary: corners.toReversed() }] };
-    expect(snap(nightstand, 2.0, 0.15, 0, 'r1', reversed)).toEqual({ x: 2.0, y: 0.25, rotation: 0 });
+    expect(snap(nightstand, 2.0, 0.15, 0, 'r1', reversed)).toEqual({
+      x: 2.0,
+      y: 0.25,
+      rotation: 0,
+    });
   });
 });
 

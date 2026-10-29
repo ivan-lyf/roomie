@@ -41,6 +41,15 @@ export function itemOutline(
   return localRect(placement, -w / 2, -d / 2, w / 2, d / 2);
 }
 
+/** How far an item reaches from its center along a direction (a unit vector). */
+export function reach(product: Pick<Product, 'dims' | 'shape'>, rotation: number, n: Vec2): number {
+  if (product.shape === 'round') return product.dims.w / 2;
+  const across = { x: Math.cos(rotation), y: -Math.sin(rotation) };
+  const front = { x: Math.sin(rotation), y: Math.cos(rotation) };
+  const dot = (a: Vec2, b: Vec2) => a.x * b.x + a.y * b.y;
+  return (Math.abs(dot(across, n)) * product.dims.w + Math.abs(dot(front, n)) * product.dims.d) / 2;
+}
+
 /** A wall's body: the rectangle around its center line, as thick as the wall. */
 export function wallOutline(wall: { a: Vec2; b: Vec2; thickness: number }): Vec2[] {
   const length = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y) || 1;

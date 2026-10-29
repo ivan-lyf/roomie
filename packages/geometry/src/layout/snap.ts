@@ -1,7 +1,7 @@
 import type { Category, Placement, Vec2 } from '@roomie/schema';
 import { signedArea } from '../plan/polygon';
 import { edgeInsets, floorPolygon } from '../plan/rooms';
-import { itemOutline, overlaps, type ProductFit, shape } from './shapes';
+import { itemOutline, overlaps, type ProductFit, reach, shape } from './shapes';
 import { doorZones } from './zones';
 import { type LayoutPlan, OVERLAP_TOLERANCE } from './validate';
 
@@ -52,16 +52,6 @@ function wallFaces(plan: LayoutPlan, roomId: string): Face[] {
 }
 
 const dot = (a: Vec2, b: Vec2) => a.x * b.x + a.y * b.y;
-
-/** How far an item reaches from its center along a direction. */
-function reach(product: ProductFit, rotation: number, n: Vec2): number {
-  if (product.shape === 'round') return product.dims.w / 2;
-  const across = { x: Math.cos(rotation), y: -Math.sin(rotation) };
-  const front = { x: Math.sin(rotation), y: Math.cos(rotation) };
-  return (
-    (Math.abs(dot(across, n)) * product.dims.w) / 2 + (Math.abs(dot(front, n)) * product.dims.d) / 2
-  );
-}
 
 /**
  * How far an item is from a wall face, in meters (less than 0 when it's through it), if the

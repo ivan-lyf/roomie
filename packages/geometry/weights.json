@@ -1,0 +1,19 @@
+{
+  "source": "hand-set to start (PLAN.md M4); ml/ replaces them with weights fitted to ratings (M7)",
+  "room": {
+    "relations": 3,
+    "walls": 1,
+    "focal": 1,
+    "walkway": 1,
+    "bed_head": 1,
+    "desk_window": 0.5,
+    "windows": 0.5,
+    "spread": 0.5
+  },
+  "home": {
+    "rooms": 4,
+    "style_match": 1,
+    "style_consistency": 1,
+    "budget": 1
+  }
+}

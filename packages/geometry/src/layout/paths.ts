@@ -189,3 +189,35 @@ export function walkways(
   });
   return { cutOff: cutOff.map((e) => e.id), unreached: unreached.map((t) => t.id) };
 }
+
+/**
+ * The share of a room's free floor that a 75 cm wide path could run through, around what
+ * stands on it: 1 for open floor, less as furniture crowds it.
+ */
+export function walkableShare(
+  floor: readonly Vec2[],
+  beyond: readonly (readonly Vec2[])[],
+  blockers: readonly (readonly Vec2[])[],
+): number {
+  const { min, max } = bounds([floor, ...beyond].flat());
+  const g: Grid = {
+    x0: min.x,
+    y0: min.y,
+    nx: Math.max(1, Math.ceil((max.x - min.x) / CELL)),
+    ny: Math.max(1, Math.ceil((max.y - min.y) / CELL)),
+  };
+  const free = new Uint8Array(g.nx * g.ny);
+  for (const area of [floor, ...beyond]) cellsIn(g, area, (i) => (free[i] = 1));
+  const inRoom = new Uint8Array(g.nx * g.ny);
+  cellsIn(g, floor, (i) => (inRoom[i] = 1));
+  for (const b of blockers) cellsIn(g, b, (i) => (free[i] = 0));
+  const half = WALKWAY / 2 / CELL;
+  const near = distances(g, (i) => !free[i], true);
+  let [open, walk] = [0, 0];
+  for (let i = 0; i < free.length; i++) {
+    if (!inRoom[i]) continue;
+    open++;
+    if (free[i] && near[i]! >= half * half - 1e-9) walk++;
+  }
+  return open === 0 ? 0 : walk / open;
+}

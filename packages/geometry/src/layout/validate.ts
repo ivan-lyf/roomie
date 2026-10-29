@@ -261,7 +261,9 @@ function entrancesOf(plan: LayoutPlan, room: Room, fx: Fixed): Way[] {
     const side = beside.left?.id === room.id ? 0 : beside.right?.id === room.id ? 1 : -1;
     if (side < 0) continue;
     const to = side === 0 ? beside.right : beside.left;
-    const name = to ? `the ${door.kind} to the ${to.name}` : `a ${door.kind} out of the ${room.name}`;
+    const name = to
+      ? `the ${door.kind} to the ${to.name}`
+      : `a ${door.kind} out of the ${room.name}`;
     found.push({ id: door.openingId, region: door.parts[side]!.points, name });
   }
   // Sides with no wall, open to the next room.
