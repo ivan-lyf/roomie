@@ -198,6 +198,49 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 
 **Done when:** you can furnish a test room by hand and the validator catches every bad placement.
 
+#### M3 in detail
+
+**Where the furniture lives.** On the floorplan, as `furniture: Placement[]`: a new JSONB column, saved by the autosave that's already there and undone by the floorplan store's history. `Layout` rows stay what M4 and M7 need, immutable logs of generated candidates. Editing one would spoil the ratings, so M4 *copies* a winner's placements into `furniture`, with the layout's id kept on the floorplan (`furnishedFrom`). M7's implicit signals are then the difference between the two. `Placement` gets an `id`, since two identical chairs can stand in one room. Nothing writes `layouts` yet, so no data migrates. Keeping it in the floorplan store, not a store of its own, means moving a sofa and repainting a wall share one undo history and one save.
+
+**The validator** lives in `packages/geometry/src/layout/` and holds pure functions only. `validateLayout(plan, furniture, products)` returns a list of problems. Each problem has a code, the placement ids involved, and a reason in words. It runs in the browser while you drag, and on the server in M4.
+
+| Code | Fails when |
+|---|---|
+| `outside_room` | The footprint isn't inside its room's floor. The floor is the boundary inset by half of each wall along it (`floorPolygon`, the outline `floorArea` measures). Open sides between rooms aren't inset, so a rug can't cross from the living room into the dining area either |
+| `wrong_room` | `roomId` isn't the room the item's center stands in, or the room isn't furnishable |
+| `overlap` | Two footprints overlap by more than 1 cm, or a footprint overlaps an obstacle. Rugs only collide with other rugs. Chairs may go under their table or desk, but not under other furniture |
+| `blocks_door` | A footprint enters a door's swing arc, or the clear zone in front of a door or passage on either side of it. That zone is the opening's width, 0.6 m deep. Rugs are exempt |
+| `no_clearance` | An item's use zone (table below) holds another item, a wall or an obstacle. The partners listed are allowed in it |
+
+Use zones, from common furniture-planning minimums. They live in one table in code, to tune once M7's ratings come in:
+
+| Item | Zone that must stay clear | Allowed in it |
+|---|---|---|
+| Bed | 0.6 m along one long side, or both for beds 1.4 m wide or more, from the foot to a third of the way back from the head (the nightstand's spot) | Rug, nightstand |
+| Sofa, armchair | 0.35 m in front | Rug, coffee table (it must stay ≥ 0.35 m away) |
+| Desk | 0.75 m in front | Desk chair, rug |
+| Dining table | 0.6 m on every side | Dining chairs, rug |
+| Wardrobe, dresser, shelving, TV unit | 0.6 m in front (doors and drawers) | Rug |
+| Nightstand, coffee table, chairs, rug, floor lamp | None | |
+
+Footprints are rectangles from `dims` and `rotation`. Round products (71) are 24-sided polygons. Overlaps use `polygon-clipping`, already a geometry dependency, because obstacles can be concave. A room holds about 30 items, so a check on each drag frame is cheap. The walkway rule (75 cm paths from the doors to every zone) stays in M4 with the other whole-home checks.
+
+**The screens** are plain working ones in today's style. The user-facing design comes later, built with Claude Design from `docs/frontend-design.md`.
+
+**Steps,** each one commit and demoable:
+
+1. **Schema:** `Placement.id`; `Floorplan.furniture` (default `[]`) and `furnishedFrom`; a Drizzle migration; the fixtures. The API reads plans saved before this with no furniture. Commit `feat(schema): furniture on the floorplan`.
+2. **Validator:** `floorPolygon`, footprints with round shapes, the five checks, and `validateLayout`. Tests use made-up products (no IKEA data in the repo), with one test per code. A furnished `00-demo-1br` is checked as valid, then broken one rule at a time. Commit `feat(geometry): validate furniture placements`.
+3. **Snapping:** `snapPlacement(placement, dims, room, plan)`, pure and tested. Within 0.15 m of a wall, the item's back moves flush to the wall's face and turns to match it. Within 0.15 m of a corner, its side moves flush too. Rotation steps by 90°, or by 15° with Shift. The snap never moves an item into a door's zone if an unsnapped spot is clear.
+4. **Products by article number:** `GET /products?articleNo=…`, including discontinued ones, so a saved home still finds its items. The web app keeps the products it has seen in a cache by article number.
+5. **Furniture in 3D:** `Furniture.tsx` in `scene/home/`, using `ProductModel` (a box while a model loads or for products with no model). Chairs with the same model share one geometry. Store actions: `place`, `move`, `rotate`, `remove`, all undoable.
+6. **Catalog browser on the home page:** a "Furnish" tab beside the room picker. It has the category list from `CatalogPanel` and filters for price and maximum width and depth. A "fits this room" toggle hides items larger than the room's floor. The filters are pure functions in `catalog.ts`, with tests.
+7. **Place, drag and rotate:** pick a product, then click the floor of a furnishable room. Drag moves an item across the floor plane, snapping as it goes. R rotates it, and Delete removes it. The room it ends up in is its `roomId`. Each item's footprint and use zones are drawn on the floor, red while a problem holds. Problems are listed in the panel, and clicking one selects its item.
+8. **Totals and links:** for each room, its items with name, price and IKEA.ca link, and the room's total. The home's total sits at the top. Prices are the catalog's: the weekly scrape, no live sync.
+9. **Done check:** furnish the demo bedroom and living room, plus one Opus-read multi-room test plan, by hand. Try each bad placement from Step 2's list in the UI and check it turns red with the right reason.
+
+Out of M3: swapping items (M5), regenerating rooms (M4/M5), walkways and scores (M4), wall-mounted items, and instancing beyond shared geometry, unless the demo home drops below 60 fps.
+
 ### M4 — Auto layout (3–4 weeks)
 - [ ] **Scorer:** hard constraints (pass/fail) plus soft scores (focal point facing, wall alignment, circulation path from door to each zone, bed access, desk near window, symmetry, budget use)
 - [ ] **Whole-home checks:** a clear path from the entrance through every interior door to each room; style consistency across rooms; total within budget
