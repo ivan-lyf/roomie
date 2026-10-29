@@ -1,6 +1,6 @@
 import type { Product } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
-import { groupFamilies, matchesFilter, optionChoices, pickVariant } from './catalog';
+import { groupFamilies, matchesFilter, optionChoices, pickVariant, swapOptions } from './catalog';
 
 const product = (
   articleNo: string,
@@ -92,5 +92,36 @@ describe('matchesFilter', () => {
   it('keeps products that fit the room either way round', () => {
     expect(matchesFilter(bed, { room: { w: 2.5, d: 1.8 } })).toBe(true);
     expect(matchesFilter(bed, { room: { w: 1.5, d: 3.0 } })).toBe(false);
+  });
+});
+
+describe('swapOptions', () => {
+  const current = product('100.000.01', 'f1', 'MALM Bed frame - white Queen', 299);
+  const sized = (articleNo: string, w: number, d: number, price = 299): Product => ({
+    ...product(articleNo, 'f2', 'TEST Bed frame', price),
+    dims: { w, d, h: 1 },
+  });
+  const close = sized('200.000.01', 1.8, 2.1);
+  const wide = sized('200.000.02', 1.81, 2.1);
+  const dear = sized('200.000.03', 1.5, 2.0, 899);
+  const sofa: Product = { ...sized('200.000.04', 1.6, 2.1), category: 'sofa' };
+  const gone: Product = { ...sized('200.000.05', 1.6, 2.1), status: 'discontinued' };
+  const all = [current, close, wide, dear, sofa, gone];
+  const ids = (ps: Product[]) => ps.map((p) => p.articleNo);
+
+  it('offers others of its category still sold, within 20 cm of its size', () => {
+    expect(ids(swapOptions(current, all))).toEqual(['200.000.01', '200.000.03']);
+  });
+
+  it('offers every size on request, within the price limit', () => {
+    expect(ids(swapOptions(current, all, { anySize: true }))).toEqual([
+      '200.000.01',
+      '200.000.02',
+      '200.000.03',
+    ]);
+    expect(ids(swapOptions(current, all, { anySize: true, maxPrice: 300 }))).toEqual([
+      '200.000.01',
+      '200.000.02',
+    ]);
   });
 });

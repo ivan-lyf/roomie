@@ -34,9 +34,7 @@ export function optionChoices(variants: readonly Product[]): OptionChoice[] {
       if (!seen.includes(value)) values.set(name, [...seen, value]);
     }
   }
-  return [...values]
-    .filter(([, vs]) => vs.length > 1)
-    .map(([name, vs]) => ({ name, values: vs }));
+  return [...values].filter(([, vs]) => vs.length > 1).map(([name, vs]) => ({ name, values: vs }));
 }
 
 /** The variant with option `name` set to `value` that keeps most of `current`'s other options. */
@@ -46,7 +44,9 @@ export function pickVariant(
   name: string,
   value: string,
 ): Product | undefined {
-  const others = new Map(current.options.filter((o) => o.name !== name).map((o) => [o.name, o.value]));
+  const others = new Map(
+    current.options.filter((o) => o.name !== name).map((o) => [o.name, o.value]),
+  );
   let best: Product | undefined;
   let bestShared = -1;
   for (const variant of variants) {
@@ -79,4 +79,33 @@ export function matchesFilter(product: Product, filter: ProductFilter): boolean 
     if (!((w <= across && d <= down) || (w <= down && d <= across))) return false;
   }
   return true;
+}
+
+/** How much wider or deeper than the item a product it's swapped for may be, either way: 20 cm. */
+export const SWAP_TOLERANCE = 0.2;
+
+export type SwapFilter = {
+  /** Every size, not only those about the item's. */
+  anySize?: boolean;
+  maxPrice?: number;
+};
+
+/**
+ * What an item could be swapped for: the other products of its category still sold, each about
+ * its size (width and depth within SWAP_TOLERANCE of its own) and within the price limit.
+ */
+export function swapOptions(
+  current: Product,
+  products: readonly Product[],
+  filter: SwapFilter = {},
+): Product[] {
+  const near = (a: number, b: number) => Math.abs(a - b) <= SWAP_TOLERANCE + 1e-9;
+  return products.filter(
+    (p) =>
+      p.category === current.category &&
+      p.status === 'active' &&
+      p.articleNo !== current.articleNo &&
+      (filter.anySize || (near(p.dims.w, current.dims.w) && near(p.dims.d, current.dims.d))) &&
+      (filter.maxPrice === undefined || p.priceCad <= filter.maxPrice),
+  );
 }

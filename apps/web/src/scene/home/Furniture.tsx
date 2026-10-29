@@ -40,9 +40,10 @@ export function Furniture({ plan, problems }: Props) {
   return (
     <>
       {plan.furniture.map((placement) => {
-        const product = products.get(placement.articleNo);
-        if (!product) return null;
+        // The item being dragged, or shown as the product it would be swapped for.
         const at = preview?.id === placement.id ? { ...placement, ...preview } : placement;
+        const product = products.get(at.articleNo);
+        if (!product) return null;
         return (
           <Movable
             key={placement.id}

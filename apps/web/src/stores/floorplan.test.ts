@@ -168,6 +168,17 @@ describe('furnishing', () => {
     expect(current().furniture[0]!.x).toBe(6);
   });
 
+  it('swaps an item for another product, keeping its id and ref, as one edit', () => {
+    const sofa = { id: 'f1', articleNo: '123.456.78', roomId: 'r2', x: 5, y: 2, rotation: 0 };
+    state().setFurniture([{ ...sofa, ref: 'sofa' }]);
+    state().swapItem('f1', { articleNo: '876.543.21', x: 5, y: 2.05, rotation: 0 });
+    expect(current().furniture).toEqual([
+      { ...sofa, ref: 'sofa', articleNo: '876.543.21', y: 2.05 },
+    ]);
+    undo();
+    expect(current().furniture[0]!.articleNo).toBe('123.456.78');
+  });
+
   it('clears a room, and puts in a furnished layout, each one edit to undo', () => {
     const item = (id: string, roomId: string) => ({
       id,

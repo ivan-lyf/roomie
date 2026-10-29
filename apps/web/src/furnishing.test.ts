@@ -17,6 +17,14 @@ describe('liveFurniture', () => {
     ]);
   });
 
+  it('shows an item as the product it would be swapped for', () => {
+    const preview = { id: 'f1', x: 5, y: 2.1, rotation: 0, roomId: 'r2', articleNo: '111.111.11' };
+    expect(liveFurniture([sofa, lamp], undefined, preview)).toEqual([
+      { ...sofa, y: 2.1, articleNo: '111.111.11' },
+      lamp,
+    ]);
+  });
+
   it('adds a product about to be placed', () => {
     const preview = { x: 6, y: 1, rotation: 0, roomId: 'r2' };
     const armed = { articleNo: '111.111.11' };

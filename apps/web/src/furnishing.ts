@@ -1,5 +1,6 @@
 import {
   type FurnitureScores,
+  type LayoutPlan,
   type LayoutProblem,
   scoreFurniture,
   snapPlacement,
@@ -30,8 +31,10 @@ export function liveFurniture(
 ): Placement[] {
   if (!preview) return [...furniture];
   if (preview.id) {
-    const { id, x, y, rotation, roomId } = preview;
-    return furniture.map((f) => (f.id === id ? { ...f, x, y, rotation, roomId } : f));
+    const { id, x, y, rotation, roomId, articleNo } = preview;
+    return furniture.map((f) =>
+      f.id === id ? { ...f, x, y, rotation, roomId, ...(articleNo && { articleNo }) } : f,
+    );
   }
   if (!armed) return [...furniture];
   const { x, y, rotation, roomId } = preview;
@@ -140,6 +143,48 @@ export function rotateItem(itemId: string, by: number) {
   const snapped = snapPlacement({ ...item, rotation }, product, plan);
   const kept = Math.abs(turn(snapped.rotation, -rotation)) < 1e-6;
   moveItem(itemId, kept ? { x: snapped.x, y: snapped.y, rotation } : { rotation });
+}
+
+/**
+ * Where an item would stand as another product: centred where it is and turned the same, then
+ * snapped, so a deeper sofa keeps its back to the wall.
+ */
+export function swapSpot(
+  item: Placement,
+  product: Product,
+  plan: LayoutPlan,
+): Pick<Placement, 'x' | 'y' | 'rotation'> {
+  return snapPlacement(item, product, plan);
+}
+
+/**
+ * What would be wrong with an item swapped for another product, where it would stand: its own
+ * problems, without the walkways, which are checked once a swap is shown in place.
+ */
+export function swapProblems(
+  plan: LayoutPlan & Pick<Floorplan, 'furniture'>,
+  products: ReadonlyMap<string, Product>,
+  itemId: string,
+  product: Product,
+): LayoutProblem[] {
+  const item = plan.furniture.find((f) => f.id === itemId);
+  if (!item) return [];
+  const spot = swapSpot(item, product, plan);
+  const furniture = plan.furniture.map((f) =>
+    f.id === itemId ? { ...f, ...spot, articleNo: product.articleNo } : f,
+  );
+  const known = new Map(products).set(product.articleNo, product);
+  return validateLayout(plan, furniture, known, { paths: false }).filter((p) =>
+    p.ids.includes(itemId),
+  );
+}
+
+/** Swaps an item for another product where it stands, as one edit to undo. */
+export function swapItem(itemId: string, product: Product) {
+  const { plan, swapItem: swap } = useFloorplan.getState();
+  const item = plan?.furniture.find((f) => f.id === itemId);
+  if (!plan || !item) return;
+  swap(itemId, { articleNo: product.articleNo, ...swapSpot(item, product, plan) });
 }
 
 /** Moves an item a little across the plan, without snapping. */

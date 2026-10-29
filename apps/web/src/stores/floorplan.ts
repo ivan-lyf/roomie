@@ -90,6 +90,8 @@ type FloorplanState = {
   setFurniture: (furniture: Placement[]) => void;
   /** Puts a product in a room, and returns the new item's id. */
   placeItem: (item: Omit<Placement, 'id'>) => string;
+  /** Swaps an item for another product where it stands; it keeps its id and ref. */
+  swapItem: (itemId: string, change: Pick<Placement, 'articleNo' | 'x' | 'y' | 'rotation'>) => void;
   /** Moves or turns an item, and sets the room it now stands in. */
   moveItem: (
     itemId: string,
@@ -340,6 +342,11 @@ export const useFloorplan = create<FloorplanState>()(
           edit((plan) => ({ ...plan, furniture: [...plan.furniture, { id: itemId, ...item }] }));
           return itemId;
         },
+        swapItem: (itemId, change) =>
+          edit((plan) => ({
+            ...plan,
+            furniture: plan.furniture.map((f) => (f.id === itemId ? { ...f, ...change } : f)),
+          })),
         moveItem: (itemId, change) =>
           edit((plan) => ({
             ...plan,
