@@ -55,6 +55,16 @@ describe('IntentCache', () => {
     await cached.repair(answer, request, 'too big');
     await cached.repair(answer, request, 'too big');
     expect(calls).toBe(2);
+
+    // Offline, nothing is asked: a new repair keeps the last answer.
+    const offline = cache.wrap(writer, { offline: true });
+    expect(await offline.repair(answer, request, 'too wide')).toMatchObject({
+      intent: answer.intent,
+      usage: { inputTokens: 0, outputTokens: 0 },
+    });
+    expect([calls, cache.skipped]).toEqual([2, 1]);
+    const other = { ...request, inputs: { ...inputs, budgetCad: 1 } };
+    await expect(offline.write(other)).rejects.toThrow(/No cached intent/);
   });
 });
 

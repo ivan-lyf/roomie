@@ -118,7 +118,8 @@ for (const { name, plan } of homes) {
   const before = cache.fresh.length;
   let intentMs = 0;
   // Time spent waiting on the LLM, apart from the solving.
-  const cached = cache.wrap(writer);
+  // Without --yes, nothing is paid for: repairs not cached are skipped.
+  const cached = cache.wrap(writer, { offline: !args.includes('--yes') });
   const timed: IntentWriter = {
     ...cached,
     write: async (...a) => {
@@ -162,6 +163,9 @@ for (const { name, plan } of homes) {
 }
 
 console.log(`\n${formatLayoutReport(results)}`);
+if (cache.skipped > 0) {
+  console.log(`${cache.skipped} repairs weren't cached and were skipped: --yes asks for them.`);
+}
 const out = path.join(config.dataDir, 'eval');
 await mkdir(out, { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);

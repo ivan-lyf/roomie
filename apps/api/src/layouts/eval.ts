@@ -17,6 +17,8 @@ const sha = (text: string) => createHash('sha256').update(text).digest('hex').sl
 export class IntentCache {
   /** Answers that had to be asked for, and so were paid for, in this run. */
   readonly fresh: IntentResult[] = [];
+  /** Repairs not made because they weren't cached and asking was off. */
+  skipped = 0;
 
   constructor(private readonly dir: string) {}
 
@@ -35,9 +37,14 @@ export class IntentCache {
     return path.join(this.dir, `${key}.json`);
   }
 
-  private async through(key: string, ask: () => Promise<IntentResult>): Promise<IntentResult> {
+  private async through(
+    key: string,
+    ask: () => Promise<IntentResult>,
+    offline?: () => IntentResult,
+  ): Promise<IntentResult> {
     const text = await readFile(this.file(key), 'utf8').catch(() => undefined);
     if (text) return JSON.parse(text) as IntentResult;
+    if (offline) return offline();
     const result = await ask();
     this.fresh.push(result);
     await mkdir(this.dir, { recursive: true });
@@ -45,16 +52,35 @@ export class IntentCache {
     return result;
   }
 
-  /** The writer, answering from the cache where it can. */
-  wrap(writer: IntentWriter): IntentWriter {
+  /**
+   * The writer, answering from the cache where it can. Offline, nothing new is asked for: a
+   * first intent must be cached, and a repair that isn't keeps the last answer.
+   */
+  wrap(writer: IntentWriter, { offline = false } = {}): IntentWriter {
     return {
       model: writer.model,
       promptVersion: writer.promptVersion,
       write: (request, signal) =>
-        this.through(this.firstKey(writer, request), () => writer.write(request, signal)),
+        this.through(
+          this.firstKey(writer, request),
+          () => writer.write(request, signal),
+          offline
+            ? () => {
+                throw new Error('No cached intent, and asking for one is off.');
+              }
+            : undefined,
+        ),
       repair: (previous, request, feedback, signal) =>
-        this.through(sha(`${JSON.stringify(previous.messages)}\n${feedback}`), () =>
-          writer.repair(previous, request, feedback, signal),
+        this.through(
+          sha(`${JSON.stringify(previous.messages)}\n${feedback}`),
+          () => writer.repair(previous, request, feedback, signal),
+          offline
+            ? () => {
+                this.skipped++;
+                // The last answer again, at no cost: nothing was asked.
+                return { ...previous, usage: { inputTokens: 0, outputTokens: 0 }, durationMs: 0 };
+              }
+            : undefined,
         ),
     };
   }
