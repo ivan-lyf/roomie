@@ -395,9 +395,9 @@ Out of M5: sign-in and allowances (M6), the rating page and learned weights (M7)
 ### M6 — Accounts (1 week)
 Sign-in exists only to limit token use per account.
 - [ ] Sign in with Supabase Auth (Google or an email link), asked for only before a step that calls an LLM: reading a plan, furnishing, new pieces for a room. Everything else works signed out, rearranging a room included (it makes no LLM call)
-- [ ] The API verifies the Supabase session token on every route that calls an LLM
-- [ ] A `usage` row per LLM call: account, route, model, input and output tokens, cost. Cached readings cost nothing
-- [ ] A daily spending allowance per account, from config. At the limit, LLM routes refuse with a reason code; manual editing keeps working
+- [x] The API verifies the Supabase session token on every route that calls an LLM
+- [x] A `usage` row per LLM call: account, route, model, input and output tokens, cost. Cached readings cost nothing
+- [x] A daily spending allowance per account, from config. At the limit, LLM routes refuse with a reason code; manual editing keeps working
 - Homes aren't tied to accounts: they autosave as they do today.
 - The browser still talks only to our API, so the tables stay closed to Supabase's public Data API (RLS on, no policies).
 
@@ -438,6 +438,8 @@ Sign-in exists only to limit token use per account.
 6. **Signing in:** `auth.ts` in the app (the client, the session, sign in by email or Google, sign out), the sign-in panel and the account line. Commit `feat(web): sign in with an email link or google`.
 7. **AI steps signed in:** the token on the LLM calls, the sign-in panel in place of each AI step when signed out, an upload's reading held until sign-in, and each refusal in words. Commit `feat(web): ask to sign in before ai steps`.
 8. **Done check:** you sign in once by email link and once by Google, in your browser. In headless Chromium, signed out: uploading, editing, furnishing by hand, swapping, rearranging and the shopping list all work, each AI step shows the sign-in panel, and the API logs no usage. Signed in (if you add a secret key to `.env` for the check, a sign-in link made with Supabase's admin API, else in your browser): a reading with Gemini (free) and new pieces for a room with `LAYOUT_MODEL=claude-haiku-5-5` (under a cent) each log a usage row with its tokens and cost, and the account line shows them. With `DAILY_ALLOWANCE_USD=0`, every AI step is refused with `allowance_reached` while editing still works; the next day's reset is covered by the tests with a fixed clock.
+
+    Partly done on 2026-10-29, before the dashboard setup. Steps 1–7 are built and pushed, with `usage` migrated to the dev database. Signed out, in headless Chromium with placeholder Supabase settings (so the app behaves as if sign-in were set up): the plans page offers sign-in; "Read the plan again", Furnish for me and New pieces each show the sign-in panel and send nothing; a rearrange works; editing works; the usage table stays empty. With `AUTH=off` and `DAILY_ALLOWANCE_USD=0`: reading, furnishing and new pieces are each refused with "You've used today's AI allowance ($0.00). It's back at midnight; you can still edit by hand", editing still works, nothing is logged, and `GET /me` answers the local account at $0 of $0. Still to do once sign-in is set up: signing in by email link and by Google, the API checking real sessions against the project's keys, and a paid reading or new pieces (under a cent on Haiku) logged with its cost and shown in the account line. Two things found on the way: `jose` and `supabase-js` are pinned to releases at least two weeks old (6.2.12 and 2.118.0); and in the platform's time zone data Vancouver keeps daylight time after March 2026, so the allowance's day there is always 24 hours (the 23- and 25-hour days are tested on New York).
 
 Out of M6: homes tied to accounts (they stay unowned until a pass is bought, §8), payments, password sign-in, a page to see everyone's usage, rate limits beyond the allowance, and deploying (CORS, production redirect URLs).
 
