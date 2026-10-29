@@ -2,7 +2,9 @@ import { area } from '@roomie/geometry';
 import type { Floorplan } from '@roomie/schema';
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { ROOM_TYPES, squareMeters } from '../format';
+import { formatPrice, ROOM_TYPES, squareMeters } from '../format';
+import { furnitureTotals, type Totals } from '../furnishing';
+import { useProducts } from '../stores/products';
 import { FurnishPanel } from './FurnishPanel';
 import { LookControls } from './LookControls';
 
@@ -21,6 +23,8 @@ type Props = {
 export function HomePanel(props: Props) {
   const { plan, roomId, onRoom } = props;
   const [tab, setTab] = useState<'home' | 'furnish'>('home');
+  const products = useProducts((s) => s.byArticle);
+  const { home } = furnitureTotals(plan.furniture, products);
   return (
     <aside className="m-4 flex w-96 shrink-0 flex-col gap-3 overflow-y-auto rounded-xl bg-white p-4 text-sm text-stone-800 shadow-lg">
       <div className="flex items-center justify-between text-xs">
@@ -31,7 +35,14 @@ export function HomePanel(props: Props) {
           Edit the plan
         </Link>
       </div>
-      <h1 className="text-base font-semibold">{plan.name}</h1>
+      <header>
+        <h1 className="text-base font-semibold">{plan.name}</h1>
+        {home.count > 0 && (
+          <p className="text-stone-500">
+            {furnished(home)} in all · prices from IKEA.ca, check before buying
+          </p>
+        )}
+      </header>
 
       <nav className="flex gap-1 rounded-lg bg-stone-100 p-1" aria-label="Panels">
         {(['home', 'furnish'] as const).map((t) => (
@@ -56,8 +67,14 @@ export function HomePanel(props: Props) {
   );
 }
 
+/** "3 items, $1,249.00" */
+const furnished = ({ count, priceCad }: Totals) =>
+  `${count} item${count === 1 ? '' : 's'}, ${formatPrice(priceCad)}`;
+
 function HomeTab(props: Props) {
   const { plan, roomId, onRoom } = props;
+  const products = useProducts((s) => s.byArticle);
+  const { byRoom } = furnitureTotals(plan.furniture, products);
   const total = plan.rooms.reduce((sum, room) => sum + area(room.boundary), 0);
   const item = (selected: boolean) =>
     `w-full px-3 py-2 text-left ${selected ? 'bg-stone-100' : 'hover:bg-stone-50'}`;
@@ -82,6 +99,7 @@ function HomeTab(props: Props) {
               <span className="block font-medium">{room.name}</span>
               <span className="block text-xs text-stone-500">
                 {ROOM_TYPES[room.roomType]} · {squareMeters(area(room.boundary))}
+                {byRoom.has(room.id) && ` · ${furnished(byRoom.get(room.id)!)}`}
               </span>
             </button>
           </li>

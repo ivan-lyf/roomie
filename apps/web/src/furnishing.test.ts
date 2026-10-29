@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { liveFurniture, PREVIEW_ID } from './furnishing';
+import { furnitureTotals, liveFurniture, PREVIEW_ID } from './furnishing';
 
 const sofa = { id: 'f1', articleNo: '123.456.78', roomId: 'r2', x: 5, y: 2, rotation: 0 };
 const lamp = { ...sofa, id: 'f2', articleNo: '876.543.21', x: 7 };
@@ -25,5 +25,19 @@ describe('liveFurniture', () => {
       { id: PREVIEW_ID, articleNo: '111.111.11', ...preview },
     ]);
     expect(liveFurniture([sofa], undefined, preview)).toEqual([sofa]);
+  });
+});
+
+describe('furnitureTotals', () => {
+  it('counts and prices the home and each room', () => {
+    const products = new Map([
+      ['123.456.78', { priceCad: 899 }],
+      ['876.543.21', { priceCad: 49.99 }],
+    ]);
+    const chair = { ...lamp, id: 'f3', articleNo: '000.000.00', roomId: 'r1' };
+    const { home, byRoom } = furnitureTotals([sofa, lamp, chair], products);
+    expect(home).toEqual({ count: 3, priceCad: 948.99 });
+    expect(byRoom.get('r2')).toEqual({ count: 2, priceCad: 948.99 });
+    expect(byRoom.get('r1')).toEqual({ count: 1, priceCad: 0 });
   });
 });

@@ -1,5 +1,5 @@
 import { type LayoutProblem, snapPlacement, turn, validateLayout } from '@roomie/geometry';
-import type { Floorplan, Placement } from '@roomie/schema';
+import type { Floorplan, Placement, Product } from '@roomie/schema';
 import { useMemo } from 'react';
 import { useFloorplan } from './stores/floorplan';
 import { type Preview, useFurnish } from './stores/furnish';
@@ -87,4 +87,26 @@ export function nudgeItem(itemId: string, dx: number, dy: number) {
 export function removeItem(itemId: string) {
   useFloorplan.getState().remove([itemId]);
   useFurnish.getState().select(undefined);
+}
+
+export type Totals = { count: number; priceCad: number };
+
+/**
+ * How many items the home has and what they cost, in all and per room. Prices are the catalog's,
+ * from the last scrape; an item whose product hasn't loaded counts without a price.
+ */
+export function furnitureTotals(
+  furniture: readonly Placement[],
+  products: ReadonlyMap<string, Pick<Product, 'priceCad'>>,
+): { home: Totals; byRoom: ReadonlyMap<string, Totals> } {
+  const home = { count: 0, priceCad: 0 };
+  const byRoom = new Map<string, Totals>();
+  for (const item of furniture) {
+    const price = products.get(item.articleNo)?.priceCad ?? 0;
+    const room = byRoom.get(item.roomId) ?? { count: 0, priceCad: 0 };
+    byRoom.set(item.roomId, { count: room.count + 1, priceCad: room.priceCad + price });
+    home.count++;
+    home.priceCad += price;
+  }
+  return { home, byRoom };
 }

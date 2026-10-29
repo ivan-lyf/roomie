@@ -278,11 +278,11 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
             const p = products.get(f.articleNo);
             const wrong = problems.byItem.get(f.id)?.length ?? 0;
             return (
-              <li key={f.id}>
+              <li key={f.id} className="flex items-center">
                 <button
                   type="button"
                   onClick={() => select(f.id === selected ? undefined : f.id)}
-                  className={`flex w-full justify-between gap-2 px-3 py-1.5 text-left ${
+                  className={`flex min-w-0 flex-1 justify-between gap-2 px-3 py-1.5 text-left ${
                     f.id === selected ? 'bg-stone-100' : 'hover:bg-stone-50'
                   }`}
                 >
@@ -292,6 +292,18 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
                   </span>
                   <span className="shrink-0 text-stone-500">{p && formatPrice(p.priceCad)}</span>
                 </button>
+                {p && (
+                  <a
+                    href={p.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2 text-stone-500 hover:text-stone-800"
+                    title={`${p.articleNo} on IKEA.ca`}
+                    aria-label={`${familyName(p)} on IKEA.ca`}
+                  >
+                    ↗
+                  </a>
+                )}
               </li>
             );
           })}
