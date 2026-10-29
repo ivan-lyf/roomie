@@ -126,12 +126,14 @@ function Movable({ plan, placement, product, problems }: MovableProps) {
     if (controls) controls.enabled = enabled;
   };
   const selected = useFurnish((s) => s.selected === placement.id);
+  // While a product is being placed, clicks go through items to the floor behind them.
+  const placing = useFurnish((s) => s.armed !== undefined);
   const [hovered, setHovered] = useState(false);
-  useCursor(hovered, 'grab');
+  useCursor(hovered && !placing, 'grab');
   const grab = useRef<{ offset: Vec2; from: Vec2; moved: boolean }>(undefined);
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button !== 0 || useFurnish.getState().armed) return;
+    if (e.button !== 0) return;
     e.stopPropagation();
     useFurnish.getState().select(placement.id);
     const at = floorPoint(e.ray);
@@ -172,19 +174,21 @@ function Movable({ plan, placement, product, problems }: MovableProps) {
 
   return (
     <Item placement={placement} product={product}>
-      <group
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onClick={(e) => e.stopPropagation()}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          setHovered(true);
-        }}
-        onPointerOut={() => setHovered(false)}
-      >
-        <HitBox product={product} />
-      </group>
+      {placing ? null : (
+        <group
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onClick={(e) => e.stopPropagation()}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setHovered(true);
+          }}
+          onPointerOut={() => setHovered(false)}
+        >
+          <HitBox product={product} />
+        </group>
+      )}
       {selected && <Why problems={problems} height={product.dims.h} />}
     </Item>
   );
