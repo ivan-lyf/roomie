@@ -5,7 +5,8 @@ import type { Size } from './size';
 
 type Props = {
   url: string;
-  onMeasured: (size: Size) => void;
+  /** Gets the model's size once it's loaded, to check it against the listed size. */
+  onMeasured?: (size: Size) => void;
 };
 
 /**
@@ -19,6 +20,7 @@ export function ProductModel({ url, onMeasured }: Props) {
   const model = useMemo(() => withShadows(scene.clone(true)), [scene]);
 
   useLayoutEffect(() => {
+    if (!onMeasured) return;
     const size = new Box3().setFromObject(model, true).getSize(new Vector3());
     onMeasured([size.x, size.y, size.z]);
   }, [model, onMeasured]);
@@ -26,12 +28,20 @@ export function ProductModel({ url, onMeasured }: Props) {
   useEffect(() => {
     clearTimeout(pendingRelease.get(url));
     pendingRelease.delete(url);
-    return () => scheduleRelease(url, scene);
+    users.set(url, (users.get(url) ?? 0) + 1);
+    return () => {
+      const left = users.get(url)! - 1;
+      users.set(url, left);
+      // Copies share the loaded model's geometry: free it once the last one is gone.
+      if (left === 0) scheduleRelease(url, scene);
+    };
   }, [url, scene]);
 
   return <primitive object={model} />;
 }
 
+/** How many copies of each model are on screen: four chairs are one model shown four times. */
+const users = new Map<string, number>();
 const pendingRelease = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**

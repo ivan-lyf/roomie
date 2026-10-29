@@ -9,6 +9,7 @@ import { Object3D, Vector3 } from 'three';
 import { Ceilings } from './Ceilings';
 import { CUTAWAY_HEIGHT } from './cutaway';
 import { Floors } from './Floors';
+import { Furniture } from './Furniture';
 import { preloadFloors } from './floorTextures';
 import { Obstacles } from './Obstacles';
 import { Openings, placedOpenings } from './Openings';
@@ -68,6 +69,7 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
         enabled={cutaway}
       />
       <Obstacles plan={plan} />
+      <Furniture plan={plan} />
       {ceilings && <Ceilings plan={plan} />}
       <Ground home={home} />
       <Framing extent={focus} />

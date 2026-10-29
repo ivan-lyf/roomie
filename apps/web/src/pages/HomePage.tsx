@@ -5,6 +5,7 @@ import { floorplanImageUrl } from '../api';
 import { useAutosave } from '../autosave';
 import { usePlan } from '../plans';
 import { HomeScene } from '../scene/home/HomeScene';
+import { useProductsFor } from '../stores/products';
 import { HomePanel } from '../ui/HomePanel';
 
 export function HomePage({ id }: { id: string }) {
@@ -14,6 +15,8 @@ export function HomePage({ id }: { id: string }) {
   const [roomId, setRoomId] = useState(
     () => new URLSearchParams(location.search).get('room') ?? undefined,
   );
+  // The products the furniture needs, saved homes holding items the catalog has since dropped.
+  useProductsFor(plan?.furniture.map((f) => f.articleNo) ?? []);
   const [cutaway, setCutaway] = useState(true);
   const [ceilings, setCeilings] = useState(false);
 

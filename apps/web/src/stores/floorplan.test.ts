@@ -148,6 +148,27 @@ describe('editing the plan', () => {
 
 const room0 = plan.rooms[0]!;
 
+describe('furnishing', () => {
+  beforeEach(() => state().load(plan));
+
+  it('places, moves and removes items, each one edit to undo', () => {
+    const sofa = { articleNo: '123.456.78', roomId: 'r2', x: 5, y: 2, rotation: 0 };
+    const first = state().placeItem(sofa);
+    const second = state().placeItem({ ...sofa, x: 7 });
+    expect([first, second]).toEqual(['f1', 'f2']);
+    state().moveItem(first, { x: 6, rotation: Math.PI });
+    expect(current().furniture[0]).toEqual({ id: 'f1', ...sofa, x: 6, rotation: Math.PI });
+    state().remove([second]);
+    expect(current().furniture.map((f) => f.id)).toEqual(['f1']);
+    undo();
+    expect(current().furniture.map((f) => f.id)).toEqual(['f1', 'f2']);
+    undo();
+    expect(current().furniture[0]!.x).toBe(5);
+    redo();
+    expect(current().furniture[0]!.x).toBe(6);
+  });
+});
+
 describe('a plan the reader read', () => {
   const P = (x: number, y: number) => ({ x, y });
   const draft: PlanDraft = {

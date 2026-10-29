@@ -28,6 +28,7 @@ import {
   type ObstacleKind,
   type Opening,
   type OpeningKind,
+  type Placement,
   type Room,
   type RoomType,
   type Scale,
@@ -85,7 +86,15 @@ type FloorplanState = {
   addObstacle: (kind: ObstacleKind, polygon: Vec2[]) => string;
   setObstacle: (obstacleId: string, change: Partial<Pick<Obstacle, 'kind' | 'height'>>) => void;
 
-  /** Removes walls (with their openings), openings, rooms and obstacles. */
+  /** Puts a product in a room, and returns the new item's id. */
+  placeItem: (item: Omit<Placement, 'id'>) => string;
+  /** Moves or turns an item, and sets the room it now stands in. */
+  moveItem: (
+    itemId: string,
+    change: Partial<Pick<Placement, 'x' | 'y' | 'rotation' | 'roomId'>>,
+  ) => void;
+
+  /** Removes walls (with their openings), openings, rooms, obstacles and furniture. */
   remove: (ids: readonly string[]) => void;
   /**
    * Sets the scale, rescaling everything drawn under the old one; on a plan the reader read but
@@ -323,6 +332,17 @@ export const useFloorplan = create<FloorplanState>()(
             }),
           })),
 
+        placeItem: (item) => {
+          const itemId = id('f');
+          edit((plan) => ({ ...plan, furniture: [...plan.furniture, { id: itemId, ...item }] }));
+          return itemId;
+        },
+        moveItem: (itemId, change) =>
+          edit((plan) => ({
+            ...plan,
+            furniture: plan.furniture.map((f) => (f.id === itemId ? { ...f, ...change } : f)),
+          })),
+
         remove: (ids) =>
           edit((plan) => {
             const gone = new Set(ids);
@@ -333,6 +353,7 @@ export const useFloorplan = create<FloorplanState>()(
               openings: kept.openings.filter((o) => !gone.has(o.id)),
               rooms: kept.rooms.filter((r) => !gone.has(r.id)),
               obstacles: kept.obstacles.filter((o) => !gone.has(o.id)),
+              furniture: kept.furniture.filter((f) => !gone.has(f.id)),
             };
           }),
         calibrate: (scale) =>
