@@ -60,6 +60,20 @@ describe('GET /api/products', () => {
     expect(await articleNos(await get('/api/products?category=bed'))).toEqual(['333.333.33']);
   });
 
+  it('finds products by article number, discontinued ones too', async () => {
+    await db
+      .insert(products)
+      .values([
+        product('111.111.11'),
+        product('222.222.22'),
+        product('333.333.33', { status: 'discontinued' }),
+      ]);
+    const url = '/api/products?articleNo=333.333.33,111.111.11&articleNo=999.999.99';
+    expect(await articleNos(await get(url))).toEqual(['111.111.11', '333.333.33']);
+    expect(await (await get('/api/products?articleNo=')).json()).toEqual([]);
+    expect((await get('/api/products?articleNo=11111111')).status).toBe(400);
+  });
+
   it('rejects unknown categories', async () => {
     expect((await get('/api/products?category=spaceship')).status).toBe(400);
   });

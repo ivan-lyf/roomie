@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { Category, Product } from '@roomie/schema';
-import { and, eq } from 'drizzle-orm';
+import { ArticleNo, Category, Product } from '@roomie/schema';
+import { and, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { modelPath } from './catalog/store';
@@ -31,17 +31,25 @@ export function createApp({ dataDir, db, storage, plans, reader }: AppOptions) {
 
   app.route('/floorplans', floorplanRoutes({ db, plans, dataDir, reader }));
 
+  /**
+   * The catalog's active products, or one category's. With `articleNo` (comma-separated), those
+   * products whatever their status, so a home still finds items IKEA has since dropped.
+   */
   app.get('/products', async (c) => {
     const query = c.req.query('category');
     const category = query === undefined ? undefined : Category.safeParse(query);
     if (category && !category.success) return c.json({ error: `unknown category: ${query}` }, 400);
+    const wanted = c.req.queries('articleNo')?.flatMap((q) => q.split(',')).filter(Boolean);
+    const bad = wanted?.find((a) => !ArticleNo.safeParse(a).success);
+    if (bad !== undefined) return c.json({ error: `not an article number: ${bad}` }, 400);
     if (!db) return c.json({ error: 'DATABASE_URL is not set' }, 503);
+    if (wanted?.length === 0) return c.json([]);
     const rows = await db
       .select()
       .from(products)
       .where(
         and(
-          eq(products.status, 'active'),
+          wanted ? inArray(products.articleNo, wanted) : eq(products.status, 'active'),
           category ? eq(products.category, category.data) : undefined,
         ),
       )

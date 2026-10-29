@@ -9,6 +9,16 @@ export async function fetchProducts(category: Category, signal?: AbortSignal): P
   return ProductList.parse(await res.json());
 }
 
+/** Products by article number, discontinued ones too; any the catalog doesn't have are left out. */
+export async function fetchProductsByArticle(
+  articleNos: readonly string[],
+  signal?: AbortSignal,
+): Promise<Product[]> {
+  const res = await fetch(`/api/products?articleNo=${articleNos.join(',')}`, { signal });
+  if (!res.ok) throw new Error(`GET /api/products: HTTP ${res.status}`);
+  return ProductList.parse(await res.json());
+}
+
 /** An error the API answered with. */
 export class ApiError extends Error {
   constructor(
