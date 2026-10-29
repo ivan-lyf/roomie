@@ -2,6 +2,7 @@ import type { FloorplanStatus, FloorplanSummary } from '@roomie/schema';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { fetchFloorplans, uploadFloorplan } from '../api';
+import { AccountLine } from '../ui/AccountLine';
 import { ACCEPTED, preparePlan } from '../upload';
 
 const STATUS: Record<FloorplanStatus, string> = {
@@ -13,9 +14,7 @@ const STATUS: Record<FloorplanStatus, string> = {
 const when = new Intl.DateTimeFormat('en-CA', { dateStyle: 'medium', timeStyle: 'short' });
 
 type Upload =
-  | { state: 'idle' }
-  | { state: 'busy'; step: string }
-  | { state: 'failed'; error: string };
+  { state: 'idle' } | { state: 'busy'; step: string } | { state: 'failed'; error: string };
 
 /** Upload a floor plan, or open one uploaded before. */
 export function PlansPage() {
@@ -56,6 +55,7 @@ export function PlansPage() {
         <p className="text-stone-600">
           Turn a floor plan into a 3D home, then furnish it with IKEA Canada products.
         </p>
+        <AccountLine />
       </header>
 
       <button

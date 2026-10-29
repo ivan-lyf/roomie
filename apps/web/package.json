@@ -16,6 +16,7 @@
     "@react-three/postprocessing": "^3.2.1",
     "@roomie/geometry": "workspace:*",
     "@roomie/schema": "workspace:*",
+    "@supabase/supabase-js": "2.118.0",
     "konva": "^10.9.0",
     "pdfjs-dist": "^6.4.299",
     "postprocessing": "^6.39.5",

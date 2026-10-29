@@ -6,10 +6,14 @@ import {
   type GenerationInputs,
   GenerationJob,
   HomeFurnishing,
+  Me,
   Product,
+  Refusal,
+  type RefusalCode,
   type RoomAgain,
 } from '@roomie/schema';
 import { z } from 'zod';
+import { accessToken } from './auth';
 
 const ProductList = z.array(Product);
 
@@ -29,11 +33,14 @@ export async function fetchProductsByArticle(
   return ProductList.parse(await res.json());
 }
 
-/** An error the API answered with. */
+/** An error the API answered with: for a refused AI step, why (PLAN.md M6). */
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code?: RefusalCode,
+    /** When an allowance used up for the day starts again. */
+    readonly resetsAt?: Date,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -42,8 +49,29 @@ export class ApiError extends Error {
 
 /** The API's error message, else the status. */
 async function failure(res: Response, what: string): Promise<ApiError> {
-  const body = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
-  return new ApiError(body?.error ?? `${what}: HTTP ${res.status}`, res.status);
+  const body: unknown = await res.json().catch(() => undefined);
+  const refusal = Refusal.safeParse(body);
+  if (refusal.success) {
+    return new ApiError(refusal.data.error, res.status, refusal.data.code, refusal.data.resetsAt);
+  }
+  const error = (body as { error?: unknown } | undefined)?.error;
+  return new ApiError(
+    typeof error === 'string' ? error : `${what}: HTTP ${res.status}`,
+    res.status,
+  );
+}
+
+/** Headers for a step that calls an LLM: the session's token, when signed in (PLAN.md M6). */
+async function signedIn(headers: Record<string, string> = {}): Promise<Record<string, string>> {
+  const token = await accessToken();
+  return token ? { ...headers, authorization: `Bearer ${token}` } : headers;
+}
+
+/** The signed-in account and what it has spent on AI today. */
+export async function fetchMe(signal?: AbortSignal): Promise<Me> {
+  const res = await fetch('/api/me', { headers: await signedIn(), signal });
+  if (!res.ok) throw await failure(res, 'GET /api/me');
+  return Me.parse(await res.json());
 }
 
 export async function fetchFloorplans(signal?: AbortSignal): Promise<FloorplanSummary[]> {

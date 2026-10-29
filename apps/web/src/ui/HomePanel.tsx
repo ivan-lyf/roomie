@@ -16,6 +16,7 @@ import { redo, undo, useFloorplan } from '../stores/floorplan';
 import { useFurnish } from '../stores/furnish';
 import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
+import { AccountLine } from './AccountLine';
 import { FurnishPanel } from './FurnishPanel';
 import { LookControls } from './LookControls';
 
@@ -70,6 +71,7 @@ export function HomePanel(props: Props) {
           </>
         )}
       </header>
+      <AccountLine />
 
       <nav className="flex gap-1 rounded-lg bg-stone-100 p-1" aria-label="Panels">
         {(['home', 'furnish'] as const).map((t) => (
