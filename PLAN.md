@@ -191,10 +191,10 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 **Done when:** every test plan becomes a correct 3D home, with rooms labelled and scale within 3%, in ≤ 2 min of correction for a studio and ≤ 5 min for a multi-room plan.
 
 ### M3 — Manual furnishing (1–2 weeks)
-- [ ] Catalog browser (filter by category, price, size)
-- [ ] Place, drag, and rotate with wall snapping; an item belongs to the room it is dropped in
-- [ ] Live validation: overlaps (with furniture and obstacles), clearance zones, door swing arcs on both sides of interior doors, items crossing a room boundary, highlighted in red
-- [ ] Price total per room and for the whole home; product links
+- [x] Catalog browser (filter by category, price, size)
+- [x] Place, drag, and rotate with wall snapping; an item belongs to the room it is dropped in
+- [x] Live validation: overlaps (with furniture and obstacles), clearance zones, door swing arcs on both sides of interior doors, items crossing a room boundary, highlighted in red
+- [x] Price total per room and for the whole home; product links
 
 **Done when:** you can furnish a test room by hand and the validator catches every bad placement.
 
@@ -237,8 +237,10 @@ Footprints are rectangles from `dims` and `rotation`. Round products (71) are 24
 5. **Furniture in 3D:** `Furniture.tsx` in `scene/home/`, using `ProductModel` (a box while a model loads or for products with no model). Chairs with the same model share one geometry. Store actions: `place`, `move`, `rotate`, `remove`, all undoable.
 6. **Catalog browser on the home page:** a "Furnish" tab beside the room picker. It has the category list from `CatalogPanel` and filters for price and maximum width and depth. A "fits this room" toggle hides items larger than the room's floor. The filters are pure functions in `catalog.ts`, with tests.
 7. **Place, drag and rotate:** pick a product, then click the floor of a furnishable room; a preview shows where it would go, already checked. Drag moves an item across the floor plane, snapping as it goes (Alt holds the snap off). R rotates it, Delete removes it, arrows nudge it, and Ctrl+Z undoes. The room it ends up in is its `roomId`. The selected item's footprint and use zone are drawn on the floor, and every item with a problem is drawn red, with the doorways it blocks. The room's item list marks items with a problem; the selected item's card, and a label over it in the scene, say what's wrong.
-8. **Totals and links:** for each room, its items with name, price and IKEA.ca link, and the room's total. The home's total sits at the top. Prices are the catalog's: the weekly scrape, no live sync.
+8. **Totals and links:** for each room, its items with name, price and IKEA.ca link, and the room's total; item counts and subtotals on the room list, and the home's total under its name. Prices are the catalog's: the weekly scrape, no live sync. (The shopping list page is M5.)
 9. **Done check:** furnish the demo bedroom and living room, plus one Opus-read multi-room test plan, by hand. Try each bad placement from Step 2's list in the UI and check it turns red with the right reason.
+
+   Done on 2026-10-28, in headless Chromium against the dev server: the demo bedroom (bed, two nightstands, wardrobe) and living room (sofa, coffee table, TV bench, armchair, floor lamp), and the bedroom and séjour of fr-56 read by Opus (saved as "Sample fr-56 (Opus)" from the eval's cached reading), all furnished with no problems; fr-56's furniture saved and came back on reload. Each bad placement turned red with the right reason and cleared on undo: an item on another (overlap), in a door's space (blocks_door), dragged through a wall with Alt (outside_room), into the kitchen or bath (wrong_room), and crowding a sofa or wardrobe (no_clearance). Placing exposed one bug, fixed: items stood in the way of clicks on the floor behind them while a product was picked.
 
 Out of M3: swapping items (M5), regenerating rooms (M4/M5), walkways and scores (M4), wall-mounted items, and instancing beyond shared geometry, unless the demo home drops below 60 fps.
 
