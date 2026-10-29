@@ -21,7 +21,29 @@ describe('loadConfig', () => {
       reader: undefined,
       readers: {},
       layout: undefined,
+      auth: undefined,
+      allowance: { dailyUsd: 1, timeZone: 'America/Vancouver' },
     });
+  });
+
+  it('accepts Supabase sessions with a project URL, or anyone with AUTH=off, but not in production', () => {
+    expect(loadConfig({ SUPABASE_URL: 'https://abc.supabase.co/' }).auth).toEqual({
+      kind: 'supabase',
+      url: 'https://abc.supabase.co',
+    });
+    expect(loadConfig({ AUTH: 'off', SUPABASE_URL: 'https://abc.supabase.co' }).auth).toEqual({
+      kind: 'off',
+    });
+    expect(() => loadConfig({ AUTH: 'off', NODE_ENV: 'production' })).toThrow(/AUTH=off/);
+    expect(() => loadConfig({ AUTH: 'supabase' })).toThrow(/needs SUPABASE_URL/);
+  });
+
+  it('reads the daily allowance and its time zone', () => {
+    const config = loadConfig({ DAILY_ALLOWANCE_USD: '0.5', ALLOWANCE_TIME_ZONE: 'Europe/Paris' });
+    expect(config.allowance).toEqual({ dailyUsd: 0.5, timeZone: 'Europe/Paris' });
+    expect(loadConfig({ DAILY_ALLOWANCE_USD: '0' }).allowance.dailyUsd).toBe(0);
+    expect(() => loadConfig({ ALLOWANCE_TIME_ZONE: 'Mars/Olympus' })).toThrow(/time zone/);
+    expect(() => loadConfig({ DAILY_ALLOWANCE_USD: '-1' })).toThrow();
   });
 
   it('furnishes homes with Claude on the same key, with a model of its own', () => {

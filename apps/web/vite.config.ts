@@ -4,6 +4,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // The repo's .env, shared with the API: only settings starting with VITE_ reach the browser.
+  envDir: '../..',
   server: {
     proxy: {
       // Keep the Host header so the API builds model URLs on this origin.

@@ -51,6 +51,15 @@ const Env = z.object({
   /** The Claude model that furnishes homes (PLAN.md M4), on the same key. */
   LAYOUT_MODEL: unsetIfEmpty(z.string().default(DEFAULT_LAYOUT_MODEL)),
   LAYOUT_EFFORT: unsetIfEmpty(z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('medium')),
+  // Sign-in (PLAN.md M6): the Supabase project whose sessions the routes that call an LLM accept.
+  SUPABASE_URL: unsetIfEmpty(z.url().optional()),
+  /** `off` opens those routes to anyone: local development only. */
+  AUTH: unsetIfEmpty(z.enum(['supabase', 'off']).optional()),
+  NODE_ENV: optional(),
+  /** What each account may spend on LLM calls a day, in US dollars. */
+  DAILY_ALLOWANCE_USD: unsetIfEmpty(z.coerce.number().nonnegative().default(1)),
+  /** Where the allowance's day starts and ends. */
+  ALLOWANCE_TIME_ZONE: unsetIfEmpty(z.string().default('America/Vancouver')),
 });
 
 export type GeminiReaderConfig = { provider: 'gemini'; apiKey: string; models: string[] };
@@ -64,6 +73,11 @@ export type ClaudeReaderConfig = {
 export type ReaderConfig = GeminiReaderConfig | ClaudeReaderConfig;
 /** The model that furnishes homes. */
 export type LayoutConfig = Omit<ClaudeReaderConfig, 'provider'>;
+/**
+ * Who may use the routes that call an LLM: whoever is signed in to this Supabase project, or,
+ * in local development, anyone.
+ */
+export type AuthConfig = { kind: 'supabase'; url: string } | { kind: 'off' };
 
 export type Config = {
   port: number;
@@ -79,6 +93,9 @@ export type Config = {
   readers: { gemini?: GeminiReaderConfig; claude?: ClaudeReaderConfig };
   /** Without a Claude key, homes are furnished by hand. */
   layout: LayoutConfig | undefined;
+  /** Without it, the routes that call an LLM are refused. */
+  auth: AuthConfig | undefined;
+  allowance: { dailyUsd: number; timeZone: string };
 };
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
@@ -101,7 +118,32 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       ...(claude && { claude }),
     },
     layout: claude && { apiKey: claude.apiKey, model: e.LAYOUT_MODEL, effort: e.LAYOUT_EFFORT },
+    auth: authConfig(e),
+    allowance: { dailyUsd: e.DAILY_ALLOWANCE_USD, timeZone: timeZone(e.ALLOWANCE_TIME_ZONE) },
   };
+}
+
+function authConfig(e: z.infer<typeof Env>): AuthConfig | undefined {
+  if (e.AUTH === 'off') {
+    if (e.NODE_ENV === 'production') {
+      throw new Error('Invalid environment: AUTH=off is for local development, not production');
+    }
+    return { kind: 'off' };
+  }
+  if (e.SUPABASE_URL) return { kind: 'supabase', url: e.SUPABASE_URL.replace(/\/+$/, '') };
+  if (e.AUTH === 'supabase')
+    throw new Error('Invalid environment: AUTH=supabase needs SUPABASE_URL');
+  return undefined;
+}
+
+/** A time zone the platform knows, such as America/Vancouver. */
+function timeZone(name: string): string {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: name });
+    return name;
+  } catch {
+    throw new Error(`Invalid environment: ALLOWANCE_TIME_ZONE ${name} isn't a time zone`);
+  }
 }
 
 function readerConfig(e: z.infer<typeof Env>): ReaderConfig | undefined {
