@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { StylePreset } from './layout';
 import { ArticleNo } from './product';
 
 // What the LLM decides when it furnishes a home (PLAN.md M4): which products go in each room and
@@ -72,6 +73,46 @@ export const LayoutIntent = z.object({
   notes: z.string(),
 });
 export type LayoutIntent = z.infer<typeof LayoutIntent>;
+
+/** How a generation furnished its rooms: the whole home, or one room again (M5). */
+export const FurnishMode = z.enum(['home', 'rearrange', 'new_pieces']);
+export type FurnishMode = z.infer<typeof FurnishMode>;
+
+/** What a layout logs of how it was planned (`Layout.llmIntent`). */
+export const LoggedIntent = z.object({
+  intent: LayoutIntent,
+  /** Layouts logged before M5 all furnished whole homes. */
+  mode: FurnishMode.default('home'),
+  /** The LLM that wrote the intent; none when a room was only rearranged. */
+  model: z.string().nullable(),
+  usage: z.object({ inputTokens: z.number(), outputTokens: z.number() }),
+  repairs: z.number().int().nonnegative(),
+  /** The solver seeds tried, when they weren't 1 to N. */
+  seeds: z.array(z.number().int()).optional(),
+});
+export type LoggedIntent = z.infer<typeof LoggedIntent>;
+
+/** The intent a room was last furnished from (M5). */
+export const RoomFurnishing = z.object({
+  roomId: z.string().min(1),
+  /** The winning layout that furnished it. */
+  layoutId: z.uuid(),
+  intent: RoomIntent,
+  /** What the intent set aside for the room, in CAD. */
+  budgetCad: z.number().nonnegative().optional(),
+});
+export type RoomFurnishing = z.infer<typeof RoomFurnishing>;
+
+/**
+ * What a home's furnishings planned: each room's last intent, and the budget and style of the
+ * last time the whole home was furnished. All empty for a home furnished by hand.
+ */
+export const HomeFurnishing = z.object({
+  budgetCad: z.number().positive().nullable(),
+  style: StylePreset.nullable(),
+  rooms: z.array(RoomFurnishing),
+});
+export type HomeFurnishing = z.infer<typeof HomeFurnishing>;
 
 /** The refs a relation names. */
 export function relationRefs(relation: Relation): string[] {

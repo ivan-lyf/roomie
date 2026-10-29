@@ -4,14 +4,16 @@ import {
   Floorplan,
   GenerationInputs,
   type GenerationJob,
+  type LoggedIntent,
   Product,
 } from '@roomie/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Db } from '../db/client';
 import { floorplans, layouts, products } from '../db/schema';
 import { readingCost } from '../plan-reader/claude';
+import { furnishingOf } from './furnishing';
 import { generateHome } from './generate';
 import type { IntentWriter } from './intent';
 
@@ -27,6 +29,7 @@ export type LayoutOptions = {
  * Furnish a home (PLAN.md M4): POST /floorplans/:id/layouts starts it and answers at once with
  * a generation id; GET /generations/:id says how each room is going, and what came of it.
  * Generations are kept in memory while the server runs; the layouts are kept for good.
+ * GET /floorplans/:id/furnishing says what each room was last furnished from (M5).
  */
 export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
   const app = new Hono();
@@ -67,6 +70,26 @@ export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
     return c.json({ generationId: job.generationId }, 202);
   });
 
+  app.get('/floorplans/:id/furnishing', async (c) => {
+    if (!db) return c.json({ error: 'DATABASE_URL is not set' }, 503);
+    const id = c.req.param('id');
+    const [row] = z.uuid().safeParse(id).success
+      ? await db.select().from(floorplans).where(eq(floorplans.id, id))
+      : [];
+    if (!row) return c.json({ error: 'No such floor plan.' }, 404);
+    const plan = Floorplan.parse(row);
+    const winners = await db
+      .select({
+        id: layouts.id,
+        inputs: layouts.inputs,
+        llmIntent: layouts.llmIntent,
+        createdAt: layouts.createdAt,
+      })
+      .from(layouts)
+      .where(and(eq(layouts.floorplanId, id), eq(layouts.status, 'winner')));
+    return c.json(furnishingOf(new Set(plan.rooms.map((r) => r.id)), winners));
+  });
+
   app.get('/generations/:id', (c) => {
     const job = jobs.get(c.req.param('id'));
     return job ? c.json(job) : c.json({ error: 'No such furnishing.' }, 404);
@@ -97,8 +120,9 @@ async function furnish(
       ...(seeds !== undefined && { seeds }),
       onProgress: (rooms) => (job.rooms = rooms.map((r) => ({ ...r }))),
     });
-    const llmIntent = {
+    const llmIntent: LoggedIntent = {
       intent: home.intent,
+      mode: 'home',
       model: home.model,
       usage: home.usage,
       repairs: home.repairs,

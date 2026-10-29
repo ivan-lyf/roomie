@@ -1,7 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { Floorplan, type GenerationJob, Layout, LayoutIntent, Product } from '@roomie/schema';
+import {
+  Floorplan,
+  type GenerationJob,
+  HomeFurnishing,
+  Layout,
+  LayoutIntent,
+  type LoggedIntent,
+  Product,
+} from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import catalog from '../../../../fixtures/catalog/products.json';
 import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
@@ -61,7 +70,12 @@ async function savedDemo(): Promise<Floorplan> {
   return created;
 }
 
-const inputs = { roomIds: ['r1', 'r2'], budgetCad: 3000, style: 'scandinavian', mustHaves: {} };
+const inputs = {
+  roomIds: ['r1', 'r2'],
+  budgetCad: 3000,
+  style: 'scandinavian' as const,
+  mustHaves: {},
+};
 
 describe('POST /api/floorplans/:id/layouts', () => {
   it('furnishes the home, logs every candidate, and makes the winner its furniture', async () => {
@@ -107,5 +121,84 @@ describe('POST /api/floorplans/:id/layouts', () => {
     const kitchen = await post(app(writer), plan.id, { ...inputs, roomIds: ['r3'] });
     expect(kitchen.status).toBe(400);
     expect(await kitchen.json()).toEqual({ error: "Room r3 isn't one that gets furniture." });
+  });
+});
+
+describe('GET /api/floorplans/:id/furnishing', () => {
+  const intent = LayoutIntent.parse(intentJson);
+  const logged = (i: LayoutIntent, mode: LoggedIntent['mode']): LoggedIntent => ({
+    intent: i,
+    mode,
+    model: 'claude-test',
+    usage: { inputTokens: 0, outputTokens: 0 },
+    repairs: 0,
+  });
+  type Fields = Pick<typeof layouts.$inferInsert, 'inputs' | 'llmIntent' | 'status'>;
+  const row = (floorplanId: string, at: string, fields: Fields) => ({
+    floorplanId,
+    generationId: randomUUID(),
+    placements: [],
+    score: 0.8,
+    scoreBreakdown: {},
+    promptVersion: 'layout-intent.v1',
+    createdAt: new Date(at),
+    ...fields,
+  });
+
+  it("gives each room the intent it was last furnished from, and the home's budget", async () => {
+    const plan = await savedDemo();
+    // The bedroom planned again, with only its bed this time.
+    const bedroom = { ...intent.rooms.find((r) => r.roomId === 'r1')!, relations: [] };
+    bedroom.items = bedroom.items.slice(0, 1);
+    const again = { rooms: [bedroom], budget: [{ roomId: 'r1', cad: 900 }], notes: '' };
+    const [home, room] = await db
+      .insert(layouts)
+      .values([
+        row(plan.id, '2026-10-28T10:00:00Z', {
+          inputs,
+          llmIntent: logged(intent, 'home'),
+          status: 'winner',
+        }),
+        row(plan.id, '2026-10-29T10:00:00Z', {
+          inputs: { ...inputs, roomIds: ['r1'], budgetCad: 900 },
+          llmIntent: logged(again, 'new_pieces'),
+          status: 'winner',
+        }),
+        // Candidates that didn't win, and a layout logged before modes, newest of all.
+        row(plan.id, '2026-10-29T11:00:00Z', {
+          inputs: { ...inputs, roomIds: ['r2'] },
+          llmIntent: { ...logged(again, 'home'), mode: undefined },
+          status: 'candidate',
+        }),
+      ])
+      .returning();
+
+    const res = await app().request(`/api/floorplans/${plan.id}/furnishing`);
+    expect(res.status).toBe(200);
+    const furnishing = HomeFurnishing.parse(await res.json());
+    expect(furnishing.budgetCad).toBe(3000);
+    expect(furnishing.style).toBe('scandinavian');
+    const byRoom = new Map(furnishing.rooms.map((r) => [r.roomId, r]));
+    expect(byRoom.get('r1')).toEqual({
+      roomId: 'r1',
+      layoutId: room!.id,
+      intent: bedroom,
+      budgetCad: 900,
+    });
+    expect(byRoom.get('r2')).toMatchObject({
+      layoutId: home!.id,
+      intent: intent.rooms.find((r) => r.roomId === 'r2'),
+      budgetCad: intent.budget.find((b) => b.roomId === 'r2')!.cad,
+    });
+  });
+
+  it('is empty for a home furnished by hand, and 404 for no plan', async () => {
+    const plan = await savedDemo();
+    const res = await app().request(`/api/floorplans/${plan.id}/furnishing`);
+    expect(await res.json()).toEqual({ budgetCad: null, style: null, rooms: [] });
+    const none = await app().request(
+      '/api/floorplans/00000000-0000-4000-8000-000000000000/furnishing',
+    );
+    expect(none.status).toBe(404);
   });
 });
