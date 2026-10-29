@@ -74,9 +74,27 @@ class Saver {
     }
   }
 
+  /** Saves now, once any save under way is done; false if something is still not saved. */
+  async flush(): Promise<boolean> {
+    while (this.busy) await new Promise((resolve) => setTimeout(resolve, 50));
+    if (this.pending) await this.save();
+    return !this.pending;
+  }
+
   dispose() {
     clearTimeout(this.timer);
   }
+}
+
+/** The saver of the plan open now. */
+let open: Saver | undefined;
+
+/**
+ * Saves what isn't saved yet of the plan open now, and says whether it's all saved: before
+ * asking the server for something that reads the saved plan, such as furnishing it.
+ */
+export function saveNow(): Promise<boolean> {
+  return open ? open.flush() : Promise.resolve(true);
 }
 
 /**
@@ -90,6 +108,7 @@ export function useAutosave(id: string): { state: SaveState; retry: () => void }
   useEffect(() => {
     if (id === DEMO_ID) return;
     const saver = new Saver(id, setState);
+    open = saver;
     retry.current = () => void saver.save();
     saver.saved = useFloorplan.getState().plan;
     const unsubscribe = useFloorplan.subscribe((s, prev) => {
@@ -118,6 +137,7 @@ export function useAutosave(id: string): { state: SaveState; retry: () => void }
       events.forEach((e) => window.removeEventListener(e, input));
       document.removeEventListener('visibilitychange', flush);
       window.removeEventListener('beforeunload', warn);
+      if (open === saver) open = undefined;
       // Leaving the page saves what's left.
       void saver.save().finally(() => saver.dispose());
     };

@@ -5,6 +5,7 @@ import { Link } from 'wouter';
 import { floorplanImageUrl } from '../api';
 import { useAutosave } from '../autosave';
 import { nudgeItem, removeItem, rotateItem } from '../furnishing';
+import { useFurnishingProgress } from '../generation';
 import { DEMO_ID, usePlan } from '../plans';
 import { HomeScene } from '../scene/home/HomeScene';
 import { redo, undo } from '../stores/floorplan';
@@ -63,6 +64,8 @@ export function HomePage({ id }: { id: string }) {
       const furnish = useFurnish.getState();
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
+      // While a furnishing is under way, the furniture stays as it is.
+      if (furnish.busy && e.key !== 'Escape') return;
       if (mod && (key === 'z' || key === 'y')) {
         e.preventDefault();
         if (key === 'y' || e.shiftKey) redo();
@@ -96,6 +99,7 @@ export function HomePage({ id }: { id: string }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  useFurnishingProgress();
   // Picking and placing start afresh on each home.
   useEffect(() => () => useFurnish.getState().reset(), [id]);
   // What its furnishings planned, for why each item is there; the demo was never furnished.

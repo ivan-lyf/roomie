@@ -1,5 +1,5 @@
 import { FOOT, INCH, parseArea, parseDimension, SQUARE_FOOT } from '@roomie/geometry';
-import type { Category, RoomType, SourceUnit } from '@roomie/schema';
+import type { Category, RoomType, SourceUnit, StylePreset } from '@roomie/schema';
 
 // Lengths are meters everywhere else; this is where they meet the user's units.
 
@@ -35,6 +35,13 @@ export const CATEGORIES: Record<Category, string> = {
   tv_unit: 'TV units',
   rug: 'Rugs',
   floor_lamp: 'Floor lamps',
+};
+
+/** Each style, in the words a person picks it by. */
+export const STYLES: Record<StylePreset, string> = {
+  scandinavian: 'Light & natural',
+  modern: 'Clean & modern',
+  warm_minimal: 'Warm & simple',
 };
 
 const cad = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' });

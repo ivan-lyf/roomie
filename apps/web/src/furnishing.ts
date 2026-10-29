@@ -20,6 +20,12 @@ import { useProducts } from './stores/products';
 /** The id of a product shown where it would be placed, before it is. */
 export const PREVIEW_ID = 'preview';
 
+/** A starting budget per room furnished, before the user changes it. */
+export const BUDGET_PER_ROOM = 1200;
+
+/** Whether the furniture can be edited now: not while a furnishing is under way. */
+const editable = () => !useFurnish.getState().busy;
+
 /**
  * The furniture as it looks now: the item being dragged where it's being dragged, and a product
  * about to be placed where it would go.
@@ -135,6 +141,7 @@ export function useScores(plan: Floorplan): Scores {
  * the new turn; it never turns back to face the room.
  */
 export function rotateItem(itemId: string, by: number) {
+  if (!editable()) return;
   const { plan, moveItem } = useFloorplan.getState();
   const item = plan?.furniture.find((f) => f.id === itemId);
   const product = item && useProducts.getState().byArticle.get(item.articleNo);
@@ -181,6 +188,7 @@ export function swapProblems(
 
 /** Swaps an item for another product where it stands, as one edit to undo. */
 export function swapItem(itemId: string, product: Product) {
+  if (!editable()) return;
   const { plan, swapItem: swap } = useFloorplan.getState();
   const item = plan?.furniture.find((f) => f.id === itemId);
   if (!plan || !item) return;
@@ -189,6 +197,7 @@ export function swapItem(itemId: string, product: Product) {
 
 /** Moves an item a little across the plan, without snapping. */
 export function nudgeItem(itemId: string, dx: number, dy: number) {
+  if (!editable()) return;
   const { plan, moveItem } = useFloorplan.getState();
   const item = plan?.furniture.find((f) => f.id === itemId);
   if (item) moveItem(itemId, { x: item.x + dx, y: item.y + dy });
@@ -216,17 +225,41 @@ export function whyOf(
 }
 
 export function removeItem(itemId: string) {
+  if (!editable()) return;
   useFloorplan.getState().remove([itemId]);
   useFurnish.getState().select(undefined);
 }
 
 /** Takes everything out of a room, as one edit to undo. */
 export function clearRoom(roomId: string) {
+  if (!editable()) return;
   const { plan, remove } = useFloorplan.getState();
   const ids = plan?.furniture.filter((f) => f.roomId === roomId).map((f) => f.id) ?? [];
   if (ids.length === 0) return;
   remove(ids);
   useFurnish.getState().select(undefined);
+}
+
+/**
+ * What a room may spend on new pieces, to start with: its share in the intent it was last
+ * furnished from, or else what's left of the home's budget, or else a room's starting budget.
+ */
+export function roomBudget(
+  furnishing: HomeFurnishing | undefined,
+  furniture: readonly Placement[],
+  products: ReadonlyMap<string, Pick<Product, 'priceCad'>>,
+  roomId: string,
+): number {
+  const share = furnishing?.rooms.find((r) => r.roomId === roomId)?.budgetCad;
+  if (share) return Math.round(share);
+  const home = furnishing?.budgetCad;
+  if (home) {
+    const others = furniture
+      .filter((f) => f.roomId !== roomId)
+      .reduce((s, f) => s + (products.get(f.articleNo)?.priceCad ?? 0), 0);
+    if (home - others >= 1) return Math.round(home - others);
+  }
+  return BUDGET_PER_ROOM;
 }
 
 export type Totals = { count: number; priceCad: number };

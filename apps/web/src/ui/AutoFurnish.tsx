@@ -6,22 +6,12 @@ import {
   ROOM_CATEGORIES,
   StylePreset,
 } from '@roomie/schema';
-import { useEffect, useState } from 'react';
-import { fetchGeneration, startFurnishing } from '../api';
-import { CATEGORIES } from '../format';
-import { useFloorplan } from '../stores/floorplan';
-import { useIntents } from '../stores/intents';
-
-/** A starting budget per room furnished, before the user changes it. */
-const BUDGET_PER_ROOM = 1200;
-/** How often to ask how the furnishing is going. */
-const POLL_MS = 1000;
-
-const STYLES: Record<StylePreset, string> = {
-  scandinavian: 'Light & natural',
-  modern: 'Clean & modern',
-  warm_minimal: 'Warm & simple',
-};
+import { useState } from 'react';
+import { startFurnishing } from '../api';
+import { CATEGORIES, STYLES } from '../format';
+import { BUDGET_PER_ROOM } from '../furnishing';
+import { runFurnishing } from '../generation';
+import { useFurnish } from '../stores/furnish';
 
 const STATUS: Record<GenerationJob['rooms'][number]['status'], string> = {
   waiting: 'waiting',
@@ -45,32 +35,15 @@ export function AutoFurnish({ plan, saved }: Props) {
   const [budget, setBudget] = useState(String(BUDGET_PER_ROOM * Math.max(rooms.length, 1)));
   const [style, setStyle] = useState<StylePreset>('scandinavian');
   const [musts, setMusts] = useState<Record<string, Category[]>>({});
-  const [job, setJob] = useState<GenerationJob>();
-  const [error, setError] = useState<string>();
+  const busy = useFurnish((s) => s.busy);
+  // The last furnishing started, if it was of the whole home.
+  const furnishing = useFurnish((s) =>
+    s.furnishing?.roomId === undefined ? s.furnishing : undefined,
+  );
+  const [invalid, setInvalid] = useState<string>();
+  const job = furnishing?.job;
+  const error = invalid ?? furnishing?.error;
   const running = job?.status === 'running';
-
-  // Ask how it's going until it's done, then put the furniture in.
-  useEffect(() => {
-    if (!job || job.status !== 'running') return;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => {
-      fetchGeneration(job.generationId, ctrl.signal)
-        .then((next) => {
-          setJob(next);
-          if (next.status === 'done' && next.furniture) {
-            useFloorplan.getState().setFurniture(next.furniture);
-            void useIntents.getState().load(next.floorplanId);
-          }
-        })
-        .catch((e: unknown) => {
-          if (!ctrl.signal.aborted) setError(e instanceof Error ? e.message : String(e));
-        });
-    }, POLL_MS);
-    return () => {
-      clearTimeout(timer);
-      ctrl.abort();
-    };
-  }, [job]);
 
   if (rooms.length === 0) return null;
   if (!saved) {
@@ -79,27 +52,18 @@ export function AutoFurnish({ plan, saved }: Props) {
     );
   }
 
-  const start = () => {
-    setError(undefined);
+  const furnish = () => {
+    setInvalid(undefined);
     const budgetCad = Number(budget);
-    if (!(budgetCad > 0)) return setError('Enter a budget in dollars.');
-    if (chosen.length === 0) return setError('Pick at least one room to furnish.');
+    if (!(budgetCad > 0)) return setInvalid('Enter a budget in dollars.');
+    if (chosen.length === 0) return setInvalid('Pick at least one room to furnish.');
     const inputs = {
       roomIds: chosen,
       budgetCad,
       style,
       mustHaves: Object.fromEntries(chosen.map((id) => [id, musts[id] ?? []])),
     };
-    startFurnishing(plan.id, inputs)
-      .then((generationId) =>
-        setJob({
-          generationId,
-          floorplanId: plan.id,
-          status: 'running',
-          rooms: chosen.map((roomId) => ({ roomId, status: 'waiting' })),
-        }),
-      )
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    void runFurnishing(plan.id, chosen, undefined, () => startFurnishing(plan.id, inputs));
   };
 
   const name = (id: string) => plan.rooms.find((r) => r.id === id)?.name ?? id;
@@ -109,7 +73,7 @@ export function AutoFurnish({ plan, saved }: Props) {
   return (
     <section className="space-y-2 rounded-md border border-stone-200 p-2">
       <h2 className="font-medium">Furnish for me</h2>
-      <fieldset className="space-y-1" disabled={running}>
+      <fieldset className="space-y-1" disabled={busy}>
         {rooms.map((room) => (
           <div key={room.id}>
             <label className="flex items-center gap-2">
@@ -170,7 +134,7 @@ export function AutoFurnish({ plan, saved }: Props) {
         </div>
         <button
           type="button"
-          onClick={start}
+          onClick={furnish}
           className="w-full rounded-md bg-stone-800 px-3 py-1.5 text-white disabled:opacity-50"
         >
           {running ? 'Furnishing…' : 'Furnish my home'}

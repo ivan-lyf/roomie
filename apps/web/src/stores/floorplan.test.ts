@@ -179,7 +179,7 @@ describe('furnishing', () => {
     expect(current().furniture[0]!.articleNo).toBe('123.456.78');
   });
 
-  it('clears a room, and puts in a furnished layout, each one edit to undo', () => {
+  it('clears a room, and puts in a furnished home or room, each one edit to undo', () => {
     const item = (id: string, roomId: string) => ({
       id,
       articleNo: '123.456.78',
@@ -191,7 +191,11 @@ describe('furnishing', () => {
     state().setFurniture([item('f1', 'r1'), item('f2', 'r2'), item('f3', 'r2')]);
     state().remove(['f2', 'f3']);
     expect(current().furniture.map((f) => f.id)).toEqual(['f1']);
-    expect(history().pastStates).toHaveLength(2);
+    state().setRoomFurniture('r1', [item('f4', 'r1'), item('f5', 'r1')]);
+    expect(current().furniture.map((f) => f.id)).toEqual(['f4', 'f5']);
+    expect(history().pastStates).toHaveLength(3);
+    undo();
+    expect(current().furniture.map((f) => f.id)).toEqual(['f1']);
     undo();
     expect(current().furniture.map((f) => f.id)).toEqual(['f1', 'f2', 'f3']);
     undo();

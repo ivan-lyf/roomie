@@ -13,6 +13,7 @@ import {
 } from '../furnishing';
 import { DEMO_ID } from '../plans';
 import { redo, undo, useFloorplan } from '../stores/floorplan';
+import { useFurnish } from '../stores/furnish';
 import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
 import { FurnishPanel } from './FurnishPanel';
@@ -90,8 +91,9 @@ export function HomePanel(props: Props) {
 
 /** Undo and Redo for every edit to the home, each greyed out when there's nothing to take. */
 function UndoRedo() {
-  const canUndo = useStore(useFloorplan.temporal, (s) => s.pastStates.length > 0);
-  const canRedo = useStore(useFloorplan.temporal, (s) => s.futureStates.length > 0);
+  const busy = useFurnish((s) => s.busy);
+  const canUndo = useStore(useFloorplan.temporal, (s) => s.pastStates.length > 0) && !busy;
+  const canRedo = useStore(useFloorplan.temporal, (s) => s.futureStates.length > 0) && !busy;
   const button = 'underline disabled:text-stone-300 disabled:no-underline';
   return (
     <span className="flex gap-3">

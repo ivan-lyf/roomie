@@ -31,6 +31,7 @@ import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
 import { AutoFurnish } from './AutoFurnish';
 import { SwapList } from './SwapList';
+import { TryAnother } from './TryAnother';
 
 /** The category a room's furnishing starts on. */
 const FIRST_CATEGORY: Partial<Record<RoomType, Category>> = {
@@ -67,7 +68,7 @@ export function FurnishPanel({ plan, roomId, onRoom, saved }: Props) {
     <>
       <AutoFurnish plan={plan} saved={saved} />
       {room && furnishable(room) ? (
-        <Catalog key={room.id} plan={plan} room={room} />
+        <Catalog key={room.id} plan={plan} room={room} saved={saved} />
       ) : (
         <RoomPicker plan={plan} room={room} onRoom={onRoom} />
       )}
@@ -111,7 +112,7 @@ function RoomPicker({
   );
 }
 
-function Catalog({ plan, room }: { plan: Floorplan; room: Room }) {
+function Catalog({ plan, room, saved }: { plan: Floorplan; room: Room; saved: boolean }) {
   const imperial = isImperial(plan.scale?.sourceUnit);
   const [category, setCategory] = useState<Category>(FIRST_CATEGORY[room.roomType] ?? 'sofa');
   const [maxPrice, setMaxPrice] = useState('');
@@ -121,6 +122,7 @@ function Catalog({ plan, room }: { plan: Floorplan; room: Room }) {
   const [loaded, setLoaded] = useState<Loaded>();
   const armed = useFurnish((s) => s.armed);
   const arm = useFurnish((s) => s.arm);
+  const busy = useFurnish((s) => s.busy);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -158,6 +160,8 @@ function Catalog({ plan, room }: { plan: Floorplan; room: Room }) {
       </p>
 
       <RoomItems plan={plan} room={room} imperial={imperial} />
+
+      {saved && <TryAnother plan={plan} room={room} />}
 
       <h2 className="border-t border-stone-200 pt-3 font-medium">Add furniture</h2>
 
@@ -197,6 +201,7 @@ function Catalog({ plan, room }: { plan: Floorplan; room: Room }) {
           <li key={f.id}>
             <button
               type="button"
+              disabled={busy}
               onClick={() => arm(f.id === family?.id ? undefined : f.variants[0]!.articleNo)}
               className={`w-full px-3 py-2 text-left ${f.id === family?.id ? 'bg-stone-100' : 'hover:bg-stone-50'}`}
             >
@@ -277,6 +282,7 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
   const selected = useFurnish((s) => s.selected);
   const select = useFurnish((s) => s.select);
   const swapping = useFurnish((s) => s.swapping);
+  const busy = useFurnish((s) => s.busy);
   const problems = useLayoutProblems(plan);
   const items = plan.furniture.filter((f) => f.roomId === room.id);
   const item = plan.furniture.find((f) => f.id === selected);
@@ -301,7 +307,12 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
           {items.length > 0 && `, ${formatPrice(total)}`}
         </h2>
         {items.length > 0 && (
-          <button type="button" className="text-xs underline" onClick={() => clearRoom(room.id)}>
+          <button
+            type="button"
+            className="text-xs underline disabled:opacity-50"
+            disabled={busy}
+            onClick={() => clearRoom(room.id)}
+          >
             Clear the room
           </button>
         )}
@@ -357,8 +368,9 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
                 )}
                 <button
                   type="button"
+                  disabled={busy}
                   onClick={() => removeItem(f.id)}
-                  className="px-2 text-stone-500 hover:text-red-700"
+                  className="px-2 text-stone-500 hover:text-red-700 disabled:opacity-50"
                   title="Remove it"
                   aria-label={`Remove the ${p ? familyName(p) : 'item'}`}
                 >
@@ -392,7 +404,7 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
               {p.message}
             </p>
           ))}
-          <div className="flex gap-2 pt-1">
+          <fieldset className="flex gap-2 pt-1 disabled:opacity-50" disabled={busy}>
             <button
               type="button"
               className="rounded-md border border-stone-300 bg-white px-2 py-1"
@@ -415,7 +427,7 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
             >
               Remove (Delete)
             </button>
-          </div>
+          </fieldset>
           <p className="text-xs text-stone-500">
             Drag it to move it; it snaps to the walls unless you hold Alt. Arrows nudge it.
           </p>

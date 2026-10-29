@@ -88,6 +88,8 @@ type FloorplanState = {
 
   /** Puts in all new furniture, a furnished layout's, as one edit to undo. */
   setFurniture: (furniture: Placement[]) => void;
+  /** Puts new furniture in one room in place of what it had, as one edit to undo. */
+  setRoomFurniture: (roomId: string, furniture: Placement[]) => void;
   /** Puts a product in a room, and returns the new item's id. */
   placeItem: (item: Omit<Placement, 'id'>) => string;
   /** Swaps an item for another product where it stands; it keeps its id and ref. */
@@ -337,6 +339,11 @@ export const useFloorplan = create<FloorplanState>()(
           })),
 
         setFurniture: (furniture) => edit((plan) => ({ ...plan, furniture })),
+        setRoomFurniture: (roomId, furniture) =>
+          edit((plan) => ({
+            ...plan,
+            furniture: [...plan.furniture.filter((f) => f.roomId !== roomId), ...furniture],
+          })),
         placeItem: (item) => {
           const itemId = id('f');
           edit((plan) => ({ ...plan, furniture: [...plan.furniture, { id: itemId, ...item }] }));

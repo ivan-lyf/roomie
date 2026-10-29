@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { furnitureTotals, liveFurniture, PREVIEW_ID, problemsByRoom, whyOf } from './furnishing';
+import {
+  BUDGET_PER_ROOM,
+  furnitureTotals,
+  liveFurniture,
+  PREVIEW_ID,
+  problemsByRoom,
+  roomBudget,
+  whyOf,
+} from './furnishing';
 
 const sofa = { id: 'f1', articleNo: '123.456.78', roomId: 'r2', x: 5, y: 2, rotation: 0 };
 const lamp = { ...sofa, id: 'f2', articleNo: '876.543.21', x: 7 };
@@ -96,5 +104,33 @@ describe('problemsByRoom', () => {
         ['r4', 1],
       ]),
     );
+  });
+});
+
+describe('roomBudget', () => {
+  const products = new Map([
+    ['123.456.78', { priceCad: 899 }],
+    ['876.543.21', { priceCad: 50 }],
+  ]);
+  const home = { budgetCad: 2400, style: 'modern' as const, rooms: [] };
+  const bed = { ...sofa, id: 'f3', roomId: 'r1' };
+
+  it("is the room's share in its last intent", () => {
+    const room = {
+      roomId: 'r1',
+      layoutId: '00000000-0000-4000-8000-000000000000',
+      intent: { roomId: 'r1', items: [], relations: [] },
+      placements: [],
+      budgetCad: 650.4,
+    };
+    expect(roomBudget({ ...home, rooms: [room] }, [sofa, bed], products, 'r1')).toBe(650);
+  });
+
+  it("is else what's left of the home's budget, or else a room's starting budget", () => {
+    expect(roomBudget(home, [sofa, lamp, bed], products, 'r1')).toBe(2400 - 949);
+    expect(roomBudget({ ...home, budgetCad: 900 }, [sofa, lamp], products, 'r1')).toBe(
+      BUDGET_PER_ROOM,
+    );
+    expect(roomBudget(undefined, [sofa], products, 'r1')).toBe(BUDGET_PER_ROOM);
   });
 });

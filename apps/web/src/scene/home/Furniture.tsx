@@ -127,8 +127,9 @@ function Movable({ plan, placement, product, problems }: MovableProps) {
     if (controls) controls.enabled = enabled;
   };
   const selected = useFurnish((s) => s.selected === placement.id);
-  // While a product is being placed, clicks go through items to the floor behind them.
-  const placing = useFurnish((s) => s.armed !== undefined);
+  // While a product is being placed, clicks go through items to the floor behind them; while
+  // a furnishing is under way, items can't be moved.
+  const placing = useFurnish((s) => s.armed !== undefined || s.busy);
   const [hovered, setHovered] = useState(false);
   useCursor(hovered && !placing, 'grab');
   const grab = useRef<{ offset: Vec2; from: Vec2; moved: boolean }>(undefined);
