@@ -61,7 +61,12 @@ export function HomePanel(props: Props) {
             {budget !== undefined && home.priceCad > budget && (
               <p className="text-amber-700">{formatPrice(home.priceCad - budget)} over budget.</p>
             )}
-            <p className="text-xs text-stone-500">Layout score {score.toFixed(2)}</p>
+            <p className="flex justify-between text-xs text-stone-500">
+              Layout score {score.toFixed(2)}
+              <Link href={`/plans/${props.id}/list`} className="text-stone-800 underline">
+                Shopping list
+              </Link>
+            </p>
           </>
         )}
       </header>
