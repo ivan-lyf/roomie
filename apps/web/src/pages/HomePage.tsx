@@ -5,10 +5,11 @@ import { Link } from 'wouter';
 import { floorplanImageUrl } from '../api';
 import { useAutosave } from '../autosave';
 import { nudgeItem, removeItem, rotateItem } from '../furnishing';
-import { usePlan } from '../plans';
+import { DEMO_ID, usePlan } from '../plans';
 import { HomeScene } from '../scene/home/HomeScene';
 import { redo, undo } from '../stores/floorplan';
 import { useFurnish } from '../stores/furnish';
+import { useIntents } from '../stores/intents';
 import { useProductsFor } from '../stores/products';
 import { HomePanel } from '../ui/HomePanel';
 
@@ -85,6 +86,8 @@ export function HomePage({ id }: { id: string }) {
 
   // Picking and placing start afresh on each home.
   useEffect(() => () => useFurnish.getState().reset(), [id]);
+  // What its furnishings planned, for why each item is there; the demo was never furnished.
+  useEffect(() => void useIntents.getState().load(id === DEMO_ID ? undefined : id), [id]);
 
   if (error) {
     return (

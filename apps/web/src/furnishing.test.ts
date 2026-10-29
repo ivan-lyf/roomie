@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { furnitureTotals, liveFurniture, PREVIEW_ID } from './furnishing';
+import { furnitureTotals, liveFurniture, PREVIEW_ID, whyOf } from './furnishing';
 
 const sofa = { id: 'f1', articleNo: '123.456.78', roomId: 'r2', x: 5, y: 2, rotation: 0 };
 const lamp = { ...sofa, id: 'f2', articleNo: '876.543.21', x: 7 };
@@ -39,5 +39,34 @@ describe('furnitureTotals', () => {
     expect(home).toEqual({ count: 3, priceCad: 948.99 });
     expect(byRoom.get('r2')).toEqual({ count: 2, priceCad: 948.99 });
     expect(byRoom.get('r1')).toEqual({ count: 1, priceCad: 0 });
+  });
+});
+
+describe('whyOf', () => {
+  const furnishing = {
+    budgetCad: 3000,
+    style: 'scandinavian' as const,
+    rooms: [
+      {
+        roomId: 'r2',
+        layoutId: '00000000-0000-4000-8000-000000000000',
+        intent: {
+          roomId: 'r2',
+          items: [{ ref: 'sofa', articleNo: '123.456.78', why: 'Seats three, facing the TV.' }],
+          relations: [],
+        },
+      },
+    ],
+  };
+
+  it("gives the intent's reason for an item it chose", () => {
+    expect(whyOf({ ...sofa, ref: 'sofa' }, furnishing)).toBe('Seats three, facing the TV.');
+  });
+
+  it('has none once the item is swapped, moved to another room, or was placed by hand', () => {
+    expect(whyOf({ ...sofa, ref: 'sofa', articleNo: '876.543.21' }, furnishing)).toBeUndefined();
+    expect(whyOf({ ...sofa, ref: 'sofa', roomId: 'r1' }, furnishing)).toBeUndefined();
+    expect(whyOf(sofa, furnishing)).toBeUndefined();
+    expect(whyOf({ ...sofa, ref: 'sofa' }, undefined)).toBeUndefined();
   });
 });

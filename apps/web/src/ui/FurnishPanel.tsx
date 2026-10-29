@@ -18,9 +18,10 @@ import {
   parseLength,
   ROOM_TYPES,
 } from '../format';
-import { removeItem, rotateItem, useLayoutProblems } from '../furnishing';
+import { removeItem, rotateItem, useLayoutProblems, whyOf } from '../furnishing';
 import { redo, undo } from '../stores/floorplan';
 import { useFurnish } from '../stores/furnish';
+import { useIntents } from '../stores/intents';
 import { useProducts } from '../stores/products';
 import { AutoFurnish } from './AutoFurnish';
 
@@ -272,6 +273,7 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
   const items = plan.furniture.filter((f) => f.roomId === room.id);
   const item = plan.furniture.find((f) => f.id === selected);
   const product = item && products.get(item.articleNo);
+  const why = useIntents((s) => item && whyOf(item, s.furnishing));
   const total = items.reduce((sum, f) => sum + (products.get(f.articleNo)?.priceCad ?? 0), 0);
   // Problems with the room's walkways that no one item is to blame for.
   const ids = new Set(plan.furniture.map((f) => f.id));
@@ -353,6 +355,12 @@ function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; impe
           <a className="block underline" href={product.url} target="_blank" rel="noreferrer">
             {product.articleNo} on IKEA.ca
           </a>
+          {why && (
+            <p>
+              <span className="text-stone-500">Why here: </span>
+              {why}
+            </p>
+          )}
           {(problems.byItem.get(item.id) ?? []).map((p, i) => (
             <p key={i} className="text-red-700">
               {p.message}

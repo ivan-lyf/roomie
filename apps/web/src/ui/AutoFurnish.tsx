@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { fetchGeneration, startFurnishing } from '../api';
 import { CATEGORIES } from '../format';
 import { useFloorplan } from '../stores/floorplan';
+import { useIntents } from '../stores/intents';
 
 /** A starting budget per room furnished, before the user changes it. */
 const BUDGET_PER_ROOM = 1200;
@@ -58,6 +59,7 @@ export function AutoFurnish({ plan, saved }: Props) {
           setJob(next);
           if (next.status === 'done' && next.furniture) {
             useFloorplan.getState().setFurniture(next.furniture);
+            void useIntents.getState().load(next.floorplanId);
           }
         })
         .catch((e: unknown) => {

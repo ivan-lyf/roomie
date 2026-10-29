@@ -5,6 +5,7 @@ import {
   FloorplanSummary,
   type GenerationInputs,
   GenerationJob,
+  HomeFurnishing,
   Product,
 } from '@roomie/schema';
 import { z } from 'zod';
@@ -110,4 +111,11 @@ export async function fetchGeneration(id: string, signal?: AbortSignal): Promise
   const res = await fetch(`/api/generations/${encodeURIComponent(id)}`, { signal });
   if (!res.ok) throw await failure(res, 'GET /api/generations/:id');
   return GenerationJob.parse(await res.json());
+}
+
+/** What each room of a saved home was last furnished from, with its budget and style. */
+export async function fetchFurnishing(id: string, signal?: AbortSignal): Promise<HomeFurnishing> {
+  const res = await fetch(`/api/floorplans/${encodeURIComponent(id)}/furnishing`, { signal });
+  if (!res.ok) throw await failure(res, 'GET /api/floorplans/:id/furnishing');
+  return HomeFurnishing.parse(await res.json());
 }

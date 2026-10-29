@@ -1,5 +1,5 @@
 import { type LayoutProblem, snapPlacement, turn, validateLayout } from '@roomie/geometry';
-import type { Floorplan, Placement, Product } from '@roomie/schema';
+import type { Floorplan, HomeFurnishing, Placement, Product, RoomIntent } from '@roomie/schema';
 import { useMemo } from 'react';
 import { useFloorplan } from './stores/floorplan';
 import { type Preview, useFurnish } from './stores/furnish';
@@ -82,6 +82,27 @@ export function nudgeItem(itemId: string, dx: number, dy: number) {
   const { plan, moveItem } = useFloorplan.getState();
   const item = plan?.furniture.find((f) => f.id === itemId);
   if (item) moveItem(itemId, { x: item.x + dx, y: item.y + dy });
+}
+
+/** The intent a room was last furnished from, if it was furnished for the user. */
+export function roomIntent(
+  furnishing: HomeFurnishing | undefined,
+  roomId: string,
+): RoomIntent | undefined {
+  return furnishing?.rooms.find((r) => r.roomId === roomId)?.intent;
+}
+
+/**
+ * Why an item is where it is, in the intent's words: only while it's still the product the
+ * intent chose, in the room it chose it for. Items placed by hand have no reason.
+ */
+export function whyOf(
+  item: Pick<Placement, 'roomId' | 'articleNo' | 'ref'>,
+  furnishing: HomeFurnishing | undefined,
+): string | undefined {
+  if (!item.ref) return undefined;
+  const chosen = roomIntent(furnishing, item.roomId)?.items.find((i) => i.ref === item.ref);
+  return chosen?.articleNo === item.articleNo ? chosen.why : undefined;
 }
 
 export function removeItem(itemId: string) {
