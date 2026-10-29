@@ -54,4 +54,30 @@ describe('solveRoom', () => {
     });
     expect(validateLayout(plan, solved.placements, products)).toEqual([]);
   });
+
+  it("keeps clear of the furniture in a room it's open to", () => {
+    // The kitchen made a dining area: the living room is open to it along 4.6 m down.
+    const plan = Floorplan.parse(demo);
+    const open = {
+      ...plan,
+      rooms: plan.rooms.map((r) =>
+        r.id === 'r3' ? { ...r, roomType: 'dining_area' as const, furnishable: true } : r,
+      ),
+    };
+    const dining = {
+      roomId: 'r3',
+      items: [
+        { ref: 'table', articleNo: '900.000.23', why: '' },
+        { ref: 'chair_a', articleNo: '900.000.24', why: '' },
+        { ref: 'chair_b', articleNo: '900.000.24', why: '' },
+      ],
+      relations: [{ kind: 'around' as const, items: ['chair_a', 'chair_b'], target: 'table' }],
+    };
+    const first = solveRoom(open, dining, products, { seed: 1 });
+    const others = first.placements.map((p) => ({ ...p, id: `r3:${p.id}` }));
+    const living = LayoutIntent.parse(demoIntent).rooms[1]!;
+    const second = solveRoom(open, living, products, { seed: 1, others });
+    expect(second.unplaced).toEqual([]);
+    expect(validateLayout(open, [...others, ...second.placements], products)).toEqual([]);
+  });
 });

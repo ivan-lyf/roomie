@@ -66,6 +66,11 @@ export type SolveOptions = {
   seed: number;
   /** Local search moves to try. */
   steps?: number;
+  /**
+   * Furniture already standing in other rooms, which this room mustn't make invalid: rooms open
+   * to each other share walkways. Their ids must differ from this room's refs.
+   */
+  others?: readonly Placement[];
 };
 
 export type RoomSolution = {
@@ -313,8 +318,15 @@ export function solveRoom(
       const item = items.find((i) => i.ref === p.ref)!;
       return toPlacement(item, p.placement);
     });
+  // Problems the other rooms' furniture already has are theirs, not this room's.
+  const others = options.others ?? [];
+  const known = new Set(validateLayout(plan, others, products).map((p) => p.message));
   const valid = (layout: Placement[], paths: boolean) =>
-    validateLayout(plan, layout, products, { paths }).length === 0;
+    others.length === 0
+      ? validateLayout(plan, layout, products, { paths }).length === 0
+      : validateLayout(plan, [...others, ...layout], products, { paths }).every((p) =>
+          known.has(p.message),
+        );
   const score = (pieces: Piece[], walkway = false) =>
     scoreRoom(ctx, pieces, { relations, walkway }).score;
 

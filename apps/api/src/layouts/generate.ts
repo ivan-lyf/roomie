@@ -113,14 +113,19 @@ export async function generateHome(
   deps.onIntent?.(result.intent);
   for (;;) {
     solved = new Map();
+    // One room after another, each around the best of the rooms before it: rooms open to each
+    // other share walkways.
+    const others: Placement[] = [];
     for (const roomId of inputs.roomIds) {
       const intent = result.intent.rooms.find((r) => r.roomId === roomId);
       const runs = intent
         ? Array.from({ length: seeds }, (_, i) =>
-            solveRoom(plan, intent, products, { seed: i + 1 }),
+            solveRoom(plan, intent, products, { seed: i + 1, others }),
           )
         : [];
       solved.set(roomId, runs);
+      const best = runs.toSorted(better)[0];
+      if (best) others.push(...best.placements.map((p) => ({ ...p, id: `${roomId}:${p.id}` })));
     }
     const feedback = problemsOf(plan, inputs, solved, products);
     if (feedback.length === 0 || repairs >= REPAIRS) break;
@@ -151,9 +156,10 @@ export async function generateHome(
     return { placements, score: scored.score, breakdown };
   };
 
+  // Each seed's rooms together, as long as they stand together: only valid layouts are logged.
   const candidates = Array.from({ length: seeds }, (_, i) =>
     homeOf(inputs.roomIds.flatMap((id) => solved.get(id)![i] ?? [])),
-  );
+  ).filter((c) => validateLayout(plan, c.placements, products).length === 0);
   let chosen = inputs.roomIds.flatMap((id) => bestOf(id) ?? []);
   const dropped = trimToBudget(chosen, inputs.budgetCad, products);
   // A room that lost items to the budget is scored again as it now stands.
