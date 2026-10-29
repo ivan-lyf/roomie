@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import demo from '../../../fixtures/plans/00-demo-1br/floorplan.json';
-import { Floorplan, Layout, Opening, PlanReading, Product } from './index';
+import {
+  Floorplan,
+  intentErrors,
+  Layout,
+  LayoutIntent,
+  Opening,
+  PlanReading,
+  Product,
+  relationRefs,
+} from './index';
 
 describe('Product', () => {
   const sofa = {
@@ -101,5 +110,57 @@ describe('Floorplan', () => {
     delete older.furniture;
     delete older.furnishedFrom;
     expect(Floorplan.parse(older)).toMatchObject({ furniture: [], furnishedFrom: null });
+  });
+});
+
+describe('LayoutIntent', () => {
+  const intent = LayoutIntent.parse({
+    rooms: [
+      {
+        roomId: 'r1',
+        items: [
+          { ref: 'bed', articleNo: '900.000.10', why: 'The room is for sleeping.' },
+          { ref: 'ns_left', articleNo: '900.000.12', why: 'Somewhere to put a lamp.' },
+        ],
+        relations: [
+          { kind: 'against_wall', item: 'bed', wall: 'longest_windowless' },
+          { kind: 'beside', item: 'ns_left', target: 'bed', side: 'left' },
+          { kind: 'facing', item: 'bed', target: 'window' },
+        ],
+      },
+    ],
+    budget: [{ roomId: 'r1', cad: 800 }],
+    notes: '',
+  });
+
+  it('names the refs each relation uses, a place to face not being one', () => {
+    expect(intent.rooms[0]!.relations.map(relationRefs)).toEqual([
+      ['bed'],
+      ['ns_left', 'bed'],
+      ['bed'],
+    ]);
+  });
+
+  it('finds rooms, products and refs the LLM made up', () => {
+    const offered = new Set(['900.000.10', '900.000.12']);
+    expect(intentErrors(intent, new Set(['r1']), offered)).toEqual([]);
+    const room = intent.rooms[0]!;
+    const wrong: LayoutIntent = {
+      ...intent,
+      rooms: [
+        {
+          ...room,
+          roomId: 'r9',
+          items: [...room.items, { ...room.items[0]!, articleNo: '999.999.99' }],
+          relations: [...room.relations, { kind: 'in_corner', item: 'lamp' }],
+        },
+      ],
+    };
+    expect(intentErrors(wrong, new Set(['r1']), offered)).toEqual([
+      "Room r9 isn't one to furnish.",
+      'In r9, ref bed is used twice.',
+      "999.999.99 (bed in r9) wasn't in the catalog sent.",
+      "In r9, in_corner names lamp, which isn't an item.",
+    ]);
   });
 });

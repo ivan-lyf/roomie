@@ -1,0 +1,100 @@
+{
+  "rooms": [
+    {
+      "roomId": "r1",
+      "items": [
+        {
+          "ref": "bed",
+          "articleNo": "900.000.11",
+          "why": "A single bed keeps the studio open."
+        },
+        {
+          "ref": "ns",
+          "articleNo": "900.000.12",
+          "why": "By the head of the bed."
+        },
+        {
+          "ref": "sofa",
+          "articleNo": "900.000.27",
+          "why": "A small sofa for the living side."
+        },
+        {
+          "ref": "coffee",
+          "articleNo": "900.000.17",
+          "why": "In front of the sofa."
+        },
+        {
+          "ref": "table",
+          "articleNo": "900.000.26",
+          "why": "A round table for two."
+        },
+        {
+          "ref": "chair_a",
+          "articleNo": "900.000.24",
+          "why": "One of two chairs."
+        },
+        {
+          "ref": "chair_b",
+          "articleNo": "900.000.24",
+          "why": "The other chair."
+        },
+        {
+          "ref": "shelf",
+          "articleNo": "900.000.25",
+          "why": "Storage without a closet."
+        }
+      ],
+      "relations": [
+        {
+          "kind": "in_corner",
+          "item": "bed"
+        },
+        {
+          "kind": "away_from_door",
+          "item": "bed"
+        },
+        {
+          "kind": "beside",
+          "item": "ns",
+          "target": "bed",
+          "side": "either"
+        },
+        {
+          "kind": "against_wall",
+          "item": "sofa",
+          "wall": "longest"
+        },
+        {
+          "kind": "in_front_of",
+          "item": "coffee",
+          "target": "sofa",
+          "distance": "normal"
+        },
+        {
+          "kind": "near_window",
+          "item": "table"
+        },
+        {
+          "kind": "around",
+          "items": [
+            "chair_a",
+            "chair_b"
+          ],
+          "target": "table"
+        },
+        {
+          "kind": "against_wall",
+          "item": "shelf",
+          "wall": "any"
+        }
+      ]
+    }
+  ],
+  "budget": [
+    {
+      "roomId": "r1",
+      "cad": 2000
+    }
+  ],
+  "notes": "One room for sleeping, sitting and eating."
+}

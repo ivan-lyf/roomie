@@ -1,0 +1,166 @@
+{
+  "rooms": [
+    {
+      "roomId": "r1",
+      "items": [
+        {
+          "ref": "bed",
+          "articleNo": "900.000.10",
+          "why": "A queen bed is the heart of the room."
+        },
+        {
+          "ref": "ns_left",
+          "articleNo": "900.000.12",
+          "why": "Somewhere for a lamp and a book."
+        },
+        {
+          "ref": "ns_right",
+          "articleNo": "900.000.12",
+          "why": "A matching one on the other side."
+        },
+        {
+          "ref": "wardrobe",
+          "articleNo": "900.000.13",
+          "why": "The room has no closet of its own."
+        },
+        {
+          "ref": "rug",
+          "articleNo": "900.000.19",
+          "why": "Something soft underfoot getting out of bed."
+        }
+      ],
+      "relations": [
+        {
+          "kind": "against_wall",
+          "item": "bed",
+          "wall": "longest_windowless"
+        },
+        {
+          "kind": "beside",
+          "item": "ns_left",
+          "target": "bed",
+          "side": "left"
+        },
+        {
+          "kind": "beside",
+          "item": "ns_right",
+          "target": "bed",
+          "side": "right"
+        },
+        {
+          "kind": "pair",
+          "first": "ns_left",
+          "second": "ns_right",
+          "about": "bed"
+        },
+        {
+          "kind": "against_wall",
+          "item": "wardrobe",
+          "wall": "any"
+        },
+        {
+          "kind": "away_from_door",
+          "item": "bed"
+        },
+        {
+          "kind": "under",
+          "item": "rug",
+          "targets": [
+            "bed"
+          ]
+        }
+      ]
+    },
+    {
+      "roomId": "r2",
+      "items": [
+        {
+          "ref": "sofa",
+          "articleNo": "900.000.15",
+          "why": "Seats three facing the TV."
+        },
+        {
+          "ref": "tv",
+          "articleNo": "900.000.18",
+          "why": "Across from the sofa."
+        },
+        {
+          "ref": "coffee",
+          "articleNo": "900.000.17",
+          "why": "Within reach of the sofa."
+        },
+        {
+          "ref": "armchair",
+          "articleNo": "900.000.16",
+          "why": "A second seat by the window."
+        },
+        {
+          "ref": "rug",
+          "articleNo": "900.000.19",
+          "why": "Ties the seating together."
+        },
+        {
+          "ref": "lamp",
+          "articleNo": "900.000.20",
+          "why": "Light for the reading corner."
+        }
+      ],
+      "relations": [
+        {
+          "kind": "against_wall",
+          "item": "sofa",
+          "wall": "longest_windowless"
+        },
+        {
+          "kind": "against_wall",
+          "item": "tv",
+          "wall": "any"
+        },
+        {
+          "kind": "facing",
+          "item": "tv",
+          "target": "sofa"
+        },
+        {
+          "kind": "facing",
+          "item": "sofa",
+          "target": "tv"
+        },
+        {
+          "kind": "in_front_of",
+          "item": "coffee",
+          "target": "sofa",
+          "distance": "normal"
+        },
+        {
+          "kind": "facing",
+          "item": "armchair",
+          "target": "tv"
+        },
+        {
+          "kind": "under",
+          "item": "rug",
+          "targets": [
+            "sofa",
+            "coffee"
+          ]
+        },
+        {
+          "kind": "in_corner",
+          "item": "lamp"
+        }
+      ]
+    }
+  ],
+  "budget": [
+    {
+      "roomId": "r1",
+      "cad": 1100
+    },
+    {
+      "roomId": "r2",
+      "cad": 1700
+    }
+  ],
+  "notes": "Light wood and white, beige fabrics."
+}
