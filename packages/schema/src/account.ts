@@ -44,3 +44,14 @@ export const Usage = z.object({
   createdAt: z.coerce.date(),
 });
 export type Usage = z.infer<typeof Usage>;
+
+/** The signed-in account and what it has spent on LLM calls today (GET /me). */
+export const Me = z.object({
+  id: z.uuid(),
+  email: z.string().nullable(),
+  spentUsd: z.number().nonnegative(),
+  allowanceUsd: z.number().nonnegative(),
+  /** When today's spending starts again from nothing: midnight where the allowance is counted. */
+  resetsAt: z.coerce.date(),
+});
+export type Me = z.infer<typeof Me>;

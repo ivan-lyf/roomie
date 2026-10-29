@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type { Product } from '@roomie/schema';
+import { Me, type Product } from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from './app';
 import { products } from './db/schema';
@@ -99,7 +99,9 @@ describe('GET /api/models/:file', () => {
   });
 
   it('redirects to a signed link when the models are in storage', async () => {
-    const storage = { signedUrl: async (key: string) => `https://files.example/models/${key}?sig=1` };
+    const storage = {
+      signedUrl: async (key: string) => `https://files.example/models/${key}?sig=1`,
+    };
     const res = await createApp({ dataDir, db, storage }).request('/api/models/11111111.glb');
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('https://files.example/models/11111111.glb?sig=1');
@@ -110,5 +112,37 @@ describe('GET /api/models/:file', () => {
     for (const file of ['22222222.glb', '..%2Fcatalog%2Fproducts.json', 'abc.glb']) {
       expect((await get(`/api/models/${file}`)).status).toBe(404);
     }
+  });
+});
+
+describe('GET /api/me', () => {
+  const me = { id: '11111111-2222-4333-8444-555555555555', email: 'ivan@example.com' };
+  const auth = {
+    kind: 'verify' as const,
+    verify: async (token: string) => (token === 'good' ? me : undefined),
+  };
+
+  it("answers the signed-in account and today's spending", async () => {
+    const app = createApp({
+      dataDir,
+      db,
+      auth,
+      allowance: { dailyUsd: 2, timeZone: 'UTC' },
+      now: () => new Date('2026-10-29T12:00:00Z'),
+    });
+    const res = await app.request('/api/me', { headers: { authorization: 'Bearer good' } });
+    expect(Me.parse(await res.json())).toEqual({
+      ...me,
+      spentUsd: 0,
+      allowanceUsd: 2,
+      resetsAt: new Date('2026-10-30T00:00:00Z'),
+    });
+  });
+
+  it('needs sign-in', async () => {
+    const app = createApp({ dataDir, db, auth });
+    const res = await app.request('/api/me');
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ code: 'sign_in_required' });
   });
 });
