@@ -5,7 +5,8 @@ import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import weights from '../../weights.json';
 import { roomContext } from './room';
-import { type Piece, relationScore, scoreHome, scoreRoom } from './score';
+import { type Piece, relationScore, scoreFurniture, scoreHome, scoreRoom } from './score';
+import { solveRoom } from './solve';
 import { styleMatch } from './style';
 
 const plan = Floorplan.parse(demo);
@@ -184,6 +185,46 @@ describe('scoreHome', () => {
     expect(breakdown.style_match).toBeGreaterThan(0.6);
     expect(breakdown.style_consistency).toBeGreaterThan(0);
     expect(scoreHome({ rooms, budgetCad: 1500 }).breakdown.budget).toBe(0);
+  });
+});
+
+describe('scoreFurniture', () => {
+  // The demo home as the solver furnishes it, each item keeping its ref, as the pipeline does.
+  const solved = intent.rooms.map((room) => solveRoom(plan, room, products, { seed: 1 }));
+  const furniture = solved
+    .flatMap((r) => r.placements)
+    .map((p, i) => ({ ...p, id: `f${i + 1}`, ref: p.id }));
+  const options = { intents: intent.rooms, style: 'scandinavian' as const, budgetCad: 2800 };
+
+  it('scores each room as the solver did, then the home', () => {
+    const scores = scoreFurniture(plan, furniture, products, options);
+    for (const room of solved) {
+      expect(scores.rooms.get(room.roomId)!.score).toBeCloseTo(room.score, 6);
+    }
+    expect(Object.keys(scores.home.breakdown).sort()).toEqual(
+      ['budget', 'rooms', 'style_consistency', 'style_match'].sort(),
+    );
+  });
+
+  it('scores an edit that breaks a relation lower', () => {
+    // The sofa turned to face the wall it stood against, away from the TV.
+    const turned = furniture.map((f) =>
+      f.ref === 'sofa' ? { ...f, rotation: f.rotation + Math.PI } : f,
+    );
+    const before = scoreFurniture(plan, furniture, products, options).rooms.get('r2')!;
+    const after = scoreFurniture(plan, turned, products, options).rooms.get('r2')!;
+    expect(after.breakdown.relations).toBeLessThan(before.breakdown.relations!);
+    expect(after.score).toBeLessThan(before.score);
+  });
+
+  it('scores items placed by hand without relations, and leaves out empty rooms', () => {
+    const byHand = furniture
+      .filter((f) => f.roomId === 'r2')
+      .map((f) => ({ ...f, ref: undefined }));
+    const scores = scoreFurniture(plan, byHand, products, options);
+    expect([...scores.rooms.keys()]).toEqual(['r2']);
+    expect(scores.rooms.get('r2')!.breakdown).not.toHaveProperty('relations');
+    expect(scores.rooms.get('r2')!.breakdown).toHaveProperty('walls');
   });
 });
 

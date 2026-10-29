@@ -1,10 +1,19 @@
-import type { Category, Placement, Product, Relation, StylePreset, Vec2 } from '@roomie/schema';
+import type {
+  Category,
+  Placement,
+  Product,
+  Relation,
+  RoomIntent,
+  StylePreset,
+  Vec2,
+} from '@roomie/schema';
 import weights from '../../weights.json';
 import { contains } from '../plan/polygon';
 import { walkableShare } from './paths';
-import type { Face, RoomContext } from './room';
+import { type Face, type RoomContext, roomContext } from './room';
 import { itemOutline, overlaps, reach, shape } from './shapes';
 import { styleMatch, words } from './style';
+import type { LayoutPlan } from './validate';
 
 // Soft scores (PLAN.md M4): each in [0, 1], logged one by one in a layout's score breakdown and
 // weighted by weights.json. A feature that doesn't apply (no desk, no windows) is left out rather
@@ -431,4 +440,52 @@ export function scoreHome({ rooms, style, budgetCad }: HomeInput): Scored {
     features.budget = used > 1 ? 0 : used >= 0.7 ? 1 : 0.5 + (0.5 * used) / 0.7;
   }
   return weigh(features, weights.home);
+}
+
+export type FurnitureScores = {
+  /** Each room with furniture, by its id. */
+  rooms: ReadonlyMap<string, Scored>;
+  home: Scored;
+};
+
+/**
+ * The home's furniture scored as it stands, after any edits (PLAN.md M5): each room with
+ * furniture on its own, with the relations its intent asked for between the items that kept
+ * their ref, then the home. Items placed by hand have no relations; items whose product isn't
+ * known are left out.
+ */
+export function scoreFurniture(
+  plan: LayoutPlan,
+  furniture: readonly Placement[],
+  products: ReadonlyMap<string, ScoredProduct>,
+  options: { intents?: readonly RoomIntent[]; style?: StylePreset; budgetCad?: number } = {},
+): FurnitureScores {
+  const rooms = new Map<string, Scored>();
+  const scored: HomeInput['rooms'][number][] = [];
+  for (const roomId of new Set(furniture.map((f) => f.roomId))) {
+    const ctx = roomContext(plan, roomId);
+    if (!ctx) continue;
+    const refs = new Set<string>();
+    const pieces: Piece[] = [];
+    for (const f of furniture) {
+      const product = products.get(f.articleNo);
+      if (f.roomId !== roomId || !product) continue;
+      // An item without a ref of its own goes by its id, marked so it can't pass for one.
+      const ref = f.ref && !refs.has(f.ref) ? f.ref : `#${f.id}`;
+      refs.add(ref);
+      pieces.push({ ref, placement: f, product });
+    }
+    if (pieces.length === 0) continue;
+    const relations = options.intents?.find((i) => i.roomId === roomId)?.relations;
+    const room = scoreRoom(ctx, pieces, { relations });
+    rooms.set(roomId, room);
+    scored.push({
+      roomId,
+      area: ctx.area,
+      score: room.score,
+      products: pieces.map((p) => p.product),
+    });
+  }
+  const home = scoreHome({ rooms: scored, style: options.style, budgetCad: options.budgetCad });
+  return { rooms, home };
 }
