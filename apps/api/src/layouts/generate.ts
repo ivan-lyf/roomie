@@ -104,6 +104,8 @@ export type GenerateDeps = SolveDeps & {
   writer: IntentWriter;
   /** Each intent as it comes, to log if what follows fails. */
   onIntent?: (intent: LayoutIntent) => void;
+  /** What each LLM call used as it comes, to log if what follows fails. */
+  onUsage?: (usage: ReaderUsage) => void;
 };
 
 /** Lets other work on the server run before going on. */
@@ -191,6 +193,7 @@ export async function generateHome(
   let usage = result.usage;
   let repairs = 0;
   let solved: Map<string, RoomSolution[]>;
+  deps.onUsage?.(result.usage);
   deps.onIntent?.(result.intent);
   for (;;) {
     solved = await solveRooms(plan, result.intent, inputs.roomIds, products, seeds, keep);
@@ -199,6 +202,7 @@ export async function generateHome(
     repairs++;
     result = await deps.writer.repair(result, request, feedback.join('\n'), deps.signal);
     usage = addUsage(usage, result.usage);
+    deps.onUsage?.(result.usage);
     deps.onIntent?.(result.intent);
   }
 

@@ -69,33 +69,40 @@ export const refuse = (c: Context, status: 401 | 409 | 429 | 503, refusal: Refus
   c.json(refusal, status);
 
 /**
- * Lets a request through only when it's signed in, with the account it's signed in as in
- * `c.var.account`: a valid `Authorization: Bearer` token, or anyone when sign-in is off.
+ * The account a request is signed in as, from a valid `Authorization: Bearer` token (anyone,
+ * when sign-in is off), or the response refusing it.
  */
-export function requireAccount(auth: Auth | undefined): MiddlewareHandler<AccountEnv> {
-  return async (c, next) => {
-    if (!auth) {
+export async function accountOf(c: Context, auth: Auth | undefined): Promise<Account | Response> {
+  if (!auth) {
+    return refuse(c, 503, {
+      error: "Sign-in isn't set up on this server, so the AI steps aren't available.",
+      code: 'auth_unavailable',
+    });
+  }
+  let account: Account | undefined = LOCAL_ACCOUNT;
+  if (auth.kind === 'verify') {
+    const token = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
+    try {
+      account = token ? await auth.verify(token) : undefined;
+    } catch (e) {
+      console.error('Checking a session failed:', e);
       return refuse(c, 503, {
-        error: "Sign-in isn't set up on this server, so the AI steps aren't available.",
+        error: "Sign-in can't be checked right now: try again in a moment.",
         code: 'auth_unavailable',
       });
     }
-    let account: Account | undefined = LOCAL_ACCOUNT;
-    if (auth.kind === 'verify') {
-      const token = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
-      try {
-        account = token ? await auth.verify(token) : undefined;
-      } catch (e) {
-        console.error('Checking a session failed:', e);
-        return refuse(c, 503, {
-          error: "Sign-in can't be checked right now: try again in a moment.",
-          code: 'auth_unavailable',
-        });
-      }
-    }
-    if (!account) {
-      return refuse(c, 401, { error: 'Sign in to have the AI do this.', code: 'sign_in_required' });
-    }
+  }
+  return (
+    account ??
+    refuse(c, 401, { error: 'Sign in to have the AI do this.', code: 'sign_in_required' })
+  );
+}
+
+/** Lets a request through only when it's signed in, with its account in `c.var.account`. */
+export function requireAccount(auth: Auth | undefined): MiddlewareHandler<AccountEnv> {
+  return async (c, next) => {
+    const account = await accountOf(c, auth);
+    if (account instanceof Response) return account;
     c.set('account', account);
     await next();
   };

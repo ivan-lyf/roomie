@@ -46,16 +46,26 @@ export function createApp(options: AppOptions) {
 
   app.get('/health', (c) => c.json({ ok: true }));
 
+  const { auth } = options;
   const allowance = db && new Allowance(db, options.allowance ?? DEFAULT_ALLOWANCE, options.now);
 
   /** The signed-in account, and what it has spent on LLM calls today (PLAN.md M6). */
-  app.get('/me', requireAccount(options.auth), async (c) => {
+  app.get('/me', requireAccount(auth), async (c) => {
     if (!allowance) return c.json({ error: 'DATABASE_URL is not set' }, 503);
     return c.json(await allowance.today(c.var.account));
   });
 
-  app.route('/floorplans', floorplanRoutes({ db, plans, dataDir, reader }));
-  app.route('/', layoutRoutes({ db, writer: options.layoutWriter, seeds: options.layoutSeeds }));
+  app.route('/floorplans', floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }));
+  app.route(
+    '/',
+    layoutRoutes({
+      db,
+      writer: options.layoutWriter,
+      seeds: options.layoutSeeds,
+      auth,
+      allowance,
+    }),
+  );
 
   /**
    * The catalog's active products, or one category's. With `articleNo` (comma-separated), those

@@ -11,13 +11,15 @@ import {
   type LoggedIntent,
   type Placement,
   Product,
+  Usage,
 } from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import catalog from '../../../../fixtures/catalog/products.json';
 import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
-import { createApp } from '../app';
-import { layouts, products } from '../db/schema';
+import { type AppOptions, createApp } from '../app';
+import { layouts, products, usage } from '../db/schema';
+import { ReaderError } from '../plan-reader/reader';
 import { testDb } from '../test/db';
 import { pngHeader } from '../test/fixtures';
 import type { IntentWriter } from './intent';
@@ -51,8 +53,16 @@ const writer: IntentWriter = {
   },
 };
 
-const app = (layoutWriter?: IntentWriter) =>
-  createApp({ dataDir, db, ...(layoutWriter && { layoutWriter }), layoutSeeds: 2 });
+// Sign-in is off: these are about furnishing; the sign-in tests are further down.
+const app = (layoutWriter?: IntentWriter, options: Partial<AppOptions> = {}) =>
+  createApp({
+    dataDir,
+    db,
+    ...(layoutWriter && { layoutWriter }),
+    layoutSeeds: 2,
+    auth: { kind: 'off' },
+    ...options,
+  });
 
 /** The demo home, saved as a new plan. */
 async function savedDemo(): Promise<Floorplan> {
@@ -77,6 +87,25 @@ const inputs = {
   style: 'scandinavian' as const,
   mustHaves: {},
 };
+
+/** Polls a generation on the app that started it until it's over. */
+async function finished(served: ReturnType<typeof app>, res: Response): Promise<GenerationJob> {
+  const { generationId } = (await res.json()) as { generationId: string };
+  let job: GenerationJob | undefined;
+  for (let i = 0; i < 200 && job?.status !== 'done' && job?.status !== 'failed'; i++) {
+    await new Promise((r) => setTimeout(r, 50));
+    job = (await (
+      await served.request(`/api/generations/${generationId}`)
+    ).json()) as GenerationJob;
+  }
+  return job!;
+}
+const post = (served: ReturnType<typeof app>, url: string, body: object, token?: string) =>
+  served.request(url, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    ...(token && { headers: { authorization: `Bearer ${token}` } }),
+  });
 
 describe('POST /api/floorplans/:id/layouts', () => {
   it('furnishes the home, logs every candidate, and makes the winner its furniture', async () => {
@@ -211,21 +240,6 @@ describe('GET /api/floorplans/:id/furnishing', () => {
 });
 
 describe('POST /api/floorplans/:id/rooms/:roomId/layouts', () => {
-  /** Polls a generation on the app that started it until it's over. */
-  async function finished(served: ReturnType<typeof app>, res: Response): Promise<GenerationJob> {
-    const { generationId } = (await res.json()) as { generationId: string };
-    let job: GenerationJob | undefined;
-    for (let i = 0; i < 200 && job?.status !== 'done' && job?.status !== 'failed'; i++) {
-      await new Promise((r) => setTimeout(r, 50));
-      job = (await (
-        await served.request(`/api/generations/${generationId}`)
-      ).json()) as GenerationJob;
-    }
-    return job!;
-  }
-  const post = (served: ReturnType<typeof app>, url: string, body: object) =>
-    served.request(url, { method: 'POST', body: JSON.stringify(body) });
-
   it('rearranges a room for free around the rest, logs it, and keeps the home budget', async () => {
     const plan = await savedDemo();
     const served = app(writer);
@@ -279,5 +293,99 @@ describe('POST /api/floorplans/:id/rooms/:roomId/layouts', () => {
     const second = await post(served, url, pieces);
     expect(second.status).toBe(409);
     expect((await finished(served, first)).status).toBe('done');
+  });
+});
+
+describe('furnishing needs an account within its allowance', () => {
+  const me = { id: '11111111-2222-4333-8444-555555555555', email: 'ivan@example.com' };
+  const auth = {
+    kind: 'verify' as const,
+    verify: async (token: string) => (token === 'good' ? me : undefined),
+  };
+  /** The writer, counting the times it's asked. */
+  const counted = (inner: IntentWriter = writer) => {
+    const calls = { n: 0 };
+    const w: IntentWriter = {
+      ...inner,
+      write: (...a) => (calls.n++, inner.write(...a)),
+      repair: (...a) => (calls.n++, inner.repair(...a)),
+    };
+    return { w, calls };
+  };
+  const rows = async () => Usage.array().parse(await db.select().from(usage));
+  const pieces = { mode: 'new_pieces', budgetCad: 800, style: 'modern', mustHaves: ['bed'] };
+
+  it('furnishes nothing signed out, though anyone may rearrange a room', async () => {
+    const plan = await savedDemo();
+    const { w, calls } = counted();
+    const signedOut = app(w, { auth });
+    const home = await post(signedOut, `/api/floorplans/${plan.id}/layouts`, inputs);
+    expect(home.status).toBe(401);
+    expect(await home.json()).toMatchObject({ code: 'sign_in_required' });
+    const room = await post(signedOut, `/api/floorplans/${plan.id}/rooms/r1/layouts`, pieces);
+    expect(room.status).toBe(401);
+    expect(calls.n).toBe(0);
+
+    // Furnished by someone signed in, then rearranged by someone who isn't.
+    const signed = app(w, { auth });
+    const first = await post(signed, `/api/floorplans/${plan.id}/layouts`, inputs, 'good');
+    expect((await finished(signed, first)).status).toBe('done');
+    const res = await post(signedOut, `/api/floorplans/${plan.id}/rooms/r1/layouts`, {
+      mode: 'rearrange',
+    });
+    expect(res.status).toBe(202);
+    expect((await finished(signedOut, res)).status).toBe('done');
+    expect(calls.n).toBe(1);
+    expect(await rows()).toHaveLength(1);
+  });
+
+  it('logs what a furnishing used against the account, a failed one too', async () => {
+    const plan = await savedDemo();
+    const signed = app(writer, { auth });
+    const done = await post(signed, `/api/floorplans/${plan.id}/layouts`, inputs, 'good');
+    expect((await finished(signed, done)).status).toBe('done');
+    const failure = new ReaderError("Claude's answer wasn't a usable intent, twice: …", 502);
+    failure.usage = { inputTokens: 3000, outputTokens: 1000 };
+    const broken = app(
+      {
+        ...writer,
+        write: async () => {
+          throw failure;
+        },
+      },
+      { auth },
+    );
+    const failed = await post(broken, `/api/floorplans/${plan.id}/layouts`, inputs, 'good');
+    expect((await finished(broken, failed)).status).toBe('failed');
+    const logged = await rows();
+    expect(logged).toMatchObject([
+      {
+        accountId: me.id,
+        route: 'furnish_home',
+        floorplanId: plan.id,
+        model: 'claude-opus-5-5',
+        inputTokens: 10_000,
+        outputTokens: 4000,
+        status: 'done',
+      },
+      { route: 'furnish_home', inputTokens: 3000, outputTokens: 1000, status: 'failed' },
+    ]);
+    // $4 and $20 per million tokens in and out.
+    expect(logged[0]!.costUsd).toBeCloseTo(0.12, 6);
+  });
+
+  it('refuses once a furnishing would pass the allowance, asking the LLM nothing', async () => {
+    const plan = await savedDemo();
+    const { w, calls } = counted();
+    // A home on Opus usually costs about $0.13.
+    const tight = app(w, { auth, allowance: { dailyUsd: 0.1, timeZone: 'UTC' } });
+    const res = await post(tight, `/api/floorplans/${plan.id}/layouts`, inputs, 'good');
+    expect(res.status).toBe(429);
+    expect(await res.json()).toMatchObject({
+      code: 'allowance_reached',
+      error: expect.stringMatching(/today's AI allowance \(\$0\.10\)/),
+    });
+    expect(calls.n).toBe(0);
+    expect(await rows()).toEqual([]);
   });
 });

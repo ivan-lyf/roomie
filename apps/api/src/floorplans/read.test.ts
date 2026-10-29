@@ -1,9 +1,10 @@
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { Floorplan, type RawPlan } from '@roomie/schema';
+import { Floorplan, type RawPlan, Usage } from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp, type AppOptions } from '../app';
+import { usage } from '../db/schema';
 import { type PlanImage, type PlanReader, ReaderError } from '../plan-reader/reader';
 import { testDb } from '../test/db';
 import { demoRawPlan, pngHeader } from '../test/fixtures';
@@ -42,7 +43,9 @@ function fakeReader(plan: RawPlan | ReaderError = demoRawPlan()) {
   return { reader, images };
 }
 
-const app = (options: Partial<AppOptions> = {}) => createApp({ dataDir, db, ...options });
+// Sign-in is off unless a test says otherwise.
+const app = (options: Partial<AppOptions> = {}) =>
+  createApp({ dataDir, db, auth: { kind: 'off' }, ...options });
 
 /** Uploads a 900 x 750 plan image (only its header: the fake reader never looks). */
 async function uploaded(): Promise<Floorplan> {
@@ -159,5 +162,65 @@ describe('POST /api/floorplans/:id/read', () => {
     await mkdir(path.join(dataDir, 'uploads', 'plans'), { recursive: true });
     await writeFile(path.join(dataDir, 'uploads', 'plans', `${plan.id}.png`), pngHeader(900, 750));
     expect((await read(plan.id, fakeReader())).status).toBe(200);
+  });
+});
+
+describe('reading needs an account within its allowance', () => {
+  const me = { id: '11111111-2222-4333-8444-555555555555', email: 'ivan@example.com' };
+  const auth = {
+    kind: 'verify' as const,
+    verify: async (token: string) => (token === 'good' ? me : undefined),
+  };
+  const signedIn = { method: 'POST', headers: { authorization: 'Bearer good' } };
+  const rows = async () => Usage.array().parse(await db.select().from(usage));
+
+  it("reads nothing signed out, or where sign-in isn't set up", async () => {
+    const plan = await uploaded();
+    const { reader, images } = fakeReader();
+    const out = await app({ reader, auth }).request(`/api/floorplans/${plan.id}/read`, {
+      method: 'POST',
+    });
+    expect(out.status).toBe(401);
+    expect(await out.json()).toMatchObject({ code: 'sign_in_required' });
+    const unset = await createApp({ dataDir, db, reader }).request(
+      `/api/floorplans/${plan.id}/read`,
+      signedIn,
+    );
+    expect(unset.status).toBe(503);
+    expect(await unset.json()).toMatchObject({ code: 'auth_unavailable' });
+    expect(images).toEqual([]);
+    expect(await rows()).toEqual([]);
+  });
+
+  it('logs each reading against the account: a cached one at nothing, a failed one too', async () => {
+    const [first, second, third] = [await uploaded(), await uploaded(), await uploaded()];
+    const { reader } = fakeReader();
+    const signed = app({ reader, auth });
+    expect((await signed.request(`/api/floorplans/${first.id}/read`, signedIn)).status).toBe(200);
+    expect((await signed.request(`/api/floorplans/${second.id}/read`, signedIn)).status).toBe(200);
+    const failure = new ReaderError('Gemini gave no plan (SAFETY).', 502);
+    failure.usage = { inputTokens: 7, outputTokens: 3 };
+    const failing = app({ reader: fakeReader(failure).reader, auth });
+    const res = await failing.request(`/api/floorplans/${third.id}/read?replace=1`, signedIn);
+    expect(res.status).toBe(502);
+    expect(await rows()).toMatchObject([
+      { accountId: me.id, route: 'read_plan', floorplanId: first.id, model: 'fake-1' },
+      { floorplanId: second.id, cached: true, model: null, inputTokens: 0, costUsd: 0 },
+      { floorplanId: third.id, status: 'failed', inputTokens: 7, outputTokens: 3 },
+    ]);
+    // No price is known for the fake model, as for Gemini's free tier.
+    expect((await rows())[0]).toMatchObject({ inputTokens: 10, outputTokens: 5, costUsd: null });
+  });
+
+  it('refuses once the allowance is spent, though a cached reading costs nothing', async () => {
+    const [first, second] = [await uploaded(), await uploaded()];
+    const { reader, images } = fakeReader();
+    await app({ reader, auth }).request(`/api/floorplans/${first.id}/read`, signedIn);
+    const spent = app({ reader, auth, allowance: { dailyUsd: 0, timeZone: 'UTC' } });
+    const again = await spent.request(`/api/floorplans/${first.id}/read?replace=1`, signedIn);
+    expect(again.status).toBe(429);
+    expect(await again.json()).toMatchObject({ code: 'allowance_reached' });
+    expect((await spent.request(`/api/floorplans/${second.id}/read`, signedIn)).status).toBe(200);
+    expect(images).toHaveLength(1);
   });
 });

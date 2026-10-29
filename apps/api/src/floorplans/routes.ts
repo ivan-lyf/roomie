@@ -7,11 +7,14 @@ import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
+import type { Allowance } from '../allowance';
+import { accountOf, type Auth } from '../auth';
 import type { Db } from '../db/client';
 import { floorplans } from '../db/schema';
 import { ReadingCache } from '../plan-reader/cache';
 import { type PlanReader, ReaderError } from '../plan-reader/reader';
 import type { Storage } from '../storage';
+import { recordUsage, type Spent } from '../usage';
 import { readImageInfo } from './image';
 import { applyReading } from './reading';
 
@@ -35,13 +38,19 @@ export type FloorplanOptions = {
   dataDir: string;
   /** Reads uploaded plans; without one, plans are traced by hand. */
   reader?: PlanReader | undefined;
+  /** Who may have a plan read (PLAN.md M6); without it, nobody. */
+  auth?: Auth | undefined;
+  /** What each account may spend on readings, with the rest of its LLM calls. */
+  allowance?: Allowance | undefined;
 };
+
+const NOTHING = { inputTokens: 0, outputTokens: 0 };
 
 /**
  * Upload a plan image, list the plans, load and save one, and have one read. Mounted at
  * /api/floorplans.
  */
-export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions) {
+export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }: FloorplanOptions) {
   const app = new Hono<{ Variables: { db: Db } }>();
   const localPath = (key: string) => path.join(dataDir, 'uploads', 'plans', key);
   // The readings `plans:eval` keeps too, by image, model and prompt version.
@@ -146,12 +155,15 @@ export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions
    * Reads the plan's image with the plan reader. A plan that's already traced is only read again
    * with `?replace=1`, since the reading replaces what was traced. A first reading of an image
    * read before, by the same model and prompt, comes from the cache and costs nothing; reading
-   * again always asks afresh, since another reading is the point of it.
+   * again always asks afresh, since another reading is the point of it. Only a signed-in account
+   * within its daily allowance has a plan read, and each reading is logged against it (M6).
    */
   app.post('/:id/read', async (c) => {
     if (!reader) {
       return c.json({ error: 'No plan reader is set up: add GEMINI_API_KEY to .env.' }, 503);
     }
+    const account = await accountOf(c, auth);
+    if (account instanceof Response) return account;
     const plan = await load(c.var.db, c.req.param('id'));
     if (!plan) return c.json({ error: 'No such floor plan.' }, 404);
     if (!plan.image) return c.json({ error: 'The plan has no image to read.' }, 400);
@@ -170,14 +182,25 @@ export function floorplanRoutes({ db, plans, dataDir, reader }: FloorplanOptions
 
     const mimeType = key.endsWith('.png') ? CONTENT_TYPES.png : CONTENT_TYPES.jpeg;
     const image = { bytes, mimeType, width, height };
+    const log = (spent: Spent) => recordUsage(c.var.db, account, 'read_plan', plan.id, spent);
     let result = replace ? undefined : await readings.get(image, reader);
-    if (!result) {
+    if (result) {
+      await log({ model: reader.model, usage: NOTHING, cached: true });
+    } else {
+      const refused = await allowance?.take(account, 'read_plan', reader.model);
+      if (refused) return c.json(refused.refusal, refused.status);
       try {
         result = await reader.read(image, c.req.raw.signal);
       } catch (e) {
+        // A reading that failed still cost what it used.
+        const usage = (e instanceof ReaderError && e.usage) || NOTHING;
+        await log({ model: reader.model, usage, failed: true });
         if (e instanceof ReaderError) return c.json({ error: e.message }, e.status);
         throw e;
+      } finally {
+        allowance?.release(account);
       }
+      await log({ model: result.model ?? reader.model, usage: result.usage ?? NOTHING });
       await readings.put(image, reader, result);
     }
     // Reading takes minutes: the plan as saved now keeps anything saved meanwhile (its name, a

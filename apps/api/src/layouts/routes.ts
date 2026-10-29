@@ -11,9 +11,13 @@ import {
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
+import type { Allowance } from '../allowance';
+import { type Account, accountOf, type Auth } from '../auth';
 import type { Db } from '../db/client';
 import { floorplans, layouts, products } from '../db/schema';
 import { readingCost } from '../plan-reader/claude';
+import { ReaderError, type ReaderUsage } from '../plan-reader/reader';
+import { recordUsage } from '../usage';
 import { furnishingOf } from './furnishing';
 import { type Generation, generateHome, rearrangeRoom, type RoomStatus } from './generate';
 import type { IntentWriter } from './intent';
@@ -24,13 +28,26 @@ export type LayoutOptions = {
   writer?: IntentWriter | undefined;
   /** Solver seeds per room; fewer in tests. */
   seeds?: number;
+  /** Who may have a home furnished by the LLM (PLAN.md M6); without it, nobody. */
+  auth?: Auth | undefined;
+  /** What each account may spend on LLM calls a day. */
+  allowance?: Allowance | undefined;
 };
 
-/** How a generation runs, told where to report its progress and each intent. */
+/** How a generation runs, told where to report its progress, each intent and its usage. */
 type Run = (hooks: {
   onProgress: (rooms: RoomStatus[]) => void;
   onIntent: (intent: unknown) => void;
+  onUsage: (usage: ReaderUsage) => void;
 }) => Promise<Generation>;
+
+/** Who a generation's LLM calls are logged against and held for, and as what. */
+type Billing = {
+  account: Account;
+  route: 'furnish_home' | 'new_pieces';
+  model: string;
+  allowance: Allowance | undefined;
+};
 
 /**
  * Furnish a home (PLAN.md M4): POST /floorplans/:id/layouts starts it and answers at once with
@@ -40,7 +57,7 @@ type Run = (hooks: {
  * as it stands, and GET /floorplans/:id/furnishing says what each room was last furnished from
  * (M5).
  */
-export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
+export function layoutRoutes({ db, writer, seeds, auth, allowance }: LayoutOptions) {
   const app = new Hono();
   const jobs = new Map<string, GenerationJob>();
 
@@ -75,7 +92,14 @@ export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
   }
 
   /** Starts a generation in the background, and answers with its id. */
-  function start(c: Context, db: Db, plan: Floorplan, inputs: GenerationInputs, run: Run) {
+  function start(
+    c: Context,
+    db: Db,
+    plan: Floorplan,
+    inputs: GenerationInputs,
+    run: Run,
+    billing?: Billing,
+  ) {
     const job: GenerationJob = {
       generationId: randomUUID(),
       floorplanId: plan.id,
@@ -83,8 +107,23 @@ export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
       rooms: inputs.roomIds.map((roomId) => ({ roomId, status: 'waiting' })),
     };
     jobs.set(job.generationId, job);
-    void furnish(db, plan, inputs, job, run);
+    void furnish(db, plan, inputs, job, run, billing);
     return c.json({ generationId: job.generationId }, 202);
+  }
+
+  /**
+   * Lets an account within its allowance have the LLM furnish, holding it until the generation
+   * ends; otherwise the response refusing it.
+   */
+  async function bill(
+    c: Context,
+    account: Account,
+    route: Billing['route'],
+    model: string,
+  ): Promise<Billing | Response> {
+    const refused = await allowance?.take(account, route, model);
+    if (refused) return c.json(refused.refusal, refused.status);
+    return { account, route, model, allowance };
   }
 
   /** One home is furnished one way at a time, so two results can't overwrite each other. */
@@ -96,6 +135,8 @@ export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
     if (!writer) {
       return c.json({ error: 'No CLAUDE_API_KEY is set, so homes are furnished by hand.' }, 503);
     }
+    const account = await accountOf(c, auth);
+    if (account instanceof Response) return account;
     const plan = await planOf(c, db);
     if (plan instanceof Response) return plan;
     if (!plan.scale) return c.json({ error: 'The plan needs its size set first.' }, 409);
@@ -108,13 +149,22 @@ export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
     }
     if (busy(plan.id)) return c.json({ error: 'This home is being furnished already.' }, 409);
     const catalog = await catalogFor(db, plan);
-    return start(c, db, plan, inputs.data, (hooks) =>
-      generateHome(plan, inputs.data, {
-        writer,
-        catalog,
-        ...hooks,
-        ...(seeds !== undefined && { seeds }),
-      }),
+    // Last: from here the account is held until the generation ends.
+    const billing = await bill(c, account, 'furnish_home', writer.model);
+    if (billing instanceof Response) return billing;
+    return start(
+      c,
+      db,
+      plan,
+      inputs.data,
+      (hooks) =>
+        generateHome(plan, inputs.data, {
+          writer,
+          catalog,
+          ...hooks,
+          ...(seeds !== undefined && { seeds }),
+        }),
+      billing,
     );
   });
 
@@ -136,6 +186,9 @@ export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
     if (again.data.mode === 'new_pieces' && !writer) {
       return c.json({ error: 'No CLAUDE_API_KEY is set, so rooms are furnished by hand.' }, 503);
     }
+    // New pieces ask the LLM; a rearrange doesn't, so anyone may.
+    const account = again.data.mode === 'new_pieces' ? await accountOf(c, auth) : undefined;
+    if (account instanceof Response) return account;
     if (busy(plan.id)) return c.json({ error: 'This home is being furnished already.' }, 409);
 
     const catalog = await catalogFor(db, plan);
@@ -145,10 +198,17 @@ export function layoutRoutes({ db, writer, seeds }: LayoutOptions) {
     const options = { catalog, keep, ...(seeds !== undefined && { seeds }) };
 
     if (again.data.mode === 'new_pieces') {
+      const billing = await bill(c, account!, 'new_pieces', writer!.model);
+      if (billing instanceof Response) return billing;
       const { budgetCad, style, mustHaves } = again.data;
       const inputs = { roomIds: [roomId], budgetCad, style, mustHaves: { [roomId]: mustHaves } };
-      return start(c, db, plan, inputs, (hooks) =>
-        generateHome(plan, inputs, { writer: writer!, ...options, ...hooks }),
+      return start(
+        c,
+        db,
+        plan,
+        inputs,
+        (hooks) => generateHome(plan, inputs, { writer: writer!, ...options, ...hooks }),
+        billing,
       );
     }
     const prices = new Map(catalog.map((p) => [p.articleNo, p.priceCad]));
@@ -209,7 +269,8 @@ function winnersOf(db: Db, floorplanId: string) {
 
 /**
  * Runs one generation: logs every candidate and the winner as layouts, and makes the winner the
- * home's furniture. The job says how it's going.
+ * home's furniture. The job says how it's going. What its LLM calls used is logged against the
+ * account that asked, a failed generation's too, and the account is let go when it ends.
  */
 async function furnish(
   db: Db,
@@ -217,12 +278,19 @@ async function furnish(
   inputs: GenerationInputs,
   job: GenerationJob,
   run: Run,
+  billing?: Billing,
 ) {
   let intent: unknown;
+  const used = { inputTokens: 0, outputTokens: 0 };
+  const add = (usage: ReaderUsage | undefined) => {
+    used.inputTokens += usage?.inputTokens ?? 0;
+    used.outputTokens += usage?.outputTokens ?? 0;
+  };
   try {
     const home = await run({
       onIntent: (i) => (intent = i),
       onProgress: (rooms) => (job.rooms = rooms.map((r) => ({ ...r }))),
+      onUsage: add,
     });
     const llmIntent: LoggedIntent = {
       intent: home.intent,
@@ -261,11 +329,21 @@ async function furnish(
   } catch (e) {
     job.status = 'failed';
     job.error = e instanceof Error ? e.message : String(e);
+    // An LLM call that failed still cost what it used.
+    if (e instanceof ReaderError) add(e.usage);
     // Enough to reproduce it offline without paying for the intent again.
     console.error(
       `Furnishing ${job.generationId} of ${plan.id} failed:`,
       e,
       JSON.stringify({ inputs, intent }),
     );
+  } finally {
+    if (billing) {
+      billing.allowance?.release(billing.account);
+      const spent = { model: billing.model, usage: used, failed: job.status === 'failed' };
+      await recordUsage(db, billing.account, billing.route, plan.id, spent).catch((e: unknown) =>
+        console.error(`Logging the usage of ${job.generationId} failed:`, e),
+      );
+    }
   }
 }
