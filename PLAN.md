@@ -96,7 +96,7 @@ PlanText  { id, text, bbox, kind: 'room_label' | 'dimension' | 'area' | 'other',
 Scale     { metersPerPixel, sourceUnit: 'imperial' | 'metric_m' | 'metric_cm' | 'metric_mm', method: 'labels' | 'wall_length' | 'area' | 'area_and_side', inputs, residual }
 Product   { articleNo, familyId, options: { name, value }[], name, category, status: 'active' | 'discontinued', priceCad, url, imageUrl, color, material, dims: { w, d, h }, shape: 'rect' | 'round', extendedW, modelUrl, modelSource: 'ikea' | 'procedural', styleTags, scrapedAt }
 Layout    { id, floorplanId, inputs, placements: Placement[], score, scoreBreakdown, llmIntent, screenshotUrls, createdAt }
-Placement { articleNo, roomId, x, y, rotation }
+Placement { id, articleNo, roomId, x, y, rotation, ref? }
 Rating    { id, layoutA, layoutB, winner, note, createdAt }
 ```
 
@@ -332,6 +332,56 @@ Out of M4: swapping and regenerating one room (M5), sign-in and allowances (M6),
 - [ ] Regenerate a single room while keeping the others
 - [ ] Undo/redo
 - [ ] Shopping list: the home's final items from the current layout, grouped by product with quantities, article numbers, prices, links and the total; flag items discontinued since the last scrape; copy article numbers, export CSV, print
+
+**Done when:** on a furnished test home, every edit (swap, delete, move, one room redone, undo and redo) is checked and scored as it lands, a room redone never changes or breaks the rooms kept, and the shopping list matches what's in 3D, item for item and to the cent.
+
+#### M5 in detail
+
+**What's already there.** From M3: delete (the Remove button and the Delete key), undo and redo (one history for the plan and its furniture, Ctrl+Z and Ctrl+Shift+Z, 200 steps), and validation live on every drag frame, walkways included since M4. M5 adds swapping, scores and the budget after each edit, another layout for one room, the shopping list, and the "Why here?" M4 kept the intent's reasons for.
+
+**Items keep their ref.** `Placement` gets an optional `ref`, the intent's name for the item (`sofa`, `ns_left`). The pipeline keeps it when it numbers the winner's ids, a swap keeps it, and items placed by hand have none. It ties each item to its reason and its relations, so a swapped sofa is still meant to face the TV, and a room can be rearranged from what it holds now. Placements are JSONB on both tables, so nothing migrates.
+
+**What each room was furnished from.** Every furnishing logs whole-home layouts (M4). For each room, the latest winner whose `inputs.roomIds` include it holds the intent the room came from: its items' reasons, its relations and its share of the budget. `GET /floorplans/:id/furnishing` returns that intent per room, with the last budget and style. Rooms furnished by hand have none.
+
+**Scores after each edit.** `scoreFurniture(plan, furniture, products, { intents, budgetCad, style })` in `packages/geometry`: `scoreRoom` for each furnished room (relations from its intent, matched by ref; none for items placed by hand) and `scoreHome` over them. It runs in the browser once an edit lands, not on drag frames, since the walkway feature is the slow one; validation stays live as in M3. The panel shows each room's score beside the one it was furnished with, and the home's total against its last budget: over budget is a warning here, since it's the user's choice. The Rooms tab marks each room's problems with a red count, so one left in another room isn't missed. The scores are a working aid on plain screens and aren't saved: M7 can work them out again from the furniture and the logged layouts.
+
+**Swap.** "Swap" on the selected item's card (or S) lists products of the same category whose width and depth are each within 20 cm of the item's (`SWAP_TOLERANCE`, one constant; a toggle shows every size), grouped by family with the catalog's variant pickers. Each option shows its price difference ("+$120") and whether it fits where the item stands: `validateLayout` with `paths: false` for the list, and the full check for the option hovered, which is drawn in 3D in the item's place. "Within budget", on when the home has a budget, hides options that take the home over it; without one, an "Up to $" limit. A swap keeps the item's id, ref and turn, centred where it was, then snapped, so a deeper sofa keeps its back to the wall. It's one edit to undo.
+
+**Try another layout for one room**, with the other rooms kept as they are:
+
+| | Rearrange | New pieces |
+|---|---|---|
+| What changes | Where the room's items stand | What's in the room, and where |
+| How | The solver again on the items the room holds now and its intent's relations, with 8 new seeds | One LLM call for this room only, with the rooms kept described for their style, then the solver as in M4 |
+| Cost and time | Free, a few seconds | About a third of a home's intent: roughly $0.03–0.08 on Opus 5.5, under a cent on Haiku 5.5; under 30 s |
+| Needs | Nothing: items placed by hand have no relations and go where their category usually does | A saved plan and `CLAUDE_API_KEY`; sign-in from M6 |
+
+Both go through M4's pipeline. `generateHome` gains `keep`, the other rooms' furniture, which every room is solved around and which never changes. New items get ids after the home's existing ones, not `f1` again. The home is checked whole before anything ships, but only problems the new room causes fail it: one the user left in another room doesn't. Rearrange draws its seeds at random and logs them, and a candidate that leaves every item within 10 cm of where it stands doesn't count as another layout. New pieces' budget defaults to the room's share in its last intent (or what's left of the home's budget), and its must-haves to the categories the room holds now; both can be changed, as in Furnish for me. Furnishing a whole home keeps prompt `layout-intent.v1` as it is, so `layouts:eval`'s cached intents stay valid. One room adds a short second prompt, `layout-room.v1`: match the rooms kept, keep to the room's budget, and try something other than what's there. Both versions are logged.
+
+Every candidate is logged as in M4, as a whole home: the rooms kept as they stood, plus the room redone. `inputs.roomIds` names the room, and `llmIntent` holds the mode and seeds (no model or usage for a rearrange). The winner becomes `furnishedFrom`. A layout row is always a whole home, so M7 can tell which generation each room came from, and what the user changed since.
+
+While a room is being redone, the furniture is read-only (no dragging, keys or placing, with a note saying why), so the result can't clash with an edit made meanwhile. The app saves before it asks, so the server solves around what's on screen. The result replaces the room's items as one edit to undo.
+
+**Delete, undo and redo.** × on each item in the room's list, and "Clear the room" as one step. Undo and Redo move to the panel's header, on both tabs, and grey out when there's nothing to undo or redo. Every furniture edit is one step, with store tests: place, move, turn, swap, remove, clear a room, a room redone, and Furnish for me.
+
+**Shopping list** at `/plans/:id/list`, linked from the home's panel, the demo's included. One row per product: picture, name and variant, article number, the rooms it's in, quantity, unit price, line total and IKEA.ca link; then the item count and the total. Products IKEA has dropped since the last scrape are flagged ("No longer sold: swap it", linking back to the item in 3D), and so are article numbers the catalog doesn't have. Prices carry the date of the last scrape and "check before buying". Copy puts one line per product on the clipboard (`900.000.10 × 2  TEST sofa, grey`). Export downloads a CSV, UTF-8 with a byte order mark so Excel shows "Ö", with names quoted. Print uses a print stylesheet without the buttons. The list's logic is pure functions in `apps/web/src/shopping.ts`, with tests.
+
+**The screens** stay plain, as in M3 and M4: the user-facing design comes later, from `docs/frontend-design.md`.
+
+**Steps,** each one commit or two, and demoable:
+
+1. **Refs:** `Placement.ref`, kept by the pipeline. Commit `feat(schema): keep each item's ref from the intent`.
+2. **What each room was furnished from:** `GET /floorplans/:id/furnishing`, tested on logged layouts of two generations: a whole home, then one room redone. Commit `feat(api): what each room was furnished from`.
+3. **Why here:** the app loads it with the plan, and the item card shows the item's reason; items placed by hand show none. Commit `feat(web): say why each item is there`.
+4. **Scores after each edit:** `scoreFurniture`, with tests (a swap that breaks a relation scores lower; a room furnished by hand is scored without relations). Then the room scores, the budget line and the problem counts on the room list. Commits `feat(geometry): score a furnished home`, `feat(web): score the home after each edit`.
+5. **Delete, undo and redo:** the buttons, Clear the room, and the store tests. Commit `feat(web): undo, redo and delete on every tab`.
+6. **Swap:** `swapOptions` in `catalog.ts` (category, size tolerance, budget), with tests; the `swapItem` store action; `Preview.articleNo`, so the option hovered is drawn and checked in place; then the list. Commits `feat(web): swap an item for a like one`, `feat(web): swap list`.
+7. **One room again, on the server:** `generateHome` with `keep` and the mode, the `layout-room.v1` prompt, and `POST /floorplans/:id/rooms/:roomId/layouts` with `{ mode, budgetCad?, mustHaves? }`, answered through the same `GET /generations/:id`. Tests with a fake LLM: the rooms kept come back untouched, no ids collide, a problem left in a kept room doesn't fail the room redone, and a rearrange makes no LLM call. Commit `feat(api): furnish one room again`.
+8. **One room again, in the app:** "Try another layout" on the room's Furnish tab, with both choices and what each costs, progress, the furniture read-only while it runs, and the result as one step to undo. Commit `feat(web): try another layout for a room`.
+9. **Shopping list:** the page, and `shopping.ts` with tests (grouping, quantities, totals to the cent, the flags, CSV quoting). Commit `feat(web): shopping list`.
+10. **Done check:** in headless Chromium, on fr-56 as Opus read it (saved in M3) and on the demo. Swap the sofa and a nightstand, once for one that fits and once for one that doesn't; delete an item and clear a room; undo and redo all of it; rearrange the bedroom; get new pieces for the séjour once (paid, with the estimate first, under $0.10); and check the shopping list and its CSV against what's in 3D.
+
+Out of M5: sign-in and allowances (M6), the rating page and learned weights (M7), a cart on IKEA.ca (§8), live prices (the weekly scrape stays), and wall-mounted items.
 
 ### M6 — Accounts (1 week)
 Sign-in exists only to limit token use per account.
