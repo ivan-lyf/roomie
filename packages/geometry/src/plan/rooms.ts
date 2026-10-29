@@ -107,19 +107,17 @@ export function roomWalls(
 }
 
 /**
- * A room's floor area inside its walls: its outline (on the walls' center lines) less half of
- * each wall along each edge, with the corners where two walls meet put right. An edge with no
- * wall along it (a room open to the next) loses nothing. `walls` only need `a`, `b` and
+ * How far into a room each edge's walls reach: half their thickness, averaged along the edge
+ * (an edge with a wall along half of it reaches in half as far). `walls` only need `a`, `b` and
  * `thickness`, in the outline's units.
  */
-export function floorArea(
+function edgeInsets(
   boundary: readonly Vec2[],
   walls: readonly Pick<Wall, 'a' | 'b' | 'thickness'>[],
-  tolerance = 0.05,
-): number {
+  tolerance: number,
+): number[] {
   const n = boundary.length;
-  // How far each edge's walls reach into the room: half their thickness, averaged along it.
-  const inset = boundary.map((a, i) => {
+  return boundary.map((a, i) => {
     const b = boundary[(i + 1) % n]!;
     const edge: Wall = { id: '', a, b, thickness: 0 };
     const length = wallLength(edge);
@@ -137,6 +135,21 @@ export function floorArea(
     }
     return Math.min(covered / length, length / 2);
   });
+}
+
+/**
+ * A room's floor area inside its walls: its outline (on the walls' center lines) less half of
+ * each wall along each edge, with the corners where two walls meet put right. An edge with no
+ * wall along it (a room open to the next) loses nothing. `walls` only need `a`, `b` and
+ * `thickness`, in the outline's units.
+ */
+export function floorArea(
+  boundary: readonly Vec2[],
+  walls: readonly Pick<Wall, 'a' | 'b' | 'thickness'>[],
+  tolerance = 0.05,
+): number {
+  const n = boundary.length;
+  const inset = edgeInsets(boundary, walls, tolerance);
   const lengths = boundary.map((a, i) => {
     const b = boundary[(i + 1) % n]!;
     return Math.hypot(b.x - a.x, b.y - a.y);
@@ -151,6 +164,35 @@ export function floorArea(
     lost -= Math.sign(turn) * sign * inset[(i + n - 1) % n]! * inset[i]!;
   }
   return Math.max(area(boundary) - lost, 0);
+}
+
+/**
+ * A room's floor: its outline moved in by half of each wall along each edge, the outline
+ * `floorArea` measures. An edge with no wall along it stays where it is, open to the next room.
+ */
+export function floorPolygon(
+  boundary: readonly Vec2[],
+  walls: readonly Pick<Wall, 'a' | 'b' | 'thickness'>[],
+  tolerance = 0.05,
+): Vec2[] {
+  const n = boundary.length;
+  const inset = edgeInsets(boundary, walls, tolerance);
+  // With y down the page, a positive signed area runs clockwise: the inside is on the right.
+  const inward = -(Math.sign(signedArea(boundary)) || 1);
+  const lines = boundary.map((a, i) => {
+    const d = wallDirection({ id: '', a, b: boundary[(i + 1) % n]!, thickness: 0 });
+    const normal = leftNormal(d);
+    const by = inward * inset[i]!;
+    return { p: { x: a.x + normal.x * by, y: a.y + normal.y * by }, d };
+  });
+  return lines.map((here, i) => {
+    const prev = lines[(i + n - 1) % n]!;
+    const cross = prev.d.x * here.d.y - prev.d.y * here.d.x;
+    // Edges in a straight line: the corner moves in with this edge.
+    if (Math.abs(cross) < 1e-9) return here.p;
+    const t = ((here.p.x - prev.p.x) * here.d.y - (here.p.y - prev.p.y) * here.d.x) / cross;
+    return { x: prev.p.x + prev.d.x * t, y: prev.p.y + prev.d.y * t };
+  });
 }
 
 export function roomCeiling(plan: Pick<Floorplan, 'ceilingHeight'>, room: Room): number {

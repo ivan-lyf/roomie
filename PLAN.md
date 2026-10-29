@@ -206,31 +206,32 @@ The catalog keeps **every valid product** in the MVP categories instead of a han
 
 | Code | Fails when |
 |---|---|
+| `unknown_product` | The placement's article number isn't in the catalog |
 | `outside_room` | The footprint isn't inside its room's floor. The floor is the boundary inset by half of each wall along it (`floorPolygon`, the outline `floorArea` measures). Open sides between rooms aren't inset, so a rug can't cross from the living room into the dining area either |
 | `wrong_room` | `roomId` isn't the room the item's center stands in, or the room isn't furnishable |
-| `overlap` | Two footprints overlap by more than 1 cm, or a footprint overlaps an obstacle. Rugs only collide with other rugs. Chairs may go under their table or desk, but not under other furniture |
+| `overlap` | Two footprints overlap by more than 1 cm, or a footprint overlaps an obstacle. A rug goes under any furniture but another rug. Chairs may go under a table or desk, but not under other furniture |
 | `blocks_door` | A footprint enters a door's swing arc, or the clear zone in front of a door or passage on either side of it. That zone is the opening's width, 0.6 m deep. Rugs are exempt |
-| `no_clearance` | An item's use zone (table below) holds another item, a wall or an obstacle. The partners listed are allowed in it |
+| `no_clearance` | An item's use zone (table below) holds another item, a wall or an obstacle. The items listed are allowed in it |
 
 Use zones, from common furniture-planning minimums. They live in one table in code, to tune once M7's ratings come in:
 
 | Item | Zone that must stay clear | Allowed in it |
 |---|---|---|
-| Bed | 0.6 m along one long side, or both for beds 1.4 m wide or more, from the foot to a third of the way back from the head (the nightstand's spot) | Rug, nightstand |
-| Sofa, armchair | 0.35 m in front | Rug, coffee table (it must stay ≥ 0.35 m away) |
-| Desk | 0.75 m in front | Desk chair, rug |
-| Dining table | 0.6 m on every side | Dining chairs, rug |
+| Bed | 0.6 m along one long side, or both for beds 1.4 m wide or more, from the foot to a third of the way back from the head (the nightstands' spot) | Rug |
+| Sofa, armchair | 0.35 m in front (legroom, so a coffee table stands at least that far off) | Rug |
+| Desk | 0.75 m in front | Chairs, rug |
+| Dining table | 0.6 m on every side | Chairs, rug |
 | Wardrobe, dresser, shelving, TV unit | 0.6 m in front (doors and drawers) | Rug |
 | Nightstand, coffee table, chairs, rug, floor lamp | None | |
 
-Footprints are rectangles from `dims` and `rotation`. Round products (71) are 24-sided polygons. Overlaps use `polygon-clipping`, already a geometry dependency, because obstacles can be concave. A room holds about 30 items, so a check on each drag frame is cheap. The walkway rule (75 cm paths from the doors to every zone) stays in M4 with the other whole-home checks.
+Footprints are rectangles from `dims` and `rotation`. Round products (71) are 24-sided polygons. Items and zones are convex, so most checks are a separating-axis test of how deep two shapes overlap; the floor of an L-shaped room and drawn obstacles can be concave, and go through `polygon-clipping`, already a geometry dependency. A room holds about 30 items, so a check on each drag frame is cheap. The walkway rule (75 cm paths from the doors to every zone) stays in M4 with the other whole-home checks.
 
 **The screens** are plain working ones in today's style. The user-facing design comes later, built with Claude Design from `docs/frontend-design.md`.
 
 **Steps,** each one commit and demoable:
 
 1. **Schema:** `Placement.id`; `Floorplan.furniture` (default `[]`) and `furnishedFrom`; a Drizzle migration; the fixtures. The API reads plans saved before this with no furniture. Commit `feat(schema): furniture on the floorplan`.
-2. **Validator:** `floorPolygon`, footprints with round shapes, the five checks, and `validateLayout`. Tests use made-up products (no IKEA data in the repo), with one test per code. A furnished `00-demo-1br` is checked as valid, then broken one rule at a time. Commit `feat(geometry): validate furniture placements`.
+2. **Validator:** `floorPolygon`, footprints with round shapes, the checks, and `validateLayout`. Tests use made-up products (no IKEA data in the repo), with one test per code. A furnished `00-demo-1br` is checked as valid, then broken one rule at a time. Commit `feat(geometry): validate furniture placements`.
 3. **Snapping:** `snapPlacement(placement, dims, room, plan)`, pure and tested. Within 0.15 m of a wall, the item's back moves flush to the wall's face and turns to match it. Within 0.15 m of a corner, its side moves flush too. Rotation steps by 90°, or by 15° with Shift. The snap never moves an item into a door's zone if an unsnapped spot is clear.
 4. **Products by article number:** `GET /products?articleNo=…`, including discontinued ones, so a saved home still finds its items. The web app keeps the products it has seen in a cache by article number.
 5. **Furniture in 3D:** `Furniture.tsx` in `scene/home/`, using `ProductModel` (a box while a model loads or for products with no model). Chairs with the same model share one geometry. Store actions: `place`, `move`, `rotate`, `remove`, all undoable.

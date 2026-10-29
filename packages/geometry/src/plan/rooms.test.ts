@@ -1,8 +1,10 @@
 import { Floorplan, type Obstacle } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
+import { area } from './polygon';
 import {
   floorArea,
+  floorPolygon,
   labelsIn,
   obstacleHeight,
   roomAt,
@@ -122,5 +124,41 @@ describe('floorArea', () => {
     // Inside: 3.8 × 0.8 along the top, and 0.8 × 2 down the side.
     expect(floorArea(l, walls)).toBeCloseTo(3.8 * 0.8 + 0.8 * 2, 9);
     expect(floorArea(l.toReversed(), walls)).toBeCloseTo(3.8 * 0.8 + 0.8 * 2, 9);
+  });
+});
+
+describe('floorPolygon', () => {
+  const P = (x: number, y: number) => ({ x, y });
+  const wall = (a: { x: number; y: number }, b: { x: number; y: number }, thickness: number) => ({
+    a,
+    b,
+    thickness,
+  });
+  const round = (points: { x: number; y: number }[]) =>
+    points.map((p) => [+p.x.toFixed(9), +p.y.toFixed(9)]);
+
+  it('moves each side in by half its wall, and leaves a side with no wall open', () => {
+    const rect = [P(0, 0), P(4, 0), P(4, 3), P(0, 3)];
+    const walls = [
+      wall(P(-1, 0), P(5, 0), 0.3),
+      wall(P(4, -1), P(4, 4), 0.1),
+      wall(P(0, 4), P(0, -1), 0.1),
+    ];
+    expect(round(floorPolygon(rect, walls))).toEqual([
+      [0.05, 0.15],
+      [3.95, 0.15],
+      [3.95, 3],
+      [0.05, 3],
+    ]);
+  });
+
+  it('follows an L either way round, with the area floorArea measures', () => {
+    const l = [P(0, 0), P(4, 0), P(4, 1), P(1, 1), P(1, 3), P(0, 3)];
+    const walls = l.map((a, i) => wall(a, l[(i + 1) % l.length]!, 0.2));
+    for (const outline of [l, l.toReversed()]) {
+      const floor = floorPolygon(outline, walls);
+      expect(area(floor)).toBeCloseTo(floorArea(outline, walls), 9);
+      expect(round(floor)).toContainEqual([0.9, 0.9]);
+    }
   });
 });
