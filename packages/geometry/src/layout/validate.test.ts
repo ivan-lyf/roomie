@@ -187,6 +187,13 @@ describe('validateLayout', () => {
       expect(codes(moved('ns1', { y: 2.2 }))).toEqual(['no_clearance']);
     });
 
+    it('names everything in the way', () => {
+      const queen = put('bed', 'queenBed', 'r1', 1.4, 1.65);
+      const [problem] = validate([queen, put('ns', 'nightstand', 'r1', 2.5, 2.2)]);
+      expect(problem).toMatchObject({ ids: ['bed', 'w4', 'ns'] });
+      expect(problem!.message).toMatch(/: a wall and the nightstand are in the way\.$/);
+    });
+
     it('keeps the front of storage clear to open it', () => {
       // Facing the bed's foot 30 cm away.
       const wardrobe = put('wardrobe', 'wardrobe', 'r1', 2.3, 3.3, 2 * Q);

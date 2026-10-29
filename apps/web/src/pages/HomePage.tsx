@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
 import { floorplanImageUrl } from '../api';
 import { useAutosave } from '../autosave';
+import { nudgeItem, removeItem, rotateItem } from '../furnishing';
 import { usePlan } from '../plans';
 import { HomeScene } from '../scene/home/HomeScene';
+import { redo, undo } from '../stores/floorplan';
 import { useFurnish } from '../stores/furnish';
 import { useProductsFor } from '../stores/products';
 import { HomePanel } from '../ui/HomePanel';
@@ -13,6 +15,15 @@ import { HomePanel } from '../ui/HomePanel';
 /** R turns an item a quarter, Shift+R by 15°. */
 const STEP = Math.PI / 2;
 const STEP_FINE = Math.PI / 12;
+/** Arrows move an item 5 cm across the plan, Shift+arrows 25 cm. */
+const NUDGE = 0.05;
+const NUDGE_FAR = 0.25;
+const NUDGES: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
 
 export function HomePage({ id }: { id: string }) {
   const { plan, error } = usePlan(id);
@@ -35,17 +46,37 @@ export function HomePage({ id }: { id: string }) {
   }, [roomId]);
 
   // Escape stops placing, else lets go of the item, else goes back to the whole home. R turns
-  // what's being placed.
+  // what's being placed or the item selected, Delete removes the item, arrows nudge it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+      if (e.target instanceof HTMLElement && e.target.closest('input, select, textarea')) return;
       const furnish = useFurnish.getState();
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (mod && (key === 'z' || key === 'y')) {
+        e.preventDefault();
+        if (key === 'y' || e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod || e.altKey) return;
+      const item = furnish.selected;
+      const by = e.shiftKey ? STEP_FINE : STEP;
       if (e.key === 'Escape') {
         if (furnish.armed) furnish.arm(undefined);
-        else if (furnish.selected) furnish.select(undefined);
+        else if (item) furnish.select(undefined);
         else setRoomId(undefined);
-      } else if ((e.key === 'r' || e.key === 'R') && furnish.armed) {
-        furnish.turnArmed(turn(furnish.armed.rotation, e.shiftKey ? STEP_FINE : STEP));
+      } else if (key === 'r' && furnish.armed) {
+        furnish.turnArmed(turn(furnish.armed.rotation, by));
+      } else if (key === 'r' && item) {
+        rotateItem(item, by);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && item) {
+        removeItem(item);
+      } else if (e.key in NUDGES && item) {
+        e.preventDefault();
+        const [dx, dy] = NUDGES[e.key]!;
+        const step = e.shiftKey ? NUDGE_FAR : NUDGE;
+        nudgeItem(item, dx * step, dy * step);
       }
     };
     window.addEventListener('keydown', onKey);

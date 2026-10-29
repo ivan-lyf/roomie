@@ -44,7 +44,7 @@ export type UseZone = {
   allows: ReadonlySet<Category>;
 };
 
-export function useZone(
+export function zoneOf(
   placement: Pick<Placement, 'x' | 'y' | 'rotation'>,
   product: ProductFit,
 ): UseZone | undefined {

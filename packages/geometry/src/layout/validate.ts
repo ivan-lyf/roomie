@@ -17,7 +17,7 @@ import {
   shape,
   wallOutline,
 } from './shapes';
-import { doorZones, useZone } from './zones';
+import { doorZones, zoneOf } from './zones';
 
 /** Shapes may overlap by this much, in meters, before it counts: they're drawn to the cm. */
 export const OVERLAP_TOLERANCE = 0.01;
@@ -254,7 +254,7 @@ function clearance(
   walls: readonly Blocker[],
   obstacles: readonly Blocker[],
 ): LayoutProblem | undefined {
-  const zone = useZone(item.placement, item.product);
+  const zone = zoneOf(item.placement, item.product);
   if (!zone) return undefined;
   const others: Blocker[] = [
     ...items
@@ -281,10 +281,14 @@ function clearance(
         ? 'on every side'
         : 'in front';
   const purpose = ZONE_PURPOSE[item.product.category] ?? 'to be used';
-  const blocker = inTheWay[0]!.noun;
+  const nouns = [...new Set(inTheWay.map((b) => b.noun))];
+  const blockers =
+    nouns.length === 1
+      ? `${nouns[0]} is`
+      : `${nouns.slice(0, -1).join(', ')} and ${nouns.at(-1)} are`;
   return {
     code: 'no_clearance',
-    message: `The ${item.noun} needs ${cm} cm clear ${where} ${purpose}: ${blocker} is in the way.`,
+    message: `The ${item.noun} needs ${cm} cm clear ${where} ${purpose}: ${blockers} in the way.`,
     ids: [item.placement.id, ...inTheWay.map((b) => b.id)],
   };
 }

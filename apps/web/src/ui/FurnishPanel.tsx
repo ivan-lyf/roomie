@@ -9,7 +9,7 @@ import {
 } from '@roomie/schema';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchProducts } from '../api';
-import { groupFamilies, matchesFilter, optionChoices, pickVariant } from '../catalog';
+import { familyName, groupFamilies, matchesFilter, optionChoices, pickVariant } from '../catalog';
 import {
   CATEGORIES,
   formatLength,
@@ -18,6 +18,8 @@ import {
   parseLength,
   ROOM_TYPES,
 } from '../format';
+import { removeItem, rotateItem, useLayoutProblems } from '../furnishing';
+import { redo, undo } from '../stores/floorplan';
 import { useFurnish } from '../stores/furnish';
 import { useProducts } from '../stores/products';
 
@@ -118,12 +120,16 @@ function Catalog({ plan, room }: { plan: Floorplan; room: Room }) {
   const family = families.find((f) => f.id === picked?.familyId);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col gap-3">
+    <section className="flex flex-col gap-3">
       <p>
         Furnishing the <span className="font-medium">{room.name}</span> (
         {ROOM_TYPES[room.roomType].toLowerCase()}, {formatLength(size.w, imperial)} ×{' '}
         {formatLength(size.d, imperial)} inside).
       </p>
+
+      <RoomItems plan={plan} room={room} imperial={imperial} />
+
+      <h2 className="border-t border-stone-200 pt-3 font-medium">Add furniture</h2>
 
       <nav className="flex flex-wrap gap-1" aria-label="Categories">
         {Category.options.map((c) => (
@@ -156,7 +162,7 @@ function Catalog({ plan, room }: { plan: Floorplan; room: Room }) {
         <p className="text-stone-500">Nothing matches: loosen the limits above.</p>
       )}
 
-      <ul className="min-h-24 flex-1 divide-y divide-stone-200 overflow-y-auto rounded-md border border-stone-200">
+      <ul className="max-h-80 divide-y divide-stone-200 overflow-y-auto rounded-md border border-stone-200">
         {families.map((f) => (
           <li key={f.id}>
             <button
@@ -229,5 +235,106 @@ function Limit(props: {
         onChange={(e) => props.onChange(e.target.value)}
       />
     </label>
+  );
+}
+
+/**
+ * The items in the room, with what's wrong where anything is, and the selected item's card:
+ * its price, size and link, and buttons to turn or remove it.
+ */
+function RoomItems({ plan, room, imperial }: { plan: Floorplan; room: Room; imperial: boolean }) {
+  const products = useProducts((s) => s.byArticle);
+  const selected = useFurnish((s) => s.selected);
+  const select = useFurnish((s) => s.select);
+  const problems = useLayoutProblems(plan);
+  const items = plan.furniture.filter((f) => f.roomId === room.id);
+  const item = plan.furniture.find((f) => f.id === selected);
+  const product = item && products.get(item.articleNo);
+  const total = items.reduce((sum, f) => sum + (products.get(f.articleNo)?.priceCad ?? 0), 0);
+
+  return (
+    <section className="space-y-2">
+      <header className="flex items-baseline justify-between">
+        <h2 className="font-medium">
+          In the {room.name}: {items.length} item{items.length === 1 ? '' : 's'}
+          {items.length > 0 && `, ${formatPrice(total)}`}
+        </h2>
+        <span className="flex gap-2 text-xs">
+          <button type="button" className="underline" onClick={undo} title="Ctrl+Z">
+            Undo
+          </button>
+          <button type="button" className="underline" onClick={redo} title="Ctrl+Shift+Z">
+            Redo
+          </button>
+        </span>
+      </header>
+
+      {items.length === 0 && (
+        <p className="text-stone-500">Nothing yet: pick something below to place it.</p>
+      )}
+      {items.length > 0 && (
+        <ul className="divide-y divide-stone-200 rounded-md border border-stone-200">
+          {items.map((f) => {
+            const p = products.get(f.articleNo);
+            const wrong = problems.byItem.get(f.id)?.length ?? 0;
+            return (
+              <li key={f.id}>
+                <button
+                  type="button"
+                  onClick={() => select(f.id === selected ? undefined : f.id)}
+                  className={`flex w-full justify-between gap-2 px-3 py-1.5 text-left ${
+                    f.id === selected ? 'bg-stone-100' : 'hover:bg-stone-50'
+                  }`}
+                >
+                  <span className="min-w-0 truncate">
+                    {wrong > 0 && <span className="mr-1 text-red-700">●</span>}
+                    {p ? familyName(p) : 'Loading…'}
+                  </span>
+                  <span className="shrink-0 text-stone-500">{p && formatPrice(p.priceCad)}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {item && product && (
+        <section className="space-y-1.5 rounded-md bg-stone-50 p-2">
+          <p className="font-medium">{product.name}</p>
+          <p>
+            {formatPrice(product.priceCad)} · {formatLength(product.dims.w, imperial)} wide ×{' '}
+            {formatLength(product.dims.d, imperial)} deep
+            {product.status === 'discontinued' && ' · no longer sold at IKEA'}
+          </p>
+          <a className="block underline" href={product.url} target="_blank" rel="noreferrer">
+            {product.articleNo} on IKEA.ca
+          </a>
+          {(problems.byItem.get(item.id) ?? []).map((p, i) => (
+            <p key={i} className="text-red-700">
+              {p.message}
+            </p>
+          ))}
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              className="rounded-md border border-stone-300 bg-white px-2 py-1"
+              onClick={() => rotateItem(item.id, Math.PI / 2)}
+            >
+              Turn (R)
+            </button>
+            <button
+              type="button"
+              className="rounded-md border border-stone-300 bg-white px-2 py-1"
+              onClick={() => removeItem(item.id)}
+            >
+              Remove (Delete)
+            </button>
+          </div>
+          <p className="text-xs text-stone-500">
+            Drag it to move it; it snaps to the walls unless you hold Alt. Arrows nudge it.
+          </p>
+        </section>
+      )}
+    </section>
   );
 }

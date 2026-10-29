@@ -10,7 +10,9 @@ import { Ceilings } from './Ceilings';
 import { CUTAWAY_HEIGHT } from './cutaway';
 import { Floors } from './Floors';
 import { useFurnish } from '../../stores/furnish';
+import { useLayoutProblems } from '../../furnishing';
 import { Furniture, useFloorEvents } from './Furniture';
+import { Marks } from './Marks';
 import { preloadFloors } from './floorTextures';
 import { Obstacles } from './Obstacles';
 import { Openings, placedOpenings } from './Openings';
@@ -47,6 +49,7 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
   const room = plan.rooms.find((r) => r.id === roomId);
   const focus = useMemo(() => (room ? extentOf(room.boundary) : home), [room, home]);
   const floorEvents = useFloorEvents(plan, onRoom);
+  const problems = useLayoutProblems(plan);
   useEffect(preloadFloors, []);
   return (
     <Canvas
@@ -74,7 +77,8 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
         enabled={cutaway}
       />
       <Obstacles plan={plan} />
-      <Furniture plan={plan} />
+      <Furniture plan={plan} problems={problems} />
+      <Marks plan={plan} problems={problems} />
       {ceilings && <Ceilings plan={plan} />}
       <Ground home={home} />
       <Framing extent={focus} />
