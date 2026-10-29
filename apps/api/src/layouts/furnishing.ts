@@ -17,8 +17,9 @@ export type WinnerRow = Pick<Layout, 'id' | 'createdAt'> & {
 
 /**
  * What each room was last furnished from: going back through the home's winning layouts, newest
- * first, the first one that furnished it. Rooms since deleted from the plan are left out. The
- * budget and style are the last whole-home furnishing's.
+ * first, the first one that chose its pieces. A rearrange chose none, so the room keeps the
+ * intent its pieces came from, reasons and relations included. Rooms since deleted from the plan
+ * are left out. The budget and style are the last whole-home furnishing's.
  */
 export function furnishingOf(
   roomIds: ReadonlySet<string>,
@@ -32,6 +33,7 @@ export function furnishingOf(
     const placements = z.array(Placement).safeParse(row.placements);
     if (!inputs.success || !logged.success || !placements.success) continue;
     const { intent, mode } = logged.data;
+    if (mode === 'rearrange') continue;
     if (mode === 'home' && furnishing.budgetCad === null) {
       furnishing.budgetCad = inputs.data.budgetCad;
       furnishing.style = inputs.data.style;

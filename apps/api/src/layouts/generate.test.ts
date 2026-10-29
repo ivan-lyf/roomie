@@ -217,15 +217,33 @@ describe('one room again', () => {
     expect(validateLayout(plan, placed, byArticle)).toEqual([]);
   });
 
-  it('rearranges items placed by hand under made-up refs, with the relations that still apply', () => {
+  it("won't rearrange a room by leaving anything out", async () => {
+    const home = await furnished();
+    // Three queen beds in the bedroom, where two fit at most.
+    const bed = { id: 'f90', articleNo: '900.000.10', roomId: 'r1', x: 1, y: 1, rotation: 0 };
+    const crowded = { ...home, furniture: ['f90', 'f91', 'f92'].map((id) => ({ ...bed, id })) };
+    await expect(
+      rearrangeRoom(
+        crowded,
+        { ...inputs, roomIds: ['r1'] },
+        { catalog: products, keep: [], seeds: 2, firstSeed: 1 },
+      ),
+    ).rejects.toThrow("There's no other way to fit everything in the Bedroom.");
+  });
+
+  it('rearranges items without refs under those of the same products, or made-up ones', () => {
     const sofa = { id: 'f7', articleNo: '900.000.15', roomId: 'r2', x: 1, y: 1, rotation: 0 };
     const tv = { ...sofa, id: 'f8', articleNo: '900.000.18', ref: 'tv' };
-    const { intent: room, byRef } = rearrangeIntent('r2', [sofa, tv], living);
-    expect(room.items.map((i) => i.ref)).toEqual(['item_f7', 'tv']);
+    const chair = { ...sofa, id: 'f9', articleNo: '900.000.11' };
+    const { intent: room, byRef, madeUp } = rearrangeIntent('r2', [sofa, tv, chair], living);
+    // The sofa is the product the intent chose as `sofa`; nothing like the third was chosen.
+    expect(room.items.map((i) => i.ref)).toEqual(['sofa', 'tv', 'item_f9']);
+    expect([...madeUp]).toEqual(['item_f9']);
     expect(room.items[1]!.why).toBe(living.items.find((i) => i.ref === 'tv')!.why);
-    // Only relations about the TV alone hold: the sofa it was planned with isn't there by name.
-    expect(room.relations.length).toBeGreaterThan(0);
-    for (const r of room.relations) expect(JSON.stringify(r)).not.toContain('"sofa"');
-    expect(byRef.get('item_f7')).toBe(sofa);
+    expect(byRef.get('sofa')).toBe(sofa);
+    // Relations hold between the items there, and only those.
+    const facing = room.relations.find((r) => r.kind === 'facing' && r.item === 'sofa');
+    expect(facing).toBeDefined();
+    for (const r of room.relations) expect(JSON.stringify(r)).not.toMatch(/"(coffee|armchair)"/);
   });
 });

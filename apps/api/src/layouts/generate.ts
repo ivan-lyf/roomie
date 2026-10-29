@@ -1,8 +1,10 @@
 import {
+  anchorOf,
   type LayoutProblem,
   roomContext,
   type RoomSolution,
   type Scored,
+  type SolveOptions,
   scoreHome,
   scoreRoom,
   solveRoom,
@@ -40,8 +42,6 @@ import {
 export const SEEDS = 8;
 /** How many times failed rooms go back to the LLM. */
 export const REPAIRS = 2;
-/** A rearranged room counts as another layout once an item moves this far, in meters, or turns. */
-const MOVED = 0.1;
 
 /** What goes first when a home is over budget: the least needed. */
 const DROP_FIRST: Category[] = [
@@ -143,6 +143,7 @@ async function solveRooms(
   products: ReadonlyMap<string, Product>,
   seeds: readonly number[],
   keep: readonly Placement[],
+  options: Pick<SolveOptions, 'avoid' | 'placeAll'> = {},
 ): Promise<Map<string, RoomSolution[]>> {
   const solved = new Map<string, RoomSolution[]>();
   // Rooms open to each other share walkways, so each is solved around the rooms kept and the
@@ -154,7 +155,7 @@ async function solveRooms(
     for (const seed of room ? seeds : []) {
       // Solving takes a moment per try: let the server answer other requests in between.
       await pause();
-      runs.push(solveRoom(plan, room!, products, { seed, others }));
+      runs.push(solveRoom(plan, room!, products, { ...options, seed, others }));
     }
     solved.set(roomId, runs);
     const best = runs.toSorted(better)[0];
@@ -228,18 +229,31 @@ export type RearrangeDeps = SolveDeps & {
 };
 
 /**
- * The intent to rearrange a room by: the items it holds now, by the refs they kept (items
- * placed by hand get one made up), and the relations of its last intent that still apply.
+ * The intent to rearrange a room by: the items it holds now, by the refs they kept, and the
+ * relations of its last intent that still apply. An item without a ref of its own (placed by
+ * hand, or furnished before refs were kept) takes the ref of a product the intent chose that
+ * it is, if one is left; otherwise it gets one made up, which it doesn't keep.
  */
 export function rearrangeIntent(
   roomId: string,
   items: readonly Placement[],
   last: RoomIntent | undefined,
-): { intent: RoomIntent; byRef: Map<string, Placement> } {
+): { intent: RoomIntent; byRef: Map<string, Placement>; madeUp: Set<string> } {
   const byRef = new Map<string, Placement>();
+  const madeUp = new Set<string>();
+  const own = new Set(items.flatMap((f) => f.ref ?? []));
+  const left = (last?.items ?? []).filter((i) => !own.has(i.ref));
   const chosen: IntentItem[] = [];
   for (const item of items) {
-    const ref = item.ref && !byRef.has(item.ref) ? item.ref : `item_${item.id}`.toLowerCase();
+    let ref = item.ref && !byRef.has(item.ref) ? item.ref : undefined;
+    if (!ref) {
+      const same = left.findIndex((i) => i.articleNo === item.articleNo);
+      if (same >= 0) ref = left.splice(same, 1)[0]!.ref;
+    }
+    if (!ref) {
+      ref = `item_${item.id}`.toLowerCase();
+      madeUp.add(ref);
+    }
     byRef.set(ref, item);
     const why = last?.items.find((i) => i.ref === ref && i.articleNo === item.articleNo)?.why;
     chosen.push({ ref, articleNo: item.articleNo, why: why ?? '' });
@@ -247,17 +261,14 @@ export function rearrangeIntent(
   const relations: Relation[] = (last?.relations ?? []).filter((r) =>
     relationRefs(r).every((ref) => byRef.has(ref)),
   );
-  return { intent: { roomId, items: chosen, relations }, byRef };
+  return { intent: { roomId, items: chosen, relations }, byRef, madeUp };
 }
-
-/** How far apart two turns are, in radians. */
-const turnBetween = (a: number, b: number) =>
-  Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /**
  * Lays a room's items out afresh (M5): the same items, solved again with new seeds, keeping the
  * relations its intent asked for, around the rest of the home as it stands. No LLM, so it costs
- * nothing. A try that leaves every item where it stands doesn't count as another layout.
+ * nothing. The room's largest piece that stands on its own leaves where it is, so each rearrange
+ * is another layout; every item must find a spot, or the room stays as it was.
  */
 export async function rearrangeRoom(
   plan: Floorplan,
@@ -267,7 +278,7 @@ export async function rearrangeRoom(
   const products = new Map(deps.catalog.map((p) => [p.articleNo, p]));
   const roomId = inputs.roomIds[0]!;
   const now = plan.furniture.filter((f) => f.roomId === roomId);
-  const { intent: room, byRef } = rearrangeIntent(roomId, now, deps.intent);
+  const { intent: room, byRef, madeUp } = rearrangeIntent(roomId, now, deps.intent);
   const intent: LayoutIntent = {
     rooms: [room],
     budget: [{ roomId, cad: inputs.budgetCad }],
@@ -276,27 +287,34 @@ export async function rearrangeRoom(
   const seeds = Array.from({ length: deps.seeds ?? SEEDS }, (_, i) => deps.firstSeed + i);
   deps.onProgress?.([{ roomId, status: 'waiting' }]);
 
-  const solved = await solveRooms(plan, intent, [roomId], products, seeds, deps.keep);
-  const moved = (run: RoomSolution) =>
-    run.placements.some((p) => {
-      const was = byRef.get(p.id)!;
-      return (
-        Math.hypot(p.x - was.x, p.y - was.y) > MOVED || turnBetween(p.rotation, was.rotation) > 0.01
-      );
-    });
-  const others = solved.get(roomId)!.filter(moved);
-  if (others.length > 0) solved.set(roomId, others);
+  const area = (ref: string) => {
+    const dims = products.get(byRef.get(ref)!.articleNo)?.dims;
+    return dims ? dims.w * dims.d : 0;
+  };
+  const main = room.items
+    .map((i) => i.ref)
+    .filter((ref) => anchorOf(ref, room.relations) === undefined)
+    .sort((a, b) => area(b) - area(a))[0];
+  const avoid = main ? [{ ...byRef.get(main)!, id: main }] : [];
+  const solved = await solveRooms(plan, intent, [roomId], products, seeds, deps.keep, {
+    avoid,
+    placeAll: true,
+  });
+  // Nothing the room has is left out of it.
+  const whole = solved.get(roomId)!.filter((run) => run.unplaced.length === 0);
+  if (whole.length === 0) {
+    const name = plan.rooms.find((r) => r.id === roomId)?.name ?? roomId;
+    throw new Error(`There's no other way to fit everything in the ${name}.`);
+  }
+  solved.set(roomId, whole);
 
-  // Rearranged items stay the items they were: their ids and refs don't change.
+  // Rearranged items stay the items they were, with their ids, and the refs they were solved
+  // under unless those were made up.
   const identify = () => (p: Placement) => {
-    const { id, ref } = byRef.get(p.id)!;
-    return ref === undefined ? { id } : { id, ref };
+    const { id } = byRef.get(p.id)!;
+    return madeUp.has(p.id) ? { id } : { id, ref: p.id };
   };
   const outcome = combine(plan, inputs, intent, solved, products, deps.keep, identify);
-  if (others.length === 0) {
-    const status = outcome.rooms[0]!;
-    status.reasons = [...(status.reasons ?? []), 'No other arrangement fits as well as this one.'];
-  }
   deps.onProgress?.(outcome.rooms);
   return {
     mode: 'rearrange',

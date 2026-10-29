@@ -256,8 +256,9 @@ describe('POST /api/floorplans/:id/rooms/:roomId/layouts', () => {
     const furnishing = HomeFurnishing.parse(
       await (await app().request(`/api/floorplans/${plan.id}/furnishing`)).json(),
     );
+    // A rearrange chose no pieces: the bedroom's are still those the whole home was given.
     expect(furnishing.budgetCad).toBe(3000);
-    expect(furnishing.rooms.find((r) => r.roomId === 'r1')!.layoutId).toBe(job.layoutId);
+    expect(furnishing.rooms.find((r) => r.roomId === 'r1')!.layoutId).toBe(whole.layoutId);
   });
 
   it('says why it can’t: nothing to rearrange, no writer for new pieces, or busy', async () => {
