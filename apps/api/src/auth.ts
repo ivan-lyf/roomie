@@ -74,7 +74,7 @@ export function isAdmin(account: Account, auth: Auth | undefined, admins: readon
   return account.email !== null && admins.includes(account.email.toLowerCase());
 }
 
-export const refuse = (c: Context, status: 401 | 409 | 429 | 503, refusal: Refusal) =>
+export const refuse = (c: Context, status: 401 | 403 | 409 | 429 | 503, refusal: Refusal) =>
   c.json(refusal, status);
 
 /**
@@ -112,6 +112,25 @@ export function requireAccount(auth: Auth | undefined): MiddlewareHandler<Accoun
   return async (c, next) => {
     const account = await accountOf(c, auth);
     if (account instanceof Response) return account;
+    c.set('account', account);
+    await next();
+  };
+}
+
+/**
+ * Lets a request through only when it's signed in as an admin (see `isAdmin`), with its account
+ * in `c.var.account`: the internal pages' routes (PLAN.md M7).
+ */
+export function requireAdmin(
+  auth: Auth | undefined,
+  admins: readonly string[],
+): MiddlewareHandler<AccountEnv> {
+  return async (c, next) => {
+    const account = await accountOf(c, auth);
+    if (account instanceof Response) return account;
+    if (!isAdmin(account, auth, admins)) {
+      return refuse(c, 403, { error: 'Only admins can use this page.', code: 'admin_only' });
+    }
     c.set('account', account);
     await next();
   };

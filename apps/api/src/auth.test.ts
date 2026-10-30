@@ -5,6 +5,7 @@ import {
   type AccountEnv,
   LOCAL_ACCOUNT,
   requireAccount,
+  requireAdmin,
   signingKeyCount,
   supabaseVerifier,
   type TokenVerifier,
@@ -102,6 +103,48 @@ describe('requireAccount', () => {
 
   it('lets everyone through as the local account when sign-in is off', async () => {
     const res = await call(app({ kind: 'off' }));
+    expect(await res.json()).toEqual(LOCAL_ACCOUNT);
+  });
+});
+
+describe('requireAdmin', () => {
+  const app = (auth: Parameters<typeof requireAdmin>[0], admins: string[]) =>
+    new Hono<AccountEnv>().get('/admin', requireAdmin(auth, admins), (c) => c.json(c.var.account));
+  const call = (served: ReturnType<typeof app>, token?: string) =>
+    served.request('/admin', { headers: token ? { authorization: `Bearer ${token}` } : {} });
+
+  it('lets an admin through, whatever the case of the email in their token', async () => {
+    const res = await call(app({ kind: 'verify', verify }, ['ivan@example.com']), await sign());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ id: user, email: 'ivan@example.com' });
+    const shouted = await sign({ email: 'IVAN@example.com' });
+    expect(
+      (await call(app({ kind: 'verify', verify }, ['ivan@example.com']), shouted)).status,
+    ).toBe(200);
+  });
+
+  it('refuses an account that is not an admin, or has no email', async () => {
+    const res = await call(app({ kind: 'verify', verify }, ['someone@example.com']), await sign());
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: 'Only admins can use this page.',
+      code: 'admin_only',
+    });
+    const noEmail = await sign({ email: undefined });
+    expect(
+      (await call(app({ kind: 'verify', verify }, ['ivan@example.com']), noEmail)).status,
+    ).toBe(403);
+  });
+
+  it("asks a signed-out request to sign in, and is unavailable when sign-in isn't set up", async () => {
+    const res = await call(app({ kind: 'verify', verify }, ['ivan@example.com']));
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ code: 'sign_in_required' });
+    expect((await call(app(undefined, ['ivan@example.com']), await sign())).status).toBe(503);
+  });
+
+  it('lets the local account through when sign-in is off', async () => {
+    const res = await call(app({ kind: 'off' }, []));
     expect(await res.json()).toEqual(LOCAL_ACCOUNT);
   });
 });
