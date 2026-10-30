@@ -1,4 +1,4 @@
-import { Html, useCursor } from '@react-three/drei';
+import { Edges, Html, useCursor } from '@react-three/drei';
 import { type ThreeEvent, useThree } from '@react-three/fiber';
 import { type LayoutProblem, roomAt, snapPlacement } from '@roomie/geometry';
 import {
@@ -212,15 +212,74 @@ function Item(props: { placement: Placement; product: Product; children?: ReactN
   );
 }
 
-/** An invisible box around the item, so a click anywhere in its outline picks it. */
-function HitBox({ product }: { product: Product }) {
+/**
+ * An invisible box around the item, so a click anywhere in its outline picks it; outlined in a
+ * color when given one.
+ */
+function HitBox({ product, outline }: { product: Product; outline?: string | undefined }) {
   const { w, d, h } = product.dims;
   return (
     <mesh position-y={h / 2}>
       <boxGeometry args={[w, h, d]} />
       <meshBasicMaterial visible={false} />
+      {outline && <Edges color={outline} lineWidth={2} />}
     </mesh>
   );
+}
+
+const MARKED = '#b91c1c';
+const HOVERED = '#57534e';
+
+type ShownProps = {
+  placements: readonly Placement[];
+  products: ReadonlyMap<string, Product>;
+  /** The pointer over an item, or over none. */
+  onHover?: (id: string | undefined) => void;
+  /** A click on an item. */
+  onPick?: (id: string) => void;
+  /** Items outlined in red. */
+  marked?: ReadonlySet<string>;
+};
+
+/**
+ * Furniture to look at, not move (the rating page, M7): each item where it stands, outlined
+ * when pointed at or marked, and saying which it is when pointed at or clicked.
+ */
+export function ShownFurniture({ placements, products, onHover, onPick, marked }: ShownProps) {
+  const [hovered, setHovered] = useState<string>();
+  useCursor(hovered !== undefined && onPick !== undefined);
+  const hover = (id: string | undefined) => {
+    setHovered(id);
+    onHover?.(id);
+  };
+  return placements.map((placement) => {
+    const product = products.get(placement.articleNo);
+    if (!product) return null;
+    const outline = marked?.has(placement.id)
+      ? MARKED
+      : hovered === placement.id
+        ? HOVERED
+        : undefined;
+    return (
+      <Item key={placement.id} placement={placement} product={product}>
+        <group
+          onClick={(e) => {
+            // A drag that ends on the item was turning the camera.
+            if (e.delta > DRAG_SLOP) return;
+            e.stopPropagation();
+            onPick?.(placement.id);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            hover(placement.id);
+          }}
+          onPointerOut={() => hover(undefined)}
+        >
+          <HitBox product={product} outline={outline} />
+        </group>
+      </Item>
+    );
+  });
 }
 
 /** Above an item with a problem, what's wrong, in words. */
