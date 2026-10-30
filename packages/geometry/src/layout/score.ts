@@ -75,6 +75,43 @@ function aim(piece: Piece, target: Vec2): number {
   return within(degrees, 0, 15, 60);
 }
 
+/**
+ * Where an armchair sits well, in meters: in the seating group, this far from the coffee table
+ * (or the spot in front of a sofa without one), center to center; or in a corner of its own, a
+ * floor lamp this close beside it, or a window this close.
+ */
+export const ARMCHAIR_REACH = { group: { from: 0.9, to: 1.9 }, lamp: 0.9, window: 1.3 };
+
+/**
+ * How well an armchair is placed: gathered round the coffee table with the sofa, turned toward
+ * it; or else a corner of its own to sit in, by a floor lamp or a window, facing the room.
+ * Either will do; the better one counts.
+ */
+function armchairPlace(chair: Piece, pieces: readonly Piece[], ctx: RoomContext): number {
+  const table = pieces.find((p) => p.product.category === 'coffee_table');
+  const sofa = pieces.find((p) => p.product.category === 'sofa');
+  let hub = table && at(table);
+  if (!hub && sofa) {
+    const { front } = axes(sofa.placement.rotation);
+    hub = { x: sofa.placement.x + front.x * 0.9, y: sofa.placement.y + front.y * 0.9 };
+  }
+  const { from, to } = ARMCHAIR_REACH.group;
+  const group = hub ? aim(chair, hub) * within(distance(at(chair), hub), from, to, 1.5) : 0;
+  const near = (points: Vec2[]) => Math.min(...points.map((p) => distance(at(chair), p)));
+  const lamps = pieces.filter((p) => p.product.category === 'floor_lamp').map(at);
+  const by = Math.max(
+    lamps.length > 0 ? within(near(lamps), 0, ARMCHAIR_REACH.lamp, 0.6) : 0,
+    ctx.windows.length > 0
+      ? within(near(ctx.windows.map((w) => w.center)), 0, ARMCHAIR_REACH.window, 1)
+      : 0,
+  );
+  // Facing the room, not a wall: half marks turned 90° from its middle.
+  const { front } = axes(chair.placement.rotation);
+  const inward = { x: ctx.center.x - chair.placement.x, y: ctx.center.y - chair.placement.y };
+  const room = clamp(0.5 + 0.5 * (dot(front, inward) / (Math.hypot(inward.x, inward.y) || 1)));
+  return Math.max(group, by * room);
+}
+
 /** How far apart a seat and the TV it watches should be, center to center, in meters. */
 export const VIEWING_DISTANCE = { from: 2.2, to: 4 };
 
@@ -343,6 +380,11 @@ export function scoreRoom(
     const sofas = seats.filter((p) => p.product.category === 'sofa');
     const watchers = sofas.length > 0 ? sofas : seats;
     features.tv_view = Math.max(...tv.flatMap((t) => watchers.map((s) => view(s, t))));
+  }
+
+  const armchairs = standing.filter((p) => p.product.category === 'armchair');
+  if (armchairs.length > 0) {
+    features.armchairs = mean(armchairs.map((c) => armchairPlace(c, standing, ctx)));
   }
 
   if (options.walkway !== false && standing.length > 0) {

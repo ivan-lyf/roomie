@@ -5,6 +5,7 @@
     "walls": 1,
     "focal": 1,
     "tv_view": 2,
+    "armchairs": 1.5,
     "walkway": 1,
     "bed_head": 1,
     "desk_window": 0.5,

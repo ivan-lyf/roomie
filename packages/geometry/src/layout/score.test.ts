@@ -135,7 +135,16 @@ describe('scoreRoom', () => {
   it('weighs the features that apply by weights.json', () => {
     const { score, breakdown } = scoreRoom(living, furnished, { relations });
     expect(Object.keys(breakdown).sort()).toEqual(
-      ['focal', 'relations', 'spread', 'tv_view', 'walkway', 'walls', 'windows'].sort(),
+      [
+        'armchairs',
+        'focal',
+        'relations',
+        'spread',
+        'tv_view',
+        'walkway',
+        'walls',
+        'windows',
+      ].sort(),
     );
     const w = weights.room as Record<string, number>;
     const total = Object.keys(breakdown).reduce((s, k) => s + w[k]!, 0);
@@ -144,6 +153,18 @@ describe('scoreRoom', () => {
     expect(breakdown.walls).toBeCloseTo(1);
     expect(breakdown.focal).toBeGreaterThan(0.9);
     expect(breakdown.tv_view).toBeCloseTo(1);
+  });
+
+  it('wants an armchair gathered round the coffee table, or in a corner by a lamp', () => {
+    const place = (chair: Piece) =>
+      scoreRoom(living, [sofa, coffee, tv, lamp, chair], { walkway: false }).breakdown.armchairs!;
+    // At the coffee table's end, 1.2 m from it, turned to it.
+    expect(place({ ...armchair, placement: { x: 5.6, y: 3.0, rotation: Math.PI } })).toBeCloseTo(1);
+    // In the far corner, 3.6 m from the table, turned to the wall, with nothing by it.
+    expect(place({ ...armchair, placement: { x: 8.2, y: 4.3, rotation: 0 } })).toBeLessThan(0.05);
+    // Beside the floor lamp, facing into the room: a corner to read in.
+    const nook = place({ ...armchair, placement: { x: 8.25, y: 1.4, rotation: -Q } });
+    expect(nook).toBeGreaterThan(0.8);
   });
 
   it('wants the TV square to the sofa, centered on it, at a distance to watch', () => {

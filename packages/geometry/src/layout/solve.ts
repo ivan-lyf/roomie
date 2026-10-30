@@ -194,6 +194,40 @@ function viewSpots(tv: Item, seat: Spot, ctx: RoomContext): Spot[] {
   });
 }
 
+/**
+ * Spots for an armchair in the sofa's group: at each end of the coffee table (or of the space in
+ * front of a sofa without one), straight or a little toward the room, and across the table from
+ * the sofa, each turned toward the table.
+ */
+function groupSpots(chair: Item, placed: Map<string, Piece>): Spot[] {
+  const pieces = [...placed.values()];
+  const sofa = pieces.find((p) => p.product.category === 'sofa');
+  const table = pieces.find((p) => p.product.category === 'coffee_table');
+  if (!sofa && !table) return [];
+  const axis = (sofa ?? table)!.placement.rotation;
+  const [f, l] = [frontOf(axis), leftOf(axis)];
+  const hub = table
+    ? { x: table.placement.x, y: table.placement.y }
+    : { x: sofa!.placement.x + f.x * 0.9, y: sofa!.placement.y + f.y * 0.9 };
+  const half = table ? reach(table.product, table.placement.rotation, l) : 0.45;
+  const deep = table ? reach(table.product, table.placement.rotation, f) : 0.3;
+  const seat = chair.product.dims.d / 2 + 0.35;
+  const toward = (p: Vec2) => ({ ...p, rotation: Math.atan2(hub.x - p.x, hub.y - p.y) });
+  const spots: Spot[] = [];
+  for (const side of [1, -1]) {
+    for (const ahead of [0, 0.4, 0.8]) {
+      spots.push(
+        toward({
+          x: hub.x + l.x * side * (half + seat) + f.x * ahead,
+          y: hub.y + l.y * side * (half + seat) + f.y * ahead,
+        }),
+      );
+    }
+  }
+  spots.push(toward({ x: hub.x + f.x * (deep + seat), y: hub.y + f.y * (deep + seat) }));
+  return spots;
+}
+
 /** Spots on a grid over the floor, turned square to each wall or toward what it should face. */
 function floorSpots(ctx: RoomContext, toward: Vec2[]): Spot[] {
   const { min, max } = bounds(ctx.floor);
@@ -460,6 +494,7 @@ export function solveRoom(
     ...(item.product.category === 'tv_unit' && watcher()
       ? viewSpots(item, watcher()!.placement, ctx)
       : []),
+    ...(item.product.category === 'armchair' ? groupSpots(item, placed) : []),
     ...(AGAINST_WALL.has(item.product.category)
       ? wallSpots(item, ctx, item.product.category === 'bed' && item.product.dims.w < 1.4)
       : []),
