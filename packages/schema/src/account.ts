@@ -8,6 +8,7 @@ export const RefusalCode = z.enum([
   'allowance_reached',
   'busy',
   'auth_unavailable',
+  'admin_only',
 ]);
 export type RefusalCode = z.infer<typeof RefusalCode>;
 
@@ -20,8 +21,14 @@ export const Refusal = z.object({
 });
 export type Refusal = z.infer<typeof Refusal>;
 
-/** The routes that call an LLM. */
-export const LlmRoute = z.enum(['read_plan', 'furnish_home', 'new_pieces']);
+/** The routes that call an LLM; the last two are the rating page's (M7). */
+export const LlmRoute = z.enum([
+  'read_plan',
+  'furnish_home',
+  'new_pieces',
+  'read_note',
+  'revise_room',
+]);
 export type LlmRoute = z.infer<typeof LlmRoute>;
 
 /** A request that called an LLM, and what it cost. Never deleted. */
@@ -53,5 +60,7 @@ export const Me = z.object({
   allowanceUsd: z.number().nonnegative(),
   /** When today's spending starts again from nothing: midnight where the allowance is counted. */
   resetsAt: z.coerce.date(),
+  /** May rate layouts on the internal rating page (M7). */
+  admin: z.boolean(),
 });
 export type Me = z.infer<typeof Me>;

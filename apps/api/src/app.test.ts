@@ -136,7 +136,21 @@ describe('GET /api/me', () => {
       spentUsd: 0,
       allowanceUsd: 2,
       resetsAt: new Date('2026-10-30T00:00:00Z'),
+      admin: false,
     });
+  });
+
+  it('says whether the account may use the internal pages', async () => {
+    const admin = async (admins: string[]) => {
+      const app = createApp({ dataDir, db, auth, admins });
+      const res = await app.request('/api/me', { headers: { authorization: 'Bearer good' } });
+      return Me.parse(await res.json()).admin;
+    };
+    expect(await admin(['ivan@example.com'])).toBe(true);
+    expect(await admin(['someone@example.com'])).toBe(false);
+    // Sign-in off for local development: the local account is an admin.
+    const app = createApp({ dataDir, db, auth: { kind: 'off' } });
+    expect(Me.parse(await (await app.request('/api/me')).json()).admin).toBe(true);
   });
 
   it('needs sign-in', async () => {

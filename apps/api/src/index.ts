@@ -51,6 +51,7 @@ const app = createApp({
   layoutWriter,
   ...(auth && { auth }),
   allowance: config.allowance,
+  admins: config.admins,
 });
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {

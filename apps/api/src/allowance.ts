@@ -12,11 +12,16 @@ import type { ReaderUsage } from './plan-reader/reader';
 
 export type AllowanceConfig = { dailyUsd: number; timeZone: string };
 
+/** What an account has spent today: `GET /me` without whether it's an admin. */
+export type Spending = Omit<Me, 'admin'>;
+
 /** What one request usually uses, by route: about what the test homes and plans used. */
 const TYPICAL: Record<LlmRoute, ReaderUsage> = {
   read_plan: { inputTokens: 6000, outputTokens: 4000 },
   furnish_home: { inputTokens: 12_000, outputTokens: 4000 },
   new_pieces: { inputTokens: 6000, outputTokens: 2500 },
+  read_note: { inputTokens: 2000, outputTokens: 400 },
+  revise_room: { inputTokens: 5000, outputTokens: 1500 },
 };
 
 /** What one request on this route usually costs on this model: nothing on a free one. */
@@ -77,7 +82,7 @@ export class Allowance {
   ) {}
 
   /** What the account has spent today, and when that starts again from nothing. */
-  async today(account: Account): Promise<Me> {
+  async today(account: Account): Promise<Spending> {
     const { start, end } = dayOf(this.now(), this.config.timeZone);
     const [row] = await this.db
       .select({ spent: sql<string>`coalesce(sum(${usage.costUsd}), 0)` })

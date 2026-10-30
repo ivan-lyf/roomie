@@ -4,7 +4,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { Allowance, type AllowanceConfig } from './allowance';
-import { type Auth, requireAccount } from './auth';
+import { type Auth, isAdmin, requireAccount } from './auth';
 import { modelPath } from './catalog/store';
 import type { Db } from './db/client';
 import { floorplanRoutes } from './floorplans/routes';
@@ -32,6 +32,8 @@ export type AppOptions = {
   auth?: Auth;
   /** What each account may spend on them a day: by default $1, by Vancouver's calendar. */
   allowance?: AllowanceConfig;
+  /** The emails of the accounts that may use the internal pages (M7). */
+  admins?: readonly string[];
   /** The time now, for tests of the allowance's day. */
   now?: () => Date;
 };
@@ -49,10 +51,14 @@ export function createApp(options: AppOptions) {
   const { auth } = options;
   const allowance = db && new Allowance(db, options.allowance ?? DEFAULT_ALLOWANCE, options.now);
 
-  /** The signed-in account, and what it has spent on LLM calls today (PLAN.md M6). */
+  /**
+   * The signed-in account, what it has spent on LLM calls today (PLAN.md M6), and whether it may
+   * use the internal pages (M7).
+   */
   app.get('/me', requireAccount(auth), async (c) => {
     if (!allowance) return c.json({ error: 'DATABASE_URL is not set' }, 503);
-    return c.json(await allowance.today(c.var.account));
+    const admin = isAdmin(c.var.account, auth, options.admins ?? []);
+    return c.json({ ...(await allowance.today(c.var.account)), admin });
   });
 
   app.route('/floorplans', floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }));

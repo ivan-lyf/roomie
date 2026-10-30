@@ -72,21 +72,6 @@ export const Layout = z.object({
 });
 export type Layout = z.infer<typeof Layout>;
 
-/** Never delete ratings; change the status instead. */
-export const RatingStatus = z.enum(['active', 'archived']);
-export type RatingStatus = z.infer<typeof RatingStatus>;
-
-export const Rating = z.object({
-  id: z.uuid(),
-  layoutA: z.uuid(),
-  layoutB: z.uuid(),
-  winner: z.enum(['a', 'b']),
-  note: z.string().nullable(),
-  status: RatingStatus,
-  createdAt: z.coerce.date(),
-});
-export type Rating = z.infer<typeof Rating>;
-
 /** The categories that suit each furnishable room, the essentials first. */
 export const ROOM_CATEGORIES: Partial<Record<RoomType, Category[]>> = {
   living_room: ['sofa', 'coffee_table', 'tv_unit', 'armchair', 'shelving', 'rug', 'floor_lamp'],

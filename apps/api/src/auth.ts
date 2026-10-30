@@ -65,6 +65,15 @@ export async function signingKeyCount(projectUrl: string, fetcher = fetch): Prom
 
 export type AccountEnv = { Variables: { account: Account } };
 
+/**
+ * Whether an account may use the internal pages (PLAN.md M7): its sign-in email is one of the
+ * admins'. With sign-in off for local development, everyone is.
+ */
+export function isAdmin(account: Account, auth: Auth | undefined, admins: readonly string[]) {
+  if (auth?.kind === 'off') return true;
+  return account.email !== null && admins.includes(account.email.toLowerCase());
+}
+
 export const refuse = (c: Context, status: 401 | 409 | 429 | 503, refusal: Refusal) =>
   c.json(refusal, status);
 

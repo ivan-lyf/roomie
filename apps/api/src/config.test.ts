@@ -23,7 +23,15 @@ describe('loadConfig', () => {
       layout: undefined,
       auth: undefined,
       allowance: { dailyUsd: 1, timeZone: 'America/Vancouver' },
+      admins: [],
     });
+  });
+
+  it('reads the admins as a list of emails in lower case', () => {
+    expect(loadConfig({ ADMIN_EMAILS: ' Ivan@Example.com, ,b@example.com' }).admins).toEqual([
+      'ivan@example.com',
+      'b@example.com',
+    ]);
   });
 
   it('accepts Supabase sessions with a project URL, or anyone with AUTH=off, but not in production', () => {

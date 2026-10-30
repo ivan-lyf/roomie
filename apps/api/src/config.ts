@@ -63,6 +63,8 @@ const Env = z.object({
   DAILY_ALLOWANCE_USD: unsetIfEmpty(z.coerce.number().nonnegative().default(1)),
   /** Where the allowance's day starts and ends. */
   ALLOWANCE_TIME_ZONE: unsetIfEmpty(z.string().default('America/Vancouver')),
+  /** Who may use the internal rating page (PLAN.md M7): sign-in emails, separated by commas. */
+  ADMIN_EMAILS: optional(),
 });
 
 export type GeminiReaderConfig = { provider: 'gemini'; apiKey: string; models: string[] };
@@ -99,6 +101,8 @@ export type Config = {
   /** Without it, the routes that call an LLM are refused. */
   auth: AuthConfig | undefined;
   allowance: { dailyUsd: number; timeZone: string };
+  /** The emails of the accounts that may rate layouts, in lower case. */
+  admins: string[];
 };
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
@@ -123,6 +127,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     layout: claude && { apiKey: claude.apiKey, model: e.LAYOUT_MODEL, effort: e.LAYOUT_EFFORT },
     auth: authConfig(e),
     allowance: { dailyUsd: e.DAILY_ALLOWANCE_USD, timeZone: timeZone(e.ALLOWANCE_TIME_ZONE) },
+    admins: (e.ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((a) => a.trim().toLowerCase())
+      .filter((a) => a !== ''),
   };
 }
 

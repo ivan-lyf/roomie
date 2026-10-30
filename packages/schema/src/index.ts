@@ -5,3 +5,4 @@ export * from './layout';
 export * from './models';
 export * from './intent';
 export * from './account';
+export * from './rating';

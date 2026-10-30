@@ -186,6 +186,10 @@ export type Room = z.infer<typeof Room>;
 export const FloorplanStatus = z.enum(['uploaded', 'needs_calibration', 'ready']);
 export type FloorplanStatus = z.infer<typeof FloorplanStatus>;
 
+/** Where a plan came from: uploaded by someone, or one of the test homes added to rate (M7). */
+export const FloorplanSource = z.enum(['upload', 'test_set']);
+export type FloorplanSource = z.infer<typeof FloorplanSource>;
+
 export const CeilingHeightSource = z.enum(['user', 'plan', 'default']);
 export type CeilingHeightSource = z.infer<typeof CeilingHeightSource>;
 
@@ -279,6 +283,7 @@ export const Floorplan = z.object({
   id: z.uuid(),
   name: z.string().min(1),
   status: FloorplanStatus,
+  source: FloorplanSource.default('upload'),
   image: PlanImage.nullable(),
   walls: z.array(Wall),
   openings: z.array(Opening),
@@ -315,11 +320,13 @@ export const FloorplanSummary = Floorplan.pick({
 export type FloorplanSummary = z.infer<typeof FloorplanSummary>;
 
 /**
- * What a save can change: everything but the identity, the uploaded image, what the reader
- * returned, the layout the furniture came from, and the timestamps, which the server keeps.
+ * What a save can change: everything but the identity, where the plan came from, the uploaded
+ * image, what the reader returned, the layout the furniture came from, and the timestamps, which
+ * the server keeps.
  */
 export const FloorplanEdit = Floorplan.omit({
   id: true,
+  source: true,
   image: true,
   reading: true,
   furnishedFrom: true,

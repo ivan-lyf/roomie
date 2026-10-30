@@ -2,12 +2,15 @@ import type {
   Category,
   CeilingHeightSource,
   Dims,
+  FloorplanSource,
   FloorplanStatus,
   GenerationInputs,
+  ItemNote,
   LayoutStatus,
   LlmRoute,
   Materials,
   ModelSource,
+  NoteReading,
   Obstacle,
   Opening,
   Placement,
@@ -18,8 +21,10 @@ import type {
   ProductShape,
   ProductStatus,
   Rating,
+  RatingSource,
   RatingStatus,
   Room,
+  RoomProblem,
   Scale,
   Usage,
   Wall,
@@ -52,6 +57,7 @@ export const floorplans = pgTable('floorplans', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   status: text('status').$type<FloorplanStatus>().notNull(),
+  source: text('source').$type<FloorplanSource>().notNull().default('upload'),
   image: jsonb('image').$type<PlanImage>(),
   walls: jsonb('walls').$type<Wall[]>().notNull(),
   openings: jsonb('openings').$type<Opening[]>().notNull(),
@@ -126,6 +132,7 @@ export const layouts = pgTable(
   ],
 ).enableRLS();
 
+/** One room from two layouts, which is better and why (PLAN.md M7). */
 export const ratings = pgTable('ratings', {
   id: uuid('id').primaryKey().defaultRandom(),
   layoutA: uuid('layout_a')
@@ -134,8 +141,20 @@ export const ratings = pgTable('ratings', {
   layoutB: uuid('layout_b')
     .notNull()
     .references(() => layouts.id),
+  roomId: text('room_id').notNull(),
+  // A Supabase Auth user, as in `usage`.
+  accountId: uuid('account_id').notNull(),
   winner: text('winner').$type<Rating['winner']>().notNull(),
+  livable: boolean('livable'),
   note: text('note'),
+  itemNotes: jsonb('item_notes')
+    .$type<ItemNote[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  tags: text('tags').array().$type<RoomProblem[]>().notNull().default(emptyTextArray),
+  labels: jsonb('labels').$type<NoteReading>(),
+  source: text('source').$type<RatingSource>().notNull().default('pair'),
+  seconds: real('seconds'),
   status: text('status').$type<RatingStatus>().notNull().default('active'),
   createdAt: createdAt(),
 }).enableRLS();
