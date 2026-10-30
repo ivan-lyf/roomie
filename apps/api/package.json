@@ -15,7 +15,8 @@
     "plans:eval": "tsx --env-file-if-exists=../../.env src/plan-reader/eval-cli.ts",
     "layouts:eval": "tsx --env-file-if-exists=../../.env src/layouts/eval-cli.ts",
     "ratings:pool": "tsx --env-file-if-exists=../../.env src/ratings/pool-cli.ts",
-    "ratings:export": "tsx --env-file-if-exists=../../.env src/ratings/export-cli.ts"
+    "ratings:export": "tsx --env-file-if-exists=../../.env src/ratings/export-cli.ts",
+    "ratings:lessons": "tsx --env-file-if-exists=../../.env src/ratings/lessons-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
