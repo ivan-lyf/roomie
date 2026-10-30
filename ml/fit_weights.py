@@ -7,13 +7,14 @@ pulled toward the hand-set ones, so a hundred ratings nudge them rather than rep
 the same" counts as half a win each way.
 
 The fit is checked by cross-validation grouped by home, so a home's ratings are never in both
-training and test: it writes packages/geometry/weights.json only if the fitted weights predict
-the held-out homes' ratings better than the hand-set ones (lower log loss, and at least the same
-accuracy), and otherwise reports and leaves the file alone. Home weights stay as they are: room
-ratings say nothing about them.
+training and test. The fitted weights go to data/ml/weights-fitted.json, for the blind check
+(`pnpm ratings:pool --compare data/ml/weights-fitted.json`, then /admin/rate?compare=...); with
+--ship, they go to packages/geometry/weights.json too, but only if they predict the held-out
+homes' ratings better than the current ones (lower log loss, and at least the same accuracy).
+Home weights stay as they are: room ratings say nothing about them.
 
     pnpm ratings:export                  # data/ml/ratings.csv and notes.jsonl
-    cd ml && uv run python fit_weights.py [--dry-run]
+    cd ml && uv run python fit_weights.py [--ship]
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ RATINGS = ROOT / "data" / "ml" / "ratings.csv"
 NOTES = ROOT / "data" / "ml" / "notes.jsonl"
 WEIGHTS = ROOT / "packages" / "geometry" / "weights.json"
 REPORT = ROOT / "data" / "ml" / "fit-report.md"
+FITTED = ROOT / "data" / "ml" / "weights-fitted.json"
 
 # How hard the weights are pulled toward the hand-set ones: per squared relative change.
 PULL = 0.05
@@ -205,9 +207,14 @@ def main() -> None:
     parser.add_argument("--notes", type=Path, default=NOTES)
     parser.add_argument("--weights", type=Path, default=WEIGHTS)
     parser.add_argument("--report", type=Path, default=REPORT)
+    parser.add_argument("--fitted", type=Path, default=FITTED)
     parser.add_argument("--pull", type=float, default=PULL)
     parser.add_argument("--bootstraps", type=int, default=BOOTSTRAPS)
-    parser.add_argument("--dry-run", action="store_true", help="report only; never write weights")
+    parser.add_argument(
+        "--ship",
+        action="store_true",
+        help="write packages/geometry/weights.json too, if the fitted weights do better",
+    )
     args = parser.parse_args()
 
     weights = json.loads(args.weights.read_text())
@@ -229,18 +236,24 @@ def main() -> None:
     args.report.write_text(text)
     print(text)
 
+    fitted = {
+        **weights,
+        "room": {f: round(float(v), 2) for f, v in zip(feats, w)},
+        "source": (
+            f"fitted by ml/fit_weights.py on {date.today().isoformat()} from {len(df)} ratings; "
+            f"held-out accuracy {cv['fitted']['acc']:.0%} against {cv['hand']['acc']:.0%} before"
+        ),
+    }
+    args.fitted.parent.mkdir(parents=True, exist_ok=True)
+    args.fitted.write_text(json.dumps(fitted, indent=2) + "\n")
+    print(f"Wrote {args.fitted}, for the blind check.")
     if not better(cv):
-        print("The fitted weights don't beat the hand-set ones on held-out homes: left as they are.")
+        print("They don't beat the current weights on held-out homes: weights.json is left as it is.")
         return
-    if args.dry_run:
-        print("They do better on held-out homes; --dry-run, so weights.json is left as it is.")
+    if not args.ship:
+        print("They do better on held-out homes. After the blind check, --ship writes weights.json.")
         return
-    weights["room"] = {f: round(float(v), 2) for f, v in zip(feats, w)}
-    weights["source"] = (
-        f"fitted by ml/fit_weights.py on {date.today().isoformat()} from {len(df)} ratings; "
-        f"held-out accuracy {cv['fitted']['acc']:.0%} against {cv['hand']['acc']:.0%} hand-set"
-    )
-    args.weights.write_text(json.dumps(weights, indent=2) + "\n")
+    args.weights.write_text(json.dumps(fitted, indent=2) + "\n")
     print(f"Wrote {args.weights}.")
 
 

@@ -73,36 +73,38 @@ class FitWeights(unittest.TestCase):
             notes.write_text(json.dumps({"labels": {"labels": [label]}}) + "\n")
             self.assertEqual(fw.unmeasured(notes), ["Leave room by the door."])
 
-    def test_writes_weights_only_when_better_and_not_dry(self):
+    def test_writes_the_fitted_weights_and_ships_them_only_when_asked_and_better(self):
         true_w = W0.copy()
         true_w[FEATS.index("walkway")] *= 5
         with tempfile.TemporaryDirectory() as d:
             ratings, weights, report = Path(d) / "r.csv", Path(d) / "w.json", Path(d) / "r.md"
+            fitted = Path(d) / "fitted.json"
             made_up(true_w).to_csv(ratings, index=False)
             weights.write_text(json.dumps(WEIGHTS))
             run = lambda *extra: subprocess.run(  # noqa: E731
                 [sys.executable, "fit_weights.py", "--ratings", str(ratings), "--weights",
-                 str(weights), "--report", str(report), "--notes", str(Path(d) / "none"),
-                 "--bootstraps", "5", *extra],
+                 str(weights), "--report", str(report), "--fitted", str(fitted), "--notes",
+                 str(Path(d) / "none"), "--bootstraps", "5", *extra],
                 capture_output=True, text=True, check=True, cwd=Path(__file__).parent,
             )
-            dry = run("--dry-run")
-            self.assertIn("--dry-run", dry.stdout)
-            self.assertEqual(json.loads(weights.read_text()), WEIGHTS)
-            self.assertIn("| walkway |", report.read_text())
             run()
-            written = json.loads(weights.read_text())
-            self.assertGreater(written["room"]["walkway"], WEIGHTS["room"]["walkway"])
-            self.assertEqual(written["home"], WEIGHTS["home"])
-            self.assertAlmostEqual(sum(written["room"].values()), sum(WEIGHTS["room"].values()), 1)
-            self.assertIn("fitted by ml/fit_weights.py", written["source"])
+            # The fitted weights, for the blind check; the current ones as they were.
+            self.assertEqual(json.loads(weights.read_text()), WEIGHTS)
+            candidate = json.loads(fitted.read_text())
+            self.assertGreater(candidate["room"]["walkway"], WEIGHTS["room"]["walkway"])
+            self.assertEqual(candidate["home"], WEIGHTS["home"])
+            self.assertAlmostEqual(sum(candidate["room"].values()), sum(WEIGHTS["room"].values()), 1)
+            self.assertIn("fitted by ml/fit_weights.py", candidate["source"])
+            self.assertIn("| walkway |", report.read_text())
+            run("--ship")
+            self.assertEqual(json.loads(weights.read_text()), candidate)
 
     def test_fits_nothing_on_too_few_ratings(self):
         with tempfile.TemporaryDirectory() as d:
             ratings = Path(d) / "r.csv"
             made_up(W0, pairs=10).to_csv(ratings, index=False)
             out = subprocess.run(
-                [sys.executable, "fit_weights.py", "--ratings", str(ratings), "--dry-run"],
+                [sys.executable, "fit_weights.py", "--ratings", str(ratings)],
                 capture_output=True, text=True, check=True, cwd=Path(__file__).parent,
             )
             self.assertIn("fitting needs at least 20", out.stdout)
