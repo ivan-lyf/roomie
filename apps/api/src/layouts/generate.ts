@@ -25,6 +25,7 @@ import {
   type RoomProgress,
 } from '@roomie/schema';
 import type { ReaderUsage } from '../plan-reader/reader';
+import type { RoomReviser } from '../ratings/revise';
 import { pickCandidates, shortName } from './candidates';
 import {
   type IntentRequest,
@@ -77,6 +78,8 @@ export type Generation = {
   repairs: number;
   /** The solver seeds tried. */
   seeds: number[];
+  /** A revision's original layout (M7). */
+  parent?: string;
   /** Every candidate, one per seed, for the log: the whole home, rooms kept included. */
   candidates: HomeCandidate[];
   /** Each room's best, combined with the rooms kept: what the home gets. */
@@ -331,6 +334,72 @@ export async function rearrangeRoom(
     usage: { inputTokens: 0, outputTokens: 0 },
     repairs: 0,
     seeds,
+    ...outcome,
+  };
+}
+
+export type ReviseDeps = Pick<SolveDeps, 'catalog' | 'signal'> & {
+  reviser: RoomReviser;
+  /** The layout revised: the whole home, as logged. */
+  layout: { id: string; placements: readonly Placement[]; seeds: readonly number[] };
+  /** The intent its room was furnished from. */
+  intent: RoomIntent;
+  /** What should change, in the rater's words. */
+  words: string;
+  onUsage?: (usage: ReaderUsage) => void;
+};
+
+/**
+ * Revises one room of a logged layout from what a rater said ("Tell it", M7): the LLM changes the
+ * room's intent, with the pieces it has, and the solver places that with the layout's seeds,
+ * around the rest of the home as the layout had it. Items keep their ids, and nothing is left
+ * out that fits. Answers the revision as a generation, and what of the words couldn't be done.
+ */
+export async function reviseRoom(
+  plan: Floorplan,
+  inputs: GenerationInputs,
+  deps: ReviseDeps,
+): Promise<Generation & { cannot: string | null }> {
+  const products = new Map(deps.catalog.map((p) => [p.articleNo, p]));
+  const roomId = inputs.roomIds[0]!;
+  const now = deps.layout.placements.filter((p) => p.roomId === roomId);
+  const keep = deps.layout.placements.filter((p) => p.roomId !== roomId);
+  const revised = await deps.reviser.revise(
+    { plan, intent: deps.intent, placements: now, products, words: deps.words },
+    deps.signal,
+  );
+  deps.onUsage?.(revised.usage);
+  const intent: LayoutIntent = {
+    rooms: [revised.intent],
+    budget: [{ roomId, cad: inputs.budgetCad }],
+    notes: revised.cannot ?? '',
+  };
+  const seeds = [...deps.layout.seeds];
+  const solved = await solveRooms(plan, intent, [roomId], products, seeds, keep, {
+    placeAll: true,
+  });
+
+  // Items keep the ids they had under the same ref; one without a ref gets a new id.
+  const byRef = new Map(now.flatMap((p) => (p.ref ? [[p.ref, p.id] as const] : [])));
+  const fresh = newIds({ ...plan, furniture: [...deps.layout.placements] }, true);
+  const identify = () => {
+    const next = fresh();
+    return (p: Placement) => {
+      const id = byRef.get(p.id);
+      return id ? { id, ref: p.id } : next(p);
+    };
+  };
+  const outcome = combine(plan, inputs, intent, solved, products, keep, identify);
+  return {
+    mode: 'revise',
+    intent,
+    model: revised.model,
+    promptVersion: deps.reviser.promptVersion,
+    usage: revised.usage,
+    repairs: 0,
+    seeds,
+    parent: deps.layout.id,
+    cannot: revised.cannot,
     ...outcome,
   };
 }

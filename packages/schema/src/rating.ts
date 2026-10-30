@@ -174,3 +174,18 @@ export const RatingSummary = z.object({
   roomsRated: z.number().int().nonnegative(),
 });
 export type RatingSummary = z.infer<typeof RatingSummary>;
+
+/** "Tell it" (M7): what should change in one room of a layout, in the rater's words. */
+export const ReviseInput = z.object({
+  layoutId: z.uuid(),
+  roomId: z.string().min(1),
+  words: z.string().trim().min(1).max(1000),
+});
+export type ReviseInput = z.infer<typeof ReviseInput>;
+
+/** The room revised, as a new layout, and what of the words it couldn't do. */
+export const Revised = z.object({
+  room: RoomVersion,
+  cannot: z.string().nullable(),
+});
+export type Revised = z.infer<typeof Revised>;

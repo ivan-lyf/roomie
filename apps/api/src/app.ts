@@ -13,6 +13,7 @@ import { layoutRoutes } from './layouts/routes';
 import { products } from './db/schema';
 import type { PlanReader } from './plan-reader/reader';
 import type { NoteReader } from './ratings/notes';
+import type { RoomReviser } from './ratings/revise';
 import { ratingRoutes } from './ratings/routes';
 import type { Storage } from './storage';
 
@@ -38,6 +39,8 @@ export type AppOptions = {
   admins?: readonly string[];
   /** Reads rating notes into labels (M7); without one, they're kept unread. */
   noteReader?: NoteReader;
+  /** Revises a room from what a rater said ("Tell it", M7). */
+  roomReviser?: RoomReviser;
   /** The time now, for tests of the allowance's day. */
   now?: () => Date;
 };
@@ -73,6 +76,7 @@ export function createApp(options: AppOptions) {
       auth,
       admins: options.admins ?? [],
       noteReader: options.noteReader,
+      reviser: options.roomReviser,
       allowance,
     }),
   );

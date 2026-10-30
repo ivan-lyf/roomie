@@ -1,6 +1,9 @@
 import { roomScoreOf, type Scored } from '@roomie/geometry';
+import { randomUUID } from 'node:crypto';
 import {
   Floorplan,
+  GenerationInputs,
+  LoggedIntent,
   type NextPair,
   NoteLabel,
   type NoteReading,
@@ -11,6 +14,8 @@ import {
   type RatingSaved,
   type RatingSummary,
   type RatingWinner,
+  type Revised,
+  ReviseInput,
 } from '@roomie/schema';
 import { eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -19,10 +24,13 @@ import type { Allowance } from '../allowance';
 import { type AccountEnv, type Auth, requireAdmin } from '../auth';
 import type { Db } from '../db/client';
 import { floorplans, layouts, products, ratings } from '../db/schema';
-import { ReaderError } from '../plan-reader/reader';
+import { reviseRoom } from '../layouts/generate';
+import { logGeneration } from '../layouts/log';
+import { ReaderError, type ReaderUsage } from '../plan-reader/reader';
 import { recordUsage } from '../usage';
 import { hasNotes, labelProblems, type NoteReader, type NoteRequest } from './notes';
 import { pickPair, type Version } from './pairs';
+import type { RoomReviser } from './revise';
 
 export type RatingOptions = {
   db: Db | undefined;
@@ -33,7 +41,9 @@ export type RatingOptions = {
   random?: () => number;
   /** Reads ratings' notes into labels; without one, notes are kept unread. */
   noteReader?: NoteReader | undefined;
-  /** What each account may spend on LLM calls a day: reading notes counts. */
+  /** Revises a room from what the rater said ("Tell it"); without one, it isn't offered. */
+  reviser?: RoomReviser | undefined;
+  /** What each account may spend on LLM calls a day: reading notes and revising rooms count. */
   allowance?: Allowance | undefined;
 };
 
@@ -53,10 +63,11 @@ const NO_SCORE: Scored = { score: 0, breakdown: {} };
  * have picked, POST /ratings/:id/archive takes one back (never deleted), and GET
  * /ratings/summary says how it's going. The pairs come from the test homes' layouts.
  * POST /ratings/:id/read has the rating's notes read into labels by the LLM, and PUT
- * /ratings/:id/labels saves the rater's corrections to them.
+ * /ratings/:id/labels saves the rater's corrections to them. POST /rooms/revise revises a room of
+ * a layout from what the rater said ("Tell it"), logged as a new layout of the home.
  */
 export function ratingRoutes(options: RatingOptions) {
-  const { db, auth, admins, random, noteReader, allowance } = options;
+  const { db, auth, admins, random, noteReader, reviser, allowance } = options;
   const app = new Hono<AccountEnv>();
   app.use(requireAdmin(auth, admins));
   if (!db) {
@@ -283,6 +294,84 @@ export function ratingRoutes(options: RatingOptions) {
       .where(eq(ratings.id, rating.id))
       .returning();
     return c.json(Rating.parse(row));
+  });
+
+  app.post('/rooms/revise', async (c) => {
+    if (!reviser) {
+      return c.json({ error: 'No CLAUDE_API_KEY is set, so rooms are revised by hand.' }, 503);
+    }
+    const input = ReviseInput.safeParse(await c.req.json().catch(() => undefined));
+    if (!input.success) return c.json({ error: z.prettifyError(input.error) }, 400);
+    const { layoutId, roomId, words } = input.data;
+    const [row] = await db!.select().from(layouts).where(eq(layouts.id, layoutId));
+    if (!row) return c.json({ error: 'No such layout.' }, 404);
+    const logged = LoggedIntent.safeParse(row.llmIntent);
+    const intent = logged.success
+      ? logged.data.intent.rooms.find((r) => r.roomId === roomId)
+      : undefined;
+    const placements = Placements.parse(row.placements);
+    const now = placements.filter((p) => p.roomId === roomId);
+    if (!intent || now.length === 0) {
+      return c.json({ error: 'That layout has no plan for the room to revise.' }, 400);
+    }
+    const [planRow] = await db!.select().from(floorplans).where(eq(floorplans.id, row.floorplanId));
+    const plan = Floorplan.parse(planRow);
+    const articleNos = [...new Set(placements.map((p) => p.articleNo))];
+    const known = await db!.select().from(products).where(inArray(products.articleNo, articleNos));
+    const catalog = Product.array().parse(known);
+    const prices = new Map(catalog.map((p) => [p.articleNo, p.priceCad]));
+    const inputs = {
+      ...GenerationInputs.parse(row.inputs),
+      roomIds: [roomId],
+      // What the room's items cost: a revision drops nothing for the budget.
+      budgetCad: Math.max(
+        1,
+        Math.ceil(now.reduce((s, p) => s + (prices.get(p.articleNo) ?? 0), 0)),
+      ),
+      mustHaves: {},
+    };
+    const seeds = logged.data!.seeds ?? Array.from({ length: 8 }, (_, i) => i + 1);
+
+    const { account } = c.var;
+    const refused = await allowance?.take(account, 'revise_room', reviser.model);
+    if (refused) return c.json(refused.refusal, refused.status);
+    const used: ReaderUsage = { inputTokens: 0, outputTokens: 0 };
+    const log = (failed: boolean) =>
+      recordUsage(db!, account, 'revise_room', plan.id, {
+        model: reviser.model,
+        usage: used,
+        failed,
+      });
+    let generation;
+    try {
+      generation = await reviseRoom(plan, inputs, {
+        reviser,
+        catalog,
+        layout: { id: row.id, placements, seeds },
+        intent,
+        words,
+        signal: c.req.raw.signal,
+        onUsage: (u) => Object.assign(used, u),
+      });
+    } catch (e) {
+      // A revision that failed still cost what the LLM used.
+      if (e instanceof ReaderError && e.usage) Object.assign(used, e.usage);
+      await log(true);
+      if (e instanceof ReaderError) return c.json({ error: e.message }, e.status);
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 422);
+    } finally {
+      allowance?.release(account);
+    }
+    await log(false);
+    const winner = await logGeneration(db!, plan.id, randomUUID(), inputs, generation);
+    const body: Revised = {
+      room: {
+        layoutId: winner,
+        placements: generation.winner.placements.filter((p) => p.roomId === roomId),
+      },
+      cannot: generation.cannot,
+    };
+    return c.json(body, 201);
   });
 
   app.get('/ratings/summary', async (c) => {

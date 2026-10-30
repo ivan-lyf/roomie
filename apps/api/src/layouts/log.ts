@@ -21,6 +21,7 @@ export async function logGeneration(
     usage: home.usage,
     repairs: home.repairs,
     seeds: home.seeds,
+    ...(home.parent && { parent: home.parent }),
   };
   const row = (candidate: Generation['winner'], status: 'candidate' | 'winner') => ({
     floorplanId,

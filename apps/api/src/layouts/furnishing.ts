@@ -33,7 +33,8 @@ export function furnishingOf(
     const placements = z.array(Placement).safeParse(row.placements);
     if (!inputs.success || !logged.success || !placements.success) continue;
     const { intent, mode } = logged.data;
-    if (mode === 'rearrange') continue;
+    // A rearrange or a revision (M7) chose no pieces.
+    if (mode === 'rearrange' || mode === 'revise') continue;
     if (mode === 'home' && furnishing.budgetCad === null) {
       furnishing.budgetCad = inputs.data.budgetCad;
       furnishing.style = inputs.data.style;

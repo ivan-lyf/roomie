@@ -74,8 +74,11 @@ export const LayoutIntent = z.object({
 });
 export type LayoutIntent = z.infer<typeof LayoutIntent>;
 
-/** How a generation furnished its rooms: the whole home, or one room again (M5). */
-export const FurnishMode = z.enum(['home', 'rearrange', 'new_pieces']);
+/**
+ * How a generation furnished its rooms: the whole home, one room again (M5), or one room's plan
+ * revised from what a rater said ("Tell it", M7).
+ */
+export const FurnishMode = z.enum(['home', 'rearrange', 'new_pieces', 'revise']);
 export type FurnishMode = z.infer<typeof FurnishMode>;
 
 /** What a layout logs of how it was planned (`Layout.llmIntent`). */
@@ -89,6 +92,8 @@ export const LoggedIntent = z.object({
   repairs: z.number().int().nonnegative(),
   /** The solver seeds tried; layouts logged before M5 tried 1 to N. */
   seeds: z.array(z.number().int()).optional(),
+  /** A revision's original layout (M7). */
+  parent: z.uuid().optional(),
 });
 export type LoggedIntent = z.infer<typeof LoggedIntent>;
 

@@ -2,19 +2,22 @@ import { randomUUID } from 'node:crypto';
 import {
   Floorplan,
   LayoutIntent,
+  LoggedIntent,
   NextPair,
   Product,
   Rating,
   type RatingInput,
   RatingSaved,
   RatingSummary,
+  Revised,
 } from '@roomie/schema';
+import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import catalog from '../../../../fixtures/catalog/products.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import { type AppOptions, createApp } from '../app';
-import { products, usage } from '../db/schema';
+import { layouts, products, usage } from '../db/schema';
 import { ReaderError } from '../plan-reader/reader';
 import { generateHome } from '../layouts/generate';
 import type { IntentWriter } from '../layouts/intent';
@@ -22,6 +25,7 @@ import { logGeneration } from '../layouts/log';
 import { testInputs } from '../layouts/test-homes';
 import { testDb } from '../test/db';
 import type { NoteReader } from './notes';
+import type { RoomReviser } from './revise';
 import { testHomePlan } from './pool';
 
 let db: Awaited<ReturnType<typeof testDb>>;
@@ -291,5 +295,62 @@ describe('reading notes', () => {
     });
     expect((await put([{ ...fixed, side: 'a', items: ['f999'] }])).status).toBe(400);
     expect((await put([{ ...fixed, problem: 'ugly' }])).status).toBe(400);
+  });
+});
+
+describe('Tell it', () => {
+  /** Keeps the plan as it was, and says it couldn't do what was asked. */
+  const reviser: RoomReviser = {
+    model: 'claude-haiku-5-5',
+    promptVersion: 'revise-room.v1',
+    revise: async (request) => ({
+      intent: request.intent,
+      cannot: 'There is no lamp to move the bed beside.',
+      model: 'claude-haiku-5-5',
+      usage: { inputTokens: 5000, outputTokens: 1500 },
+    }),
+  };
+  const revise = (body: unknown, options: Partial<AppOptions> = { roomReviser: reviser }) =>
+    app(options).request('/api/admin/rooms/revise', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('revises a room of a layout into a new layout of the home, logged with its parent', async () => {
+    const pair = (await next())!;
+    const res = await revise({
+      layoutId: pair.a.layoutId,
+      roomId: pair.roomId,
+      words: 'Move the bed beside the lamp.',
+    });
+    expect(res.status).toBe(201);
+    const revised = Revised.parse(await res.json());
+    expect(revised.cannot).toBe('There is no lamp to move the bed beside.');
+    expect(revised.room.layoutId).not.toBe(pair.a.layoutId);
+    expect(revised.room.placements.every((p) => p.roomId === pair.roomId)).toBe(true);
+    const [row] = await db.select().from(layouts).where(eq(layouts.id, revised.room.layoutId));
+    expect(row).toMatchObject({ status: 'winner', promptVersion: 'revise-room.v1' });
+    expect(LoggedIntent.parse(row!.llmIntent)).toMatchObject({
+      mode: 'revise',
+      parent: pair.a.layoutId,
+    });
+    expect(await db.select().from(usage)).toEqual([
+      expect.objectContaining({ route: 'revise_room', status: 'done', inputTokens: 5000 }),
+    ]);
+  });
+
+  it('refuses what it can’t revise', async () => {
+    const pair = (await next())!;
+    const good = { layoutId: pair.a.layoutId, roomId: pair.roomId, words: 'Bed by the window.' };
+    expect((await revise({ ...good, words: '  ' })).status).toBe(400);
+    expect((await revise({ ...good, layoutId: randomUUID() })).status).toBe(404);
+    expect((await revise({ ...good, roomId: 'r9' })).status).toBe(400);
+    expect((await revise(good, {})).status).toBe(503);
+    const broke = await revise(good, {
+      roomReviser: reviser,
+      allowance: { dailyUsd: 0, timeZone: 'UTC' },
+    });
+    expect(await broke.json()).toMatchObject({ code: 'allowance_reached' });
   });
 });
