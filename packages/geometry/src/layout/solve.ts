@@ -1,7 +1,14 @@
 import type { Category, Placement, Relation, RoomIntent, Vec2 } from '@roomie/schema';
 import { bounds, contains } from '../plan/polygon';
 import { type Face, type RoomContext, roomContext } from './room';
-import { type Piece, type Scored, type ScoredProduct, scoreRoom, VIEWING_DISTANCE } from './score';
+import {
+  type Piece,
+  type RoomWeights,
+  type Scored,
+  type ScoredProduct,
+  scoreRoom,
+  VIEWING_DISTANCE,
+} from './score';
 import { reach } from './shapes';
 import { turn } from './snap';
 import { ITEM_NOUNS, type LayoutPlan, validateLayout } from './validate';
@@ -84,6 +91,8 @@ export type SolveOptions = {
    * already has, which no repair can swap for smaller ones.
    */
   placeAll?: boolean;
+  /** Other weights than weights.json's to score spots by (M7): they steer where items go. */
+  weights?: RoomWeights;
 };
 
 export type RoomSolution = {
@@ -475,7 +484,7 @@ export function solveRoom(
           known.has(p.message),
         );
   const score = (pieces: Piece[], walkway = false) =>
-    scoreRoom(ctx, pieces, { relations, walkway }).score;
+    scoreRoom(ctx, pieces, { relations, walkway, weights: options.weights }).score;
   // Spots an item must leave: where it stands now, when the room is being rearranged.
   const leaves = (ref: string, spot: Spot) =>
     !(options.avoid ?? []).some(
@@ -638,6 +647,6 @@ export function solveRoom(
     best = next;
   }
 
-  const final = scoreRoom(ctx, [...placed.values()], { relations });
+  const final = scoreRoom(ctx, [...placed.values()], { relations, weights: options.weights });
   return { roomId, placements: placements(), unplaced, ...final };
 }

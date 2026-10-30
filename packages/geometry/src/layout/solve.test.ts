@@ -152,3 +152,36 @@ describe('solveRoom', () => {
     },
   );
 });
+
+describe('solveRoom with other weights', () => {
+  const plan = Floorplan.parse(demo);
+  const living = LayoutIntent.parse(demoIntent).rooms.find((r) => r.roomId === 'r2')!;
+  // Every weight on how well the pieces spread through the room, none on anything else.
+  const spreadOnly = {
+    relations: 0,
+    walls: 0,
+    focal: 0,
+    tv_view: 0,
+    armchairs: 0,
+    walkway: 0,
+    bed_head: 0,
+    desk_window: 0,
+    windows: 0,
+    spread: 1,
+  };
+
+  it('scores by the weights given, and places items by them', () => {
+    let better = 0;
+    for (const seed of [1, 2, 3]) {
+      const usual = solveRoom(plan, living, products, { seed });
+      const spread = solveRoom(plan, living, products, { seed, weights: spreadOnly });
+      // The score is the spread alone: the only feature with any weight.
+      expect(spread.score).toBeCloseTo(spread.breakdown.spread!, 9);
+      expect(validateLayout(plan, spread.placements, products)).toEqual([]);
+      if (spread.breakdown.spread! > usual.breakdown.spread! + 1e-6) better++;
+      expect(spread.breakdown.spread!).toBeGreaterThanOrEqual(usual.breakdown.spread! - 0.05);
+    }
+    // Weighed for it, the pieces spread better at least once.
+    expect(better).toBeGreaterThan(0);
+  });
+});

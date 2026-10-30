@@ -330,10 +330,15 @@ export function relationScore(
   }
 }
 
+/** What each room feature counts for, by name: weights.json's `room`, unless others are given. */
+export type RoomWeights = Readonly<Record<string, number>>;
+
 type RoomOptions = {
   relations?: readonly Relation[];
   /** Leave out the walkway feature, the slowest, while searching. */
   walkway?: boolean;
+  /** Other weights than weights.json's, as when comparing weights fitted to ratings (M7). */
+  weights?: RoomWeights;
 };
 
 /** The free-floor share an empty room has, worked out once per room. */
@@ -459,7 +464,7 @@ export function scoreRoom(
     features.spread = clamp(1 - off / (Math.sqrt(ctx.area) / 2));
   }
 
-  return weigh(features, weights.room);
+  return weigh(features, options.weights ?? weights.room);
 }
 
 /** The weighted mean of the features that apply, and the features themselves. */
@@ -486,6 +491,7 @@ export const ROOM_FEATURES: readonly string[] = Object.keys(weights.room);
 export function roomScoreOf(
   breakdown: Readonly<Record<string, number>>,
   roomId: string,
+  by: RoomWeights = weights.room,
 ): Scored | undefined {
   const prefix = `${roomId}.`;
   const features = Object.fromEntries(
@@ -493,7 +499,7 @@ export function roomScoreOf(
       .filter(([name]) => name.startsWith(prefix))
       .map(([name, value]) => [name.slice(prefix.length), value]),
   );
-  return Object.keys(features).length > 0 ? weigh(features, weights.room) : undefined;
+  return Object.keys(features).length > 0 ? weigh(features, by) : undefined;
 }
 
 type HomeInput = {

@@ -290,6 +290,11 @@ describe('roomScoreOf', () => {
       expect(scored.breakdown).toEqual(room.breakdown);
     }
     expect(roomScoreOf(logged, 'r9')).toBeUndefined();
+    // Other weights: only the walls count.
+    const walls = Object.fromEntries(
+      Object.keys(weights.room).map((k) => [k, k === 'walls' ? 1 : 0]),
+    );
+    expect(roomScoreOf(logged, 'r1', walls)!.score).toBeCloseTo(solved[0]!.breakdown.walls!, 9);
   });
 });
 
