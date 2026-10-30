@@ -12,6 +12,7 @@ import type { IntentWriter } from './layouts/intent';
 import { layoutRoutes } from './layouts/routes';
 import { products } from './db/schema';
 import type { PlanReader } from './plan-reader/reader';
+import type { NoteReader } from './ratings/notes';
 import { ratingRoutes } from './ratings/routes';
 import type { Storage } from './storage';
 
@@ -35,6 +36,8 @@ export type AppOptions = {
   allowance?: AllowanceConfig;
   /** The emails of the accounts that may use the internal pages (M7). */
   admins?: readonly string[];
+  /** Reads rating notes into labels (M7); without one, they're kept unread. */
+  noteReader?: NoteReader;
   /** The time now, for tests of the allowance's day. */
   now?: () => Date;
 };
@@ -63,7 +66,16 @@ export function createApp(options: AppOptions) {
   });
 
   app.route('/floorplans', floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }));
-  app.route('/admin', ratingRoutes({ db, auth, admins: options.admins ?? [] }));
+  app.route(
+    '/admin',
+    ratingRoutes({
+      db,
+      auth,
+      admins: options.admins ?? [],
+      noteReader: options.noteReader,
+      allowance,
+    }),
+  );
   app.route(
     '/',
     layoutRoutes({

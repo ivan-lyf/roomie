@@ -14,12 +14,14 @@ import catalog from '../../../../fixtures/catalog/products.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import { type AppOptions, createApp } from '../app';
-import { products } from '../db/schema';
+import { products, usage } from '../db/schema';
+import { ReaderError } from '../plan-reader/reader';
 import { generateHome } from '../layouts/generate';
 import type { IntentWriter } from '../layouts/intent';
 import { logGeneration } from '../layouts/log';
 import { testInputs } from '../layouts/test-homes';
 import { testDb } from '../test/db';
+import type { NoteReader } from './notes';
 import { testHomePlan } from './pool';
 
 let db: Awaited<ReturnType<typeof testDb>>;
@@ -177,5 +179,117 @@ describe('the rating routes', () => {
     expect((await call(['ivan@example.com'])).status).toBe(401);
     expect((await call(['someone@example.com'], 'good')).status).toBe(403);
     expect((await call(['ivan@example.com'], 'good')).status).toBe(200);
+  });
+});
+
+describe('reading notes', () => {
+  /** A rating of the first pair, with what's written. */
+  async function rated(written: Partial<RatingInput> = {}) {
+    const pair = (await next())!;
+    const input = {
+      ...blank,
+      layoutA: pair.a.layoutId,
+      layoutB: pair.b.layoutId,
+      roomId: pair.roomId,
+      winner: 'a',
+      note: 'B crowds the door.',
+      ...written,
+    } as RatingInput;
+    const { rating } = RatingSaved.parse(await (await rate(input)).json());
+    return { rating, pair };
+  }
+
+  /** Reads every note the same way: the first item of B blocks. */
+  const reader = (fail?: ReaderError): NoteReader => ({
+    model: 'claude-haiku-5-5',
+    promptVersion: 'rating-note.v1',
+    read: async (request) => {
+      if (fail) throw fail;
+      const item = request.sides.b[0]!.id;
+      return {
+        labels: [
+          {
+            side: 'b',
+            items: [item],
+            problem: 'blocks',
+            relativeTo: null,
+            feature: 'walkway',
+            rule: null,
+          },
+        ],
+        model: 'claude-haiku-5-5',
+        usage: { inputTokens: 2000, outputTokens: 300 },
+      };
+    },
+  });
+  const read = (id: string, options: Partial<AppOptions> = {}) =>
+    app(options).request(`/api/admin/ratings/${id}/read`, { method: 'POST' });
+
+  it('reads a note into labels, kept on the rating, and logs what it cost', async () => {
+    const { rating, pair } = await rated();
+    const res = await read(rating.id, { noteReader: reader() });
+    expect(res.status).toBe(200);
+    const labelled = Rating.parse(await res.json());
+    expect(labelled.labels).toEqual({
+      labels: [expect.objectContaining({ items: [pair.b.placements[0]!.id], feature: 'walkway' })],
+      model: 'claude-haiku-5-5',
+      promptVersion: 'rating-note.v1',
+      corrected: false,
+    });
+    expect(labelled.note).toBe('B crowds the door.');
+    const [row] = await db.select().from(usage);
+    expect(row).toMatchObject({ route: 'read_note', status: 'done', inputTokens: 2000 });
+    expect(row!.costUsd).toBeGreaterThan(0);
+  });
+
+  it('reads nothing when nothing was written, or when there is no reader', async () => {
+    const { rating } = await rated({ note: null });
+    expect((await read(rating.id, { noteReader: reader() })).status).toBe(400);
+    expect((await read(rating.id)).status).toBe(503);
+    expect((await read(randomUUID(), { noteReader: reader() })).status).toBe(404);
+  });
+
+  it('logs a reading that failed, and refuses one past the allowance', async () => {
+    const { rating } = await rated();
+    const failure = new ReaderError('Claude is busy.', 502, true);
+    failure.usage = { inputTokens: 100, outputTokens: 0 };
+    expect((await read(rating.id, { noteReader: reader(failure) })).status).toBe(502);
+    expect(await db.select().from(usage)).toEqual([
+      expect.objectContaining({ route: 'read_note', status: 'failed', inputTokens: 100 }),
+    ]);
+    const broke = await read(rating.id, {
+      noteReader: reader(),
+      allowance: { dailyUsd: 0, timeZone: 'UTC' },
+    });
+    expect(broke.status).toBe(429);
+    expect(await broke.json()).toMatchObject({ code: 'allowance_reached' });
+  });
+
+  it('saves the rater’s corrections, checked against the layouts', async () => {
+    const { rating, pair } = await rated();
+    await read(rating.id, { noteReader: reader() });
+    const put = (labels: unknown) =>
+      app().request(`/api/admin/ratings/${rating.id}/labels`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ labels }),
+      });
+    const fixed = {
+      side: 'b',
+      items: [pair.b.placements[0]!.id],
+      problem: 'too_close_to',
+      relativeTo: pair.b.placements[1]?.id ?? null,
+      feature: null,
+      rule: 'Leave room by the door.',
+    };
+    const res = await put([fixed]);
+    expect(res.status).toBe(200);
+    expect(Rating.parse(await res.json()).labels).toMatchObject({
+      labels: [fixed],
+      model: 'claude-haiku-5-5',
+      corrected: true,
+    });
+    expect((await put([{ ...fixed, side: 'a', items: ['f999'] }])).status).toBe(400);
+    expect((await put([{ ...fixed, problem: 'ugly' }])).status).toBe(400);
   });
 });

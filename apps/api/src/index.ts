@@ -4,6 +4,7 @@ import { type Auth, signingKeyCount, supabaseVerifier } from './auth';
 import { loadConfig } from './config';
 import { createDb } from './db/client';
 import { claudeIntentWriter } from './layouts/intent';
+import { claudeNoteReader } from './ratings/notes';
 import { claudeReader } from './plan-reader/claude';
 import { geminiReader } from './plan-reader/gemini';
 import { createStorage } from './storage';
@@ -18,6 +19,8 @@ const reader =
   (config.reader.provider === 'claude' ? claudeReader(config.reader) : geminiReader(config.reader));
 if (!reader) console.warn('No GEMINI_API_KEY or CLAUDE_API_KEY, so plans are traced by hand.');
 const layoutWriter = config.layout && claudeIntentWriter(config.layout);
+// Rating notes are read by the same model that furnishes homes (PLAN.md M7).
+const noteReader = config.layout && claudeNoteReader(config.layout);
 if (!layoutWriter) console.warn('No CLAUDE_API_KEY, so homes are furnished by hand.');
 const auth: Auth | undefined =
   config.auth?.kind === 'supabase'
@@ -49,6 +52,7 @@ const app = createApp({
   plans,
   reader,
   layoutWriter,
+  ...(noteReader && { noteReader }),
   ...(auth && { auth }),
   allowance: config.allowance,
   admins: config.admins,

@@ -476,6 +476,9 @@ function weigh(features: Record<string, number | undefined>, by: Record<string, 
   return { score: total > 0 ? sum / total : 0, breakdown };
 }
 
+/** The features a room is scored by, as weights.json names them. */
+export const ROOM_FEATURES: readonly string[] = Object.keys(weights.room);
+
 /**
  * One room's score from a home's breakdown as logged (`r3.walls`, `r3.relations`, ...): its
  * features weighed again by today's weights. Undefined when the breakdown has none for the room.
