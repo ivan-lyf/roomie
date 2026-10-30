@@ -17,6 +17,8 @@ import {
   RatingSummary,
   Refusal,
   type RefusalCode,
+  Revised,
+  type ReviseInput,
   type RoomAgain,
 } from '@roomie/schema';
 import { z } from 'zod';
@@ -227,4 +229,15 @@ export async function saveLabels(id: string, labels: readonly NoteLabel[]): Prom
   });
   if (!res.ok) throw await failure(res, 'PUT /api/admin/ratings/:id/labels');
   return Rating.parse(await res.json());
+}
+
+/** "Tell it": revises a room of a layout from the rater's words, as a new layout. */
+export async function reviseRoom(input: ReviseInput): Promise<Revised> {
+  const res = await fetch('/api/admin/rooms/revise', {
+    method: 'POST',
+    headers: await signedIn({ 'content-type': 'application/json' }),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await failure(res, 'POST /api/admin/rooms/revise');
+  return Revised.parse(await res.json());
 }

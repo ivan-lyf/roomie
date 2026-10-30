@@ -19,6 +19,7 @@ import {
   fetchNextPair,
   fetchRatingSummary,
   readNotes,
+  reviseRoom,
   saveLabels,
   saveRating,
 } from '../api';
@@ -48,7 +49,13 @@ type Loaded =
   | { kind: 'loading' }
   | { kind: 'refused'; error: ApiError | Error }
   | { kind: 'done' }
-  | { kind: 'pair'; pair: RatingPair; shownAt: number };
+  | {
+      kind: 'pair';
+      pair: RatingPair;
+      shownAt: number;
+      /** A room revised from the rater's words: A as it was, B the revision. */
+      told?: { words: string; cannot: string | null };
+    };
 
 type Form = {
   winner: RatingWinner | undefined;
@@ -97,15 +104,15 @@ type Reading = { ratingId: string } & (
 );
 
 /**
- * The readings asked for, one after another: the API lets an account make one AI request at a
- * time, and rating the next pair shouldn't wait for the last note to be read.
+ * The page's AI requests, one after another: the API lets an account make one at a time, and
+ * rating the next pair, or telling it what to change, shouldn't wait for a note to be read.
  */
-let readings: Promise<unknown> = Promise.resolve();
+let aiQueue: Promise<unknown> = Promise.resolve();
 
-/** Has a rating's notes read once the readings asked for before it are done. */
-function readInTurn(ratingId: string) {
-  const job = readings.then(() => readNotes(ratingId));
-  readings = job.catch(() => undefined);
+/** Runs an AI request once those asked for before it are done. */
+function inTurn<T>(request: () => Promise<T>): Promise<T> {
+  const job = aiQueue.then(request);
+  aiQueue = job.catch(() => undefined);
   return job;
 }
 
@@ -163,7 +170,7 @@ export function RatePage() {
   const read = useCallback((ratingId: string) => {
     setReading({ ratingId, status: 'reading' });
     const show = (next: Reading) => setReading((now) => (now?.ratingId === ratingId ? next : now));
-    readInTurn(ratingId).then(
+    inTurn(() => readNotes(ratingId)).then(
       (rating) =>
         show(
           rating.labels
@@ -190,7 +197,7 @@ export function RatePage() {
         note: form.note.trim() || null,
         itemNotes: form.itemNotes,
         tags: form.tags,
-        source: 'pair',
+        source: loaded.kind === 'pair' && loaded.told ? 'told' : 'pair',
         seconds: Math.round((Date.now() - shownAt) / 100) / 10,
       });
       setSaved(result);
@@ -203,6 +210,28 @@ export function RatePage() {
       setSaving(false);
     }
   }, [pair, saved, saving, form, loaded, refreshSummary, read]);
+
+  /**
+   * "Tell it": revises the room as one side has it from the rater's words, then shows the room
+   * as it was against the revision, to rate. Throws when it can't.
+   */
+  async function tell(side: Side, words: string) {
+    if (loaded.kind !== 'pair') return;
+    const original = loaded.pair[side];
+    const revised = await inTurn(() =>
+      reviseRoom({ layoutId: original.layoutId, roomId: loaded.pair.roomId, words }),
+    );
+    setLoaded({
+      kind: 'pair',
+      pair: { ...loaded.pair, a: original, b: revised.room },
+      shownAt: Date.now(),
+      told: { words, cannot: revised.cannot },
+    });
+    setForm({ ...BLANK, note: words });
+    setSaved(undefined);
+    setReading(undefined);
+    setError(undefined);
+  }
 
   /** Saves the rater's corrections to how a note was read. */
   async function correct(ratingId: string, labels: NoteLabel[]) {
@@ -315,6 +344,12 @@ export function RatePage() {
         {room?.name ?? roomId} ({room ? ROOM_TYPES[room.roomType] : 'room'}) in {plan.name}. Turn
         either view and the other follows. Click an item to flag it as in a bad spot.
       </p>
+      {loaded.told && (
+        <p className="rounded-md bg-amber-50 p-2">
+          You told it: “{loaded.told.words}” A is the room as it was; B is the revision.
+          {loaded.told.cannot && ` It couldn't do all of it: ${loaded.told.cannot}`}
+        </p>
+      )}
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-3" style={{ minHeight: '45vh' }}>
         {(['a', 'b'] as const).map((side) => (
           <section key={side} className="flex min-h-0 flex-col gap-1">
@@ -370,6 +405,7 @@ export function RatePage() {
           onLabels={(labels) => void correct(saved.rating.id, labels)}
           onNext={() => void next()}
           onTakeBack={() => void takeBack()}
+          onTell={tell}
         />
       ) : (
         <form
@@ -539,6 +575,7 @@ function Reveal(props: {
   onLabels: (labels: NoteLabel[]) => void;
   onNext: () => void;
   onTakeBack: () => void;
+  onTell: (side: Side, words: string) => Promise<void>;
 }) {
   const { rating, scorer } = props.saved;
   const { reading } = props;
@@ -572,6 +609,12 @@ function Reveal(props: {
           onChange={props.onLabels}
         />
       )}
+      <TellIt
+        key={rating.id}
+        side={rating.winner === 'a' ? 'b' : 'a'}
+        words={rating.note ?? ''}
+        onTell={props.onTell}
+      />
       <div className="flex gap-3">
         <button type="button" className={button(true)} onClick={props.onNext}>
           Next pair <kbd className="opacity-60">N</kbd>
@@ -581,6 +624,67 @@ function Reveal(props: {
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * "Tell it" what to change in one side's room, in words, to see the room revised: at first the
+ * side not picked, and what the note said.
+ */
+function TellIt(props: {
+  side: Side;
+  words: string;
+  onTell: (side: Side, words: string) => Promise<void>;
+}) {
+  const [side, setSide] = useState<Side>(props.side);
+  const [words, setWords] = useState(props.words);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const submit = async () => {
+    if (busy || words.trim() === '') return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await props.onTell(side, words.trim());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-stone-500">Tell it what to change in</span>
+      {(['a', 'b'] as const).map((s) => (
+        <button
+          key={s}
+          type="button"
+          className={button(side === s)}
+          aria-pressed={side === s}
+          onClick={() => setSide(s)}
+        >
+          {s.toUpperCase()}
+        </button>
+      ))}
+      <input
+        value={words}
+        onChange={(e) => setWords(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void submit();
+          else if (e.key === 'Escape') e.currentTarget.blur();
+        }}
+        placeholder="Put the armchair next to the sofa"
+        className="min-w-64 flex-1 rounded-md border border-stone-300 px-2 py-1"
+      />
+      <button
+        type="button"
+        className={button()}
+        disabled={busy || words.trim() === ''}
+        onClick={() => void submit()}
+      >
+        {busy ? 'Revising the room…' : 'Tell it'}
+      </button>
+      {error && <span className="w-full text-red-700">{error}</span>}
+    </div>
   );
 }
 
