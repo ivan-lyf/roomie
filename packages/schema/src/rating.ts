@@ -172,6 +172,21 @@ export const RatingSummary = z.object({
   /** Rooms in the pool, and how many have a rating. */
   rooms: z.number().int().nonnegative(),
   roomsRated: z.number().int().nonnegative(),
+  /** The blind check of other weights against the current ones, when asked about (M7). */
+  compare: z
+    .object({
+      /** The other weights' name. */
+      name: z.string(),
+      /** Rooms both furnished from the same intent and seeds; those that came out the same. */
+      rooms: z.number().int().nonnegative(),
+      same: z.number().int().nonnegative(),
+      /** Of the rest, those rated, and whose room was picked: the other weights', or current. */
+      rated: z.number().int().nonnegative(),
+      wins: z.number().int().nonnegative(),
+      losses: z.number().int().nonnegative(),
+      ties: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 export type RatingSummary = z.infer<typeof RatingSummary>;
 

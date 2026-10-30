@@ -115,6 +115,7 @@ describe('the ratings export', () => {
       layout_b: b.id,
       mode_a: 'home',
       model_b: 'claude-haiku-5-5',
+      weights_a: 'current',
       prompt_a: 'layout-intent.v1',
     });
     const room = intent.rooms.find((r) => r.roomId === 'r2')!;

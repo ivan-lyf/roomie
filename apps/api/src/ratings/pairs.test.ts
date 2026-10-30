@@ -1,7 +1,16 @@
 import { seeded } from '@roomie/geometry';
 import type { Placement } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
-import { CLOSE_SCORES, pickPair, type RatedPair, sameLayout, type Version } from './pairs';
+import {
+  CLOSE_SCORES,
+  compared,
+  compareTally,
+  pickComparePair,
+  pickPair,
+  type RatedPair,
+  sameLayout,
+  type Version,
+} from './pairs';
 
 const item = (id: string, articleNo: string, x: number, y = 1, rotation = 0): Placement => ({
   id,
@@ -110,5 +119,63 @@ describe('pickPair', () => {
     // Either way, one pair in five is far apart: here, those with c.
     expect(close / n).toBeCloseTo(0.8, 1);
     expect(aLeft / withA).toBeCloseTo(0.5, 1);
+  });
+});
+
+describe('the blind check of other weights', () => {
+  /** A run's winner for room r1 or r2, placed by the given weights. */
+  const run = (layoutId: string, weights: string, x: number, roomId = 'r1', seeds = '9,10') =>
+    version(layoutId, x, 0.8, {
+      weights,
+      winner: true,
+      run: seeds,
+      roomId,
+      placements: version(layoutId, x).placements.map((p) => ({ ...p, roomId })),
+    });
+  const versions = [
+    run('c1', 'current', 1),
+    run('f1', 'fitted', 2),
+    // Another room the weights placed the same.
+    run('c2', 'current', 1, 'r2'),
+    run('f2', 'fitted', 1.02, 'r2'),
+    // A candidate, and a room another weight set placed: neither is compared.
+    { ...run('c3', 'current', 0.5), winner: false },
+    run('o1', 'other', 3),
+    // An ordinary pool layout of the same room.
+    version('p1', 2.5),
+  ];
+
+  it('pairs each room’s winners from the same run, the current weights against the others', () => {
+    const rooms = compared(versions, 'fitted');
+    expect(rooms.map((r) => [r.current.layoutId, r.other.layoutId, r.same])).toEqual([
+      ['c1', 'f1', false],
+      ['c2', 'f2', true],
+    ]);
+    const random = seeded(4);
+    const sides = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const pair = pickComparePair(versions, [], 'fitted', random)!;
+      expect([pair.a.layoutId, pair.b.layoutId].toSorted()).toEqual(['c1', 'f1']);
+      sides.add(pair.a.layoutId);
+    }
+    expect(sides.size).toBe(2);
+    expect(
+      pickComparePair(versions, [{ layoutA: 'f1', layoutB: 'c1', roomId: 'r1' }], 'fitted'),
+    ).toBeUndefined();
+  });
+
+  it('tallies which weights’ room was picked', () => {
+    const rated = [{ layoutA: 'f1', layoutB: 'c1', roomId: 'r1', winner: 'a' as const }];
+    expect(compareTally(versions, rated, 'fitted')).toEqual({
+      name: 'fitted',
+      rooms: 2,
+      same: 1,
+      rated: 1,
+      wins: 1,
+      losses: 0,
+      ties: 0,
+    });
+    const lost = [{ ...rated[0]!, winner: 'b' as const }];
+    expect(compareTally(versions, lost, 'fitted')).toMatchObject({ wins: 0, losses: 1 });
   });
 });

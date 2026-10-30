@@ -333,6 +333,9 @@ export function relationScore(
 /** What each room feature counts for, by name: weights.json's `room`, unless others are given. */
 export type RoomWeights = Readonly<Record<string, number>>;
 
+/** The room weights the scorer uses unless it's given others: weights.json's. */
+export const ROOM_WEIGHTS: RoomWeights = weights.room;
+
 type RoomOptions = {
   relations?: readonly Relation[];
   /** Leave out the walkway feature, the slowest, while searching. */

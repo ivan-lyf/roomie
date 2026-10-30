@@ -12,6 +12,12 @@ export type Version = {
   placements: readonly Placement[];
   /** The room's score as logged. */
   score: number;
+  /** The weights its items were placed by, when they weren't weights.json's (M7). */
+  weights?: string;
+  /** Whether its layout was its generation's winner. */
+  winner?: boolean;
+  /** Its generation's seeds: two generations with the same compare weight sets. */
+  run?: string;
 };
 
 /** A rating already made, by its room and the two layouts. */
@@ -134,4 +140,72 @@ export function pickPair(
     b,
     samePieces: piecesOf(a) === piecesOf(b),
   };
+}
+
+/** Two rooms from the same intent and seeds, placed by the current weights and by others. */
+type Compared = { key: string; current: Version; other: Version; same: boolean };
+
+/**
+ * The rooms the blind check of weights `name` compares: each room's winner from a run of
+ * `ratings:pool --compare`, placed by the current weights and by `name` from the same intent and
+ * seeds. Rooms that came out the same either way are marked so: there's nothing to rate.
+ */
+export function compared(versions: readonly Version[], name: string): Compared[] {
+  const runs = new Map<string, { current?: Version; other?: Version }>();
+  for (const v of versions) {
+    if (!v.winner || v.placements.length === 0) continue;
+    if (v.weights !== 'current' && v.weights !== name) continue;
+    const key = `${v.floorplanId}|${v.roomId}|${v.run ?? ''}`;
+    const run = runs.get(key) ?? {};
+    run[v.weights === 'current' ? 'current' : 'other'] = v;
+    runs.set(key, run);
+  }
+  return [...runs.entries()].flatMap(([key, { current, other }]) =>
+    current && other ? [{ key, current, other, same: sameLayout(current, other) }] : [],
+  );
+}
+
+/**
+ * The next room of the blind check of weights `name`: one not rated yet, its two layouts on
+ * random sides. Undefined when every room that differs has been rated.
+ */
+export function pickComparePair(
+  versions: readonly Version[],
+  rated: readonly RatedPair[],
+  name: string,
+  random: () => number = Math.random,
+): Pair | undefined {
+  const done = new Set(rated.map((r) => pairKey(r.layoutA, r.layoutB, r.roomId)));
+  const open = compared(versions, name).filter(
+    (c) => !c.same && !done.has(pairKey(c.current.layoutId, c.other.layoutId, c.current.roomId)),
+  );
+  if (open.length === 0) return undefined;
+  const { current, other } = open[Math.floor(random() * open.length)]!;
+  const [a, b] = random() < 0.5 ? [current, other] : [other, current];
+  return { floorplanId: a.floorplanId, roomId: a.roomId, a, b, samePieces: true };
+}
+
+/** How the blind check of weights `name` is going: rooms, and which weights' room was picked. */
+export function compareTally(
+  versions: readonly Version[],
+  rated: readonly (RatedPair & { winner: 'a' | 'b' | 'same' })[],
+  name: string,
+) {
+  const rooms = compared(versions, name);
+  const tally = { name, rooms: rooms.length, same: 0, rated: 0, wins: 0, losses: 0, ties: 0 };
+  for (const room of rooms) {
+    if (room.same) {
+      tally.same++;
+      continue;
+    }
+    const key = pairKey(room.current.layoutId, room.other.layoutId, room.current.roomId);
+    const rating = rated.find((r) => pairKey(r.layoutA, r.layoutB, r.roomId) === key);
+    if (!rating) continue;
+    tally.rated++;
+    if (rating.winner === 'same') tally.ties++;
+    else if ((rating.winner === 'a' ? rating.layoutA : rating.layoutB) === room.other.layoutId) {
+      tally.wins++;
+    } else tally.losses++;
+  }
+  return tally;
 }

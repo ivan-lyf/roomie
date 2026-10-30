@@ -94,6 +94,8 @@ export const LoggedIntent = z.object({
   seeds: z.array(z.number().int()).optional(),
   /** A revision's original layout (M7). */
   parent: z.uuid().optional(),
+  /** The weights the solver placed items by, when they weren't weights.json's (M7). */
+  weights: z.string().min(1).optional(),
 });
 export type LoggedIntent = z.infer<typeof LoggedIntent>;
 

@@ -11,13 +11,14 @@ import {
   RatingSummary,
   Revised,
 } from '@roomie/schema';
+import { ROOM_FEATURES, ROOM_WEIGHTS } from '@roomie/geometry';
 import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import catalog from '../../../../fixtures/catalog/products.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import { type AppOptions, createApp } from '../app';
-import { layouts, products, usage } from '../db/schema';
+import { floorplans, layouts, products, usage } from '../db/schema';
 import { ReaderError } from '../plan-reader/reader';
 import { generateHome } from '../layouts/generate';
 import type { IntentWriter } from '../layouts/intent';
@@ -352,5 +353,52 @@ describe('Tell it', () => {
       allowance: { dailyUsd: 0, timeZone: 'UTC' },
     });
     expect(await broke.json()).toMatchObject({ code: 'allowance_reached' });
+  });
+});
+
+describe('the blind check of other weights', () => {
+  it('serves the rooms the two weight sets placed differently, and tallies the picks', async () => {
+    const [saved] = await db.select().from(floorplans).where(eq(floorplans.source, 'test_set'));
+    const plan = Floorplan.parse(saved);
+    const inputs = testInputs(plan);
+    // Every weight on spread, against the current ones: the same intent and seeds.
+    const spread = Object.fromEntries(ROOM_FEATURES.map((f) => [f, f === 'spread' ? 1 : 0.01]));
+    for (const weights of [
+      { name: 'current', room: ROOM_WEIGHTS },
+      { name: 'spread', room: spread },
+    ]) {
+      const home = await generateHome(plan, inputs, {
+        writer,
+        catalog: items,
+        seeds: 3,
+        firstSeed: 50,
+        weights,
+      });
+      await logGeneration(db, plan.id, randomUUID(), inputs, home);
+    }
+    const served = app();
+    const pairs = [];
+    for (;;) {
+      const res = await served.request('/api/admin/ratings/next?compare=spread');
+      const { pair } = NextPair.parse(await res.json());
+      if (!pair) break;
+      pairs.push(pair);
+      await rate({
+        ...blank,
+        layoutA: pair.a.layoutId,
+        layoutB: pair.b.layoutId,
+        roomId: pair.roomId,
+        winner: 'a',
+      } as RatingInput);
+      if (pairs.length > 5) throw new Error('pairs keep coming');
+    }
+    const summary = RatingSummary.parse(
+      await (await served.request('/api/admin/ratings/summary?compare=spread')).json(),
+    );
+    expect(summary.compare).toMatchObject({ name: 'spread', rooms: 2, rated: pairs.length });
+    expect(summary.compare!.same + pairs.length).toBe(2);
+    expect(summary.compare!.wins + summary.compare!.losses).toBe(pairs.length);
+    // The ordinary pool still serves pairs of its own.
+    expect(await next()).not.toBeNull();
   });
 });

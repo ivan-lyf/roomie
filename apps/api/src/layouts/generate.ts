@@ -1,6 +1,7 @@
 import {
   anchorOf,
   type LayoutProblem,
+  type RoomWeights,
   roomContext,
   type RoomSolution,
   type Scored,
@@ -80,6 +81,8 @@ export type Generation = {
   seeds: number[];
   /** A revision's original layout (M7). */
   parent?: string;
+  /** The name of the weights items were placed by, when they weren't weights.json's (M7). */
+  weights?: string;
   /** Every candidate, one per seed, for the log: the whole home, rooms kept included. */
   candidates: HomeCandidate[];
   /** Each room's best, combined with the rooms kept: what the home gets. */
@@ -101,6 +104,8 @@ type SolveDeps = {
    * doesn't change (M5). Without it, the whole home is furnished afresh.
    */
   keep?: readonly Placement[];
+  /** Other weights to place items by than weights.json's, by name (comparing them, M7). */
+  weights?: { name: string; room: RoomWeights };
 };
 
 export type GenerateDeps = SolveDeps & {
@@ -150,7 +155,7 @@ async function solveRooms(
   products: ReadonlyMap<string, Product>,
   seeds: readonly number[],
   keep: readonly Placement[],
-  options: Pick<SolveOptions, 'avoid' | 'placeAll'> = {},
+  options: Pick<SolveOptions, 'avoid' | 'placeAll' | 'weights'> = {},
 ): Promise<Map<string, RoomSolution[]>> {
   const solved = new Map<string, RoomSolution[]>();
   // Rooms open to each other share walkways, so each is solved around the rooms kept and the
@@ -202,7 +207,9 @@ export async function generateHome(
   deps.onUsage?.(result.usage);
   deps.onIntent?.(result.intent);
   for (;;) {
-    solved = await solveRooms(plan, result.intent, inputs.roomIds, products, seeds, keep);
+    solved = await solveRooms(plan, result.intent, inputs.roomIds, products, seeds, keep, {
+      weights: deps.weights?.room,
+    });
     const feedback = problemsOf(plan, inputs, solved, products);
     if (feedback.length === 0 || repairs >= REPAIRS) break;
     repairs++;
@@ -212,7 +219,16 @@ export async function generateHome(
     deps.onIntent?.(result.intent);
   }
 
-  const outcome = combine(plan, inputs, result.intent, solved, products, keep, newIds(plan, again));
+  const outcome = combine(
+    plan,
+    inputs,
+    result.intent,
+    solved,
+    products,
+    keep,
+    newIds(plan, again),
+    deps.weights?.room,
+  );
   deps.onProgress?.(outcome.rooms);
   return {
     mode: again ? 'new_pieces' : 'home',
@@ -224,6 +240,7 @@ export async function generateHome(
     usage,
     repairs,
     seeds,
+    ...(deps.weights && { weights: deps.weights.name }),
     ...outcome,
   };
 }
@@ -420,6 +437,8 @@ function combine(
   products: ReadonlyMap<string, Product>,
   keep: readonly Placement[],
   ids: () => Identify,
+  /** Other weights than weights.json's, to score a room trimmed for the budget again by. */
+  weights?: RoomWeights,
 ): Pick<Generation, 'candidates' | 'winner' | 'rooms'> {
   const before = new Set(validateLayout(plan, keep, products).map(problemKey));
   const brought = (placements: readonly Placement[]) =>
@@ -463,7 +482,7 @@ function combine(
       placement: p,
       product: products.get(p.articleNo)!,
     }));
-    return { ...room, ...scoreRoom(ctx, pieces, { relations }) };
+    return { ...room, ...scoreRoom(ctx, pieces, { relations, weights }) };
   });
   const winner = homeOf(chosen);
   // Rooms are solved apart, but the whole home is checked once more before it ships.

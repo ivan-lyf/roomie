@@ -29,7 +29,7 @@ import { logGeneration } from '../layouts/log';
 import { ReaderError, type ReaderUsage } from '../plan-reader/reader';
 import { recordUsage } from '../usage';
 import { hasNotes, labelProblems, type NoteReader, type NoteRequest } from './notes';
-import { pickPair, type Version } from './pairs';
+import { compareTally, pickComparePair, pickPair, type Version } from './pairs';
 import type { RoomReviser } from './revise';
 
 export type RatingOptions = {
@@ -83,6 +83,8 @@ export function ratingRoutes(options: RatingOptions) {
         floorplanId: layouts.floorplanId,
         placements: layouts.placements,
         breakdown: layouts.scoreBreakdown,
+        status: layouts.status,
+        llmIntent: layouts.llmIntent,
       })
       .from(layouts)
       .innerJoin(floorplans, eq(floorplans.id, layouts.floorplanId))
@@ -91,6 +93,12 @@ export function ratingRoutes(options: RatingOptions) {
       .orderBy(layouts.createdAt, layouts.id);
     return rows.flatMap((row) => {
       const placements = Placements.parse(row.placements);
+      const logged = LoggedIntent.safeParse(row.llmIntent);
+      const made = {
+        winner: row.status === 'winner',
+        ...(logged.success && logged.data.weights && { weights: logged.data.weights }),
+        ...(logged.success && { run: (logged.data.seeds ?? []).join(',') }),
+      };
       return [...new Set(placements.map((p) => p.roomId))].flatMap((roomId) => {
         const scored = roomScoreOf(row.breakdown, roomId);
         if (!scored) return [];
@@ -102,6 +110,7 @@ export function ratingRoutes(options: RatingOptions) {
             roomId,
             placements: room,
             score: scored.score,
+            ...made,
           },
         ];
       });
@@ -110,9 +119,16 @@ export function ratingRoutes(options: RatingOptions) {
 
   const active = () => db!.select().from(ratings).where(eq(ratings.status, 'active'));
 
+  /** The blind check of other weights, by name, when the page asks for it (M7). */
+  const compareOf = (c: { req: { query: (name: string) => string | undefined } }) =>
+    c.req.query('compare') || undefined;
+
   app.get('/ratings/next', async (c) => {
     const [versions, rated] = await Promise.all([pool(), active()]);
-    const pair = pickPair(versions, rated, random);
+    const compare = compareOf(c);
+    const pair = compare
+      ? pickComparePair(versions, rated, compare, random)
+      : pickPair(versions, rated, random);
     if (!pair) return c.json({ pair: null } satisfies NextPair);
     const [row] = await db!.select().from(floorplans).where(eq(floorplans.id, pair.floorplanId));
     const version = (v: Version) => ({ layoutId: v.layoutId, placements: [...v.placements] });
@@ -392,6 +408,8 @@ export function ratingRoutes(options: RatingOptions) {
       roomsRated: new Set(rated.flatMap((r) => roomOf(byKey.get(`${r.layoutA}|${r.roomId}`)) ?? []))
         .size,
     };
+    const compare = compareOf(c);
+    if (compare) summary.compare = compareTally(versions, rated, compare);
     return c.json(summary);
   });
 
