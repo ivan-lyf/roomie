@@ -443,20 +443,154 @@ Sign-in exists only to limit token use per account.
 
 Out of M6: homes tied to accounts (they stay unowned until a pass is bought, §8), payments, password sign-in, a page to see everyone's usage, rate limits beyond the allowance, and deploying (CORS, production redirect URLs).
 
-### M7 — Feedback loop (1 week)
-- [ ] Capture canvas screenshots (3 angles per furnished room, plus a top-down view of the home) after generation, upload to Supabase Storage
-- [ ] Internal `/admin/rate` page: two layouts of the same room side by side, pick the winner, optional note (rating per room keeps comparisons small and gives more pairs per home)
+### M7 — Feedback loop (1–2 weeks)
+- [ ] Internal `/admin/rate` page, for admins only: one room from two layouts side by side in live 3D, with the real models, colors and textures and the two cameras linked. Pick the better one or "about the same", say whether you'd live with it, flag items in a bad spot, and say why in your own words
+- [ ] Natural-language feedback as training data: every note is read into labels (which items, what's wrong, which scorer feature it bears on), and "Tell it" turns a note into a revised layout of the room to rate against the original
+- [ ] A pool of the test homes to rate, furnished from cached intents at no LLM cost, and pairs picked to teach the scorer the most
 - [ ] Rate 100+ pairs
-- [ ] Few-shot loop: inject top-rated layouts into the intent prompt
-- [ ] First `ml/` notebook: Bradley–Terry model on scorer features → `weights.json` loaded by the scorer
+- [ ] First `ml/` fit: Bradley–Terry on scorer features → `weights.json`, kept only if it agrees with your ratings better than the hand-set weights on held-out homes
+- [ ] Lessons and few-shot: rules drawn from your notes, and top-rated rooms as examples, in `layout-intent.v2`, kept only if it wins a blind comparison
+- Screenshots move to the vision judge (§7): rating happens in live 3D, so nothing needs pictures yet.
 - Waiting for M7's ratings (Ivan, 2026-10-30): placements the ratings should settle, and whether to ask the intent for a second armchair (a pair across the coffee table, or one in a reading corner with a floor lamp by a window) in living rooms over about 20 m². The intent always asks for one today; testing the change is about $0.06 on Haiku. Learned weights only re-weigh what the scorer measures, so the rating notes say which problems need a new feature first.
+
+**Done when:** 100+ pairs are rated on the 3D page, every note is read into labels you've checked, and the fitted weights either beat the hand-set ones on held-out homes and win a blind check of 20+ rooms, or this section records why they weren't shipped. The same goes for `layout-intent.v2`. `layouts:eval` stays 16 of 16 valid.
+
+#### M7 in detail
+
+**What's already there.** Every furnishing logs every candidate (M4): best-of-8 whole homes, each with its intent, seeds and prompt version. The `ratings` table exists (two layouts, a winner, a note) and is empty. The dev database holds one furnished home, fr-56, with 125 layouts, most from rearranges. The 16 test homes `layouts:eval` furnishes (50 rooms) exist only as files. Their intents are cached: Haiku for all 16, Opus for 4. `scoreRoom` weighs ten features with hand-set weights from `weights.json`. Those weights steer where things go, not only which candidate wins: as the solver places each item, it ranks every spot by the room's score. So weights fitted to your ratings change placements directly. `HomeScene` already draws a home in 3D with the real models, but it's tied to the editing store.
+
+**What learns from what:**
+
+| You give | It becomes | It changes |
+|---|---|---|
+| A pick between two layouts of a room | A pair for the Bradley–Terry fit | The scorer's weights, so where the solver puts each item and which candidate wins |
+| A note in your own words, on the room or on one item | Labels: the items, what's wrong, the scorer feature it bears on (or none), a rule if it implies one | Lessons in the intent prompt (what goes in a room, roughly where); new scorer features where no feature measures the problem |
+| "Tell it" what to change | A revised layout of the room, and your pick between it and the original | Another pair for the fit, and an example of how words map to the intent |
+| Whether you'd live with it | The quality measure, per room | Which rooms are top-rated examples for the prompt |
+
+**The pool.** `pnpm ratings:pool [--seeds 12] [homes...]` adds each test home to the database once, as a floor plan with `source: 'test_set'` and its name (fr-12). It goes in without its image: dataset samples stay on disk. Then it furnishes each home from cached intents only (Haiku for all 16, Opus for the 4 it has) with 12 seeds, and logs every candidate as a furnishing does. It never asks the LLM: a home with no cached intent is skipped. It's free and takes about a minute, and a rerun adds candidates with new seeds. The plans page hides test-set homes. 50 rooms with 12 versions each (plus Opus's 14 rooms) is far more than 100 pairs need.
+
+**Picking pairs.** `GET /admin/ratings/next` picks:
+
+- the room with the fewest ratings first, so all 50 get some;
+- two versions of it from logged layouts, never a pair rated before. Versions that differ by under 10 cm and 15° on every item in the room count as one;
+- for most pairs, two versions from the same intent, so only placement differs. About one in four compares intents (Haiku against Opus now, v1 against v2 later): what's in the room as well as where;
+- for most pairs, versions whose room scores are within 0.1 of each other, since those teach the fit the most. About one in five is far apart, as a check that the scorer is right when it's sure;
+- a random side for each version. The left one is stored as `layoutA`, so a lean to one side shows in the tally.
+
+Room scores come from `scoreRoom` with the logged intent's relations, cached in memory by the API.
+
+**The rating page** at `/admin/rate`, linked from the plans page for admins (plain screens, like `/catalog`; the brief leaves internal pages out). Two 3D views sit side by side, each with only the rated room's furniture, the walls cut away as in the home view, and the same lighting. Orbiting one moves the other. Keys 1–3 give the corner views and T the view from above. Hovering an item shows its name, color, size and price. Nothing shows a score, model, prompt version or weight set until you've picked.
+
+1. **Pick:** A, B, or S for about the same.
+2. **Would you live with it** (the one picked, or both when they're the same): Y or N.
+3. **Say why** if you want to. The note box takes the cursor after the pick. Click an item on either side to flag it as in a bad spot, with its own one-line note ("too far from the sofa"). Room-wide problems are a few toggles: too full, too empty, hard to walk through, blocks a window, needs more seating, pieces don't go together.
+4. **Enter saves.** The page then shows what the scorer would have picked and the features that differ most between the two. A few seconds later it shows how your note was read. N goes to the next pair. Backspace takes back the last rating: it's archived, never deleted.
+
+The header keeps a tally: pairs rated, how often the scorer agrees with you, and how often the left side wins. A pair takes about 20–30 s, more with a note, so 100 pairs is about an hour, in as many sittings as you like.
+
+**Notes in your own words.** Every note (a room's, or an item's) is read by the layout model (Haiku 5.5 by default) with a new prompt, `rating-note.v1`, into structured labels, one per problem it names:
+
+- the side and the items (by placement);
+- what's wrong: too far from, too close to, facing away from, blocks, against a window, off-center, wrong size for the room, missing, not needed, style, or other;
+- the item it's relative to, if any;
+- the scorer feature it bears on: one of the ten, or none;
+- a general rule in plain words, if the note implies one ("an armchair belongs within reach of the sofa, or by a lamp").
+
+The labels are saved on the rating with the model and prompt version. The page shows them, and you can correct one with a click: a wrong item, a wrong feature. Notes are kept exactly as written, so a later prompt can read them again. Reading one costs a fraction of a cent and is logged in `usage` against your allowance (route `read_note`).
+
+**Tell it.** "Tell it" on either side takes what should change, in words: "move the armchair beside the lamp by the window", "TV straight across from the sofa". The layout model gets the room's intent and your words, with a new prompt, `revise-room.v1`. It returns a revised intent for that room: relations, reasons, and which of its items stay. It adds no new products and never gives coordinates (the architecture principle holds). The solver places the revision with the original's seeds, `validateLayout` checks it like any layout, and it replaces that side. You then pick between the original and the revision as for any pair. That's saved as a rating with `source: 'told'` and your words as its note. The revision is logged as a candidate (`llmIntent.mode` `revise`, with the original as its parent). When the room can't do what you asked (no lamp to sit by), it says so instead of pretending, and that's a label too. A try is under a cent on Haiku and takes 5–10 s.
+
+**Fitting the weights.** `pnpm ratings:export` writes `data/ml/ratings.csv` (gitignored): one row per active rating. Each row has both sides' room features, worked out again by today's `scoreRoom`, since the logged breakdowns are whole-home and some come from older scorers. It also has the pick, whether you'd live with it, the source, the home and the labels. The notes go to `data/ml/notes.jsonl`.
+
+`ml/fit_weights.py`, with a notebook that walks through it, fits Bradley–Terry as a logistic regression on feature differences: P(A beats B) = σ(Σ wₖ(fₖᴬ − fₖᴮ)).
+
+- Weights stay ≥ 0 and are pulled toward the hand-set ones (L2 toward them, not toward zero), so a hundred pairs nudge the weights rather than replace them.
+- "About the same" counts as half a win each way.
+- The check is cross-validation grouped by home, so a home's pairs are never in both training and test. It compares the accuracy and log loss of the fitted and hand-set weights on held-out homes, with bootstrap ranges per weight.
+- It writes `weights.json` (scaled to the same total, with `source` saying when, from how many ratings, and both held-out accuracies) only if the fitted weights do better on held-out homes. Otherwise it reports and leaves the file alone.
+- The report sets each feature's change beside how often your notes blame it, and lists the problems your notes name that no feature measures.
+
+The home weights (rooms, style, budget) stay hand-set, since room-level pairs say nothing about them.
+
+**Lessons and examples.** `pnpm ratings:lessons` sends the notes and their labels (text only) to the layout model. It proposes up to ten lessons, each a rule in plain words with the ratings it rests on, and each marked as about what goes in a room or where exactly. You keep, edit or drop each one:
+
+- Kept lessons about what goes in a room, and roughly where, go into `layout-intent.v2` as a short section. They're your rules in plain words, with no catalog data, so the prompt file is committed as usual.
+- Lessons about exact placement that no feature measures become up to two new scorer features. Each is code with a Vitest test and a check on the test homes, and then the weights are fitted again.
+
+v2 also gets up to three top-rated rooms of the same type, from other homes, as examples. They're chosen from the ratings when an intent is asked for: rooms you'd live with that win most of their pairs. Each example gives the room's items, relations and reasons, never coordinates. Their layout ids are logged with the intent. The second armchair is decided here, from your armchair notes on larger living rooms: if they ask for it, it's a lesson.
+
+**Who can rate.** `ADMIN_EMAILS` (comma-separated) in `.env`. The admin routes need a signed-in account whose email is on it, and refuse others with `admin_only` (403). With `AUTH=off`, the local account is an admin. `GET /me` says whether you're one, so the plans page shows the link.
+
+**Cost.** Rating, the pool, picking pairs and fitting are free. The paid steps, all on Haiku:
+
+- reading notes, about $0.0005 each;
+- Tell it, under a cent a try;
+- the lessons, a few cents;
+- v2 on the 16 homes, about $0.10.
+
+All of M7 comes to about $0.30–0.50 of the roughly $1.40 left on the Claude key. The page's calls count against your daily allowance and show in `usage`. The CLIs print an estimate and stop until `--yes`.
+
+**Steps,** each one commit or two, and demoable. You can start rating once step 6 lands; notes saved before step 7 are read when it lands.
+
+1. **Settings and schema:**
+   - `ADMIN_EMAILS`;
+   - `Rating` by room: `roomId`, `accountId`, winner `a`, `b` or `same`, `livable`, `note`, `itemNotes`, `tags`, `labels`, `source` (`pair` or `told`), `seconds`;
+   - `floorplans.source`, the refusal `admin_only`, the LLM routes `read_note` and `revise_room`, and `Me.admin`;
+   - migration `0009`. The ratings table has no rows, so nothing moves.
+
+   Commit `feat(schema): rate one room at a time, with notes`.
+2. **Admin routes:** `requireAdmin`, tested for signed out, a non-admin, an admin and `AUTH=off`. Commit `feat(api): admin-only routes`.
+3. **The pool:** `ratings:pool`, the test homes added once, cached intents only, and the plans page without them. Commit `feat(api): a pool of test homes to rate`.
+4. **Pairs and ratings:**
+   - `pickPair`, a pure function, tested: the fewest-rated room first, never a pair twice, near-identical versions merged, the mix of same and different intents and of close and far scores;
+   - `GET /admin/ratings/next`, `POST /admin/ratings`, `POST /admin/ratings/:id/archive` and `GET /admin/ratings/summary`.
+
+   Commit `feat(api): pick pairs to rate and save ratings`.
+5. **A view that only shows:** `HomeView` split out of `HomeScene`, taking its furniture as props instead of from the store, with `HomeScene` built on it; then the linked cameras and the preset views. Commit `refactor(web): a home view for showing, not editing`.
+6. **The rating page:** the two views, the keys, flags and toggles, the note box, the reveal, undo and the tally. Commit `feat(web): rate two layouts of a room in 3d`.
+7. **Reading notes:** `rating-note.v1` and its writer, tested with a fake client (a note naming two items, a note with no problem in it, a malformed answer asked again once), and the labels on the page, correctable. Commits `feat(api): read rating notes into labels`, `feat(web): show how a note was read`.
+8. **Tell it:**
+   - `revise-room.v1`, `reviseRoom` in `generate.ts` and `POST /admin/rooms/revise`;
+   - tests with a fake LLM: no new products, no coordinates taken, the same seeds, the other rooms untouched, and an impossible ask answered as such;
+   - the button.
+
+   Commits `feat(api): revise a room from a note`, `feat(web): tell it what to change`.
+9. **You rate** 100+ pairs. After about 30, a checkpoint: the tally, how the notes were read, and the scorer's agreement. I adjust the pair mix or the note prompt if needed.
+10. **Export and fit:** `ratings:export`, `fit_weights.py` and the notebook, and the report. Commits `feat(api): export ratings with scorer features`, `feat(ml): fit scorer weights to ratings`.
+11. **Learned weights in:**
+    - `scoreRoom`, `solveRoom` and `generateHome` take `weights` (by default `weights.json`);
+    - `ratings:pool --compare` furnishes each test room from the same intents and seeds with both weight sets, and the page serves those pairs blind. You rate 20+;
+    - the fitted weights ship only if they win more than they lose, with `layouts:eval` from cache still 16 of 16 valid.
+
+    Commits `feat(geometry): score with given weights`, then `feat(geometry): weights fitted to ratings` if they ship.
+12. **Lessons, new features and v2:**
+    - `ratings:lessons`, which you go through;
+    - up to two new features, then a refit;
+    - `layout-intent.v2` with the lessons and examples, and the 16 homes on Haiku with an estimate first;
+    - 20+ blind pairs of v1 against v2. v2 becomes the default only if it wins.
+
+    Commits `feat(api): lessons from rating notes`, `feat(geometry): …` for each feature, `feat(api): layout-intent.v2 with lessons and examples`.
+13. **Done check:** the numbers above, written into this section.
+
+Out of M7: the learned reward model (LightGBM, after several hundred pairs, §7), the vision judge and its screenshots, users' own edits as signals (§7), dragging items to fix a layout on the rating page, voice notes, rating by anyone but admins, fine-tuning, and the user-facing design (M8).
+
+### M8 — Front end (later)
+The screens people use, and a landing page, designed with Claude Design from `docs/frontend-design.md`. Until then, every milestone's screens stay plain.
+- [ ] A Claude Design pass over the brief: tokens and type, `ui/kit` primitives, and the landing page with My plans (§4.1)
+- [ ] The brief's phases A–E over the app as built: reading your plan, the guided Check wizard, the workspace shell, preferences and furnishing progress, "Why here?", the swap drawer, try another layout, the sign-in dialog and daily limit, and the shopping list
+- [ ] A copy pass with the brief's vocabulary (§9), and `copy.test.ts` checking for banned words
+- [ ] First-time help (§5) and accessibility (§7): every action by keyboard, an axe check with no serious issues
+- Internal pages (`/catalog`, `/admin/rate`) stay plain. Mobile stays out of scope.
+
+**Done when:** the brief's definition of done (§11) holds for every screen: a first-time tester who isn't a developer goes from upload to a furnished home and a shopping list without help. Its detailed steps are written when it starts.
 
 ## 7. Feedback pipeline roadmap (post-MVP)
 
-1. **Few-shot prompting** with top-rated layouts (M7)
+1. **Few-shot prompting** with top-rated layouts, and lessons from your rating notes (M7)
 2. **Best-of-N reranking** with the learned weights
 3. **Learned reward model** (LightGBM → ONNX → onnxruntime-node) once there are several hundred comparisons
-4. **Vision judge:** score screenshots against a rubric, measure agreement with your ratings
+4. **Vision judge:** score screenshots (taken from fixed angles by the rating page's 3D views) against a rubric drawn from the lessons, measure agreement with your ratings
 5. **Implicit signals:** user keeps, swaps, and deletes as training data
 6. **Fine-tuning** only with thousands of high-quality examples
 
