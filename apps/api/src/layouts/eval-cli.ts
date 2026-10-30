@@ -5,21 +5,18 @@
 // above to judge against PLAN.md's quality bar. Intents are cached by what was asked, so a rerun
 // costs nothing; asking for new ones is paid, so the run stops at an estimate until --yes.
 
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateLayout } from '@roomie/geometry';
-import { FURNISHABLE, Floorplan, type GenerationInputs, Product } from '@roomie/schema';
+import { Product } from '@roomie/schema';
 import { loadConfig } from '../config';
-import { applyReading } from '../floorplans/reading';
-import { readImageInfo } from '../floorplans/image';
-import { ClaudeEffort, claudeReader, readingCost } from '../plan-reader/claude';
-import { ReadingCache } from '../plan-reader/cache';
-import { emptyPlan } from '../plan-reader/eval';
+import { ClaudeEffort, readingCost } from '../plan-reader/claude';
 import { pickCandidates } from './candidates';
 import { contactSheet, formatLayoutReport, type HomeResult, homeSvg, IntentCache } from './eval';
 import { generateHome } from './generate';
 import { claudeIntentWriter, type IntentWriter } from './intent';
+import { testHomes, testInputs } from './test-homes';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const config = loadConfig();
@@ -46,55 +43,12 @@ const catalog = Product.array()
   .filter((p) => p.status === 'active');
 const products = new Map(catalog.map((p) => [p.articleNo, p]));
 
-/** The fixtures, and each eval plan as Opus read it (from the plan reader's cache). */
-async function testHomes(): Promise<{ name: string; plan: Floorplan }[]> {
-  const homes: { name: string; plan: Floorplan }[] = [];
-  const dirs = async (parent: string) =>
-    (await readdir(parent, { withFileTypes: true }).catch(() => []))
-      .filter((e) => e.isDirectory())
-      .map((e) => path.join(parent, e.name));
-  for (const dir of await dirs(path.join(root, 'fixtures', 'plans'))) {
-    const json = await readFile(path.join(dir, 'floorplan.json'), 'utf8').catch(() => undefined);
-    if (json) homes.push({ name: path.basename(dir), plan: Floorplan.parse(JSON.parse(json)) });
-  }
-  const opus =
-    config.readers.claude && claudeReader({ ...config.readers.claude, model: 'claude-opus-5-5' });
-  const readings = new ReadingCache(path.join(config.dataDir, 'cache', 'plan-reader'));
-  for (const dir of opus ? await dirs(path.join(config.dataDir, 'plans', 'eval')) : []) {
-    const bytes = await readFile(path.join(dir, 'plan.png')).catch(() => undefined);
-    const info = bytes && readImageInfo(new Uint8Array(bytes));
-    if (!bytes || !info) continue;
-    const image = {
-      bytes: new Uint8Array(bytes),
-      mimeType: 'image/png' as const,
-      width: info.width,
-      height: info.height,
-    };
-    const reading = await readings.get(image, opus!);
-    if (!reading) continue;
-    const name = path.basename(dir);
-    const blank = {
-      ...emptyPlan(name),
-      image: { key: name, width: info.width, height: info.height },
-    };
-    const plan = applyReading(blank, opus!, reading);
-    if (plan.scale) homes.push({ name, plan });
-  }
-  return homes.filter((h) => only.length === 0 || only.includes(h.name));
-}
-
-/** The same request for every run: each room that gets furniture, $1,200 a room, one style. */
-function inputsFor(plan: Floorplan): GenerationInputs {
-  const roomIds = plan.rooms
-    .filter((r) => r.furnishable && FURNISHABLE.has(r.roomType))
-    .map((r) => r.id);
-  return { roomIds, budgetCad: 1200 * roomIds.length, style: 'scandinavian', mustHaves: {} };
-}
-
-const homes = (await testHomes()).filter((h) => inputsFor(h.plan).roomIds.length > 0);
+const homes = (await testHomes(root, config.dataDir, config.readers.claude, only)).filter(
+  (h) => testInputs(h.plan).roomIds.length > 0,
+);
 const asked = await Promise.all(
   homes.map(async (h) => {
-    const inputs = inputsFor(h.plan);
+    const inputs = testInputs(h.plan);
     const request = { plan: h.plan, inputs, candidates: pickCandidates(h.plan, catalog, inputs) };
     return cache.has(cache.firstKey(writer, request));
   }),
@@ -115,7 +69,7 @@ if (uncached.length > 0 && !args.includes('--yes')) {
 
 const results: HomeResult[] = [];
 for (const { name, plan } of homes) {
-  const inputs = inputsFor(plan);
+  const inputs = testInputs(plan);
   const before = cache.fresh.length;
   let intentMs = 0;
   // Time spent waiting on the LLM, apart from the solving.

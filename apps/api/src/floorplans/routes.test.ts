@@ -5,6 +5,7 @@ import { Floorplan, FloorplanSummary } from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import { createApp, type AppOptions } from '../app';
+import { testHomePlan } from '../ratings/pool';
 import { testDb } from '../test/db';
 import { pngHeader } from '../test/fixtures';
 
@@ -96,6 +97,17 @@ describe('floorplans', () => {
       [first.id, 'Renamed'],
       [second.id, 'Unit 4B'],
     ]);
+  });
+
+  it('leaves the test homes added to rate out of the list, but opens them', async () => {
+    const mine = await uploaded();
+    const added = await testHomePlan(db, { name: '00-demo-1br', plan: Floorplan.parse(demo) });
+    const list = FloorplanSummary.array().parse(
+      await (await app().request('/api/floorplans')).json(),
+    );
+    expect(list.map((p) => p.id)).toEqual([mine.id]);
+    const res = await app().request(`/api/floorplans/${added!.plan.id}`);
+    expect(Floorplan.parse(await res.json()).source).toBe('test_set');
   });
 
   it('saves edits but keeps the id, image and timestamps its own', async () => {

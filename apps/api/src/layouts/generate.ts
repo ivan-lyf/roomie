@@ -102,6 +102,8 @@ type SolveDeps = {
 
 export type GenerateDeps = SolveDeps & {
   writer: IntentWriter;
+  /** The first of the seeds to try, 1 unless more layouts of the same intent are wanted (M7). */
+  firstSeed?: number;
   /** Each intent as it comes, to log if what follows fails. */
   onIntent?: (intent: LayoutIntent) => void;
   /** What each LLM call used as it comes, to log if what follows fails. */
@@ -186,7 +188,8 @@ export async function generateHome(
       },
     }),
   };
-  const seeds = Array.from({ length: deps.seeds ?? SEEDS }, (_, i) => i + 1);
+  const first = deps.firstSeed ?? 1;
+  const seeds = Array.from({ length: deps.seeds ?? SEEDS }, (_, i) => first + i);
   deps.onProgress?.(inputs.roomIds.map((roomId) => ({ roomId, status: 'waiting' })));
 
   let result: IntentResult = await deps.writer.write(request, deps.signal);

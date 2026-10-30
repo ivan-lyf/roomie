@@ -13,7 +13,8 @@
     "catalog:publish": "tsx --env-file-if-exists=../../.env src/catalog/publish-cli.ts",
     "catalog:check": "tsx --env-file-if-exists=../../.env src/catalog/check-cli.ts",
     "plans:eval": "tsx --env-file-if-exists=../../.env src/plan-reader/eval-cli.ts",
-    "layouts:eval": "tsx --env-file-if-exists=../../.env src/layouts/eval-cli.ts"
+    "layouts:eval": "tsx --env-file-if-exists=../../.env src/layouts/eval-cli.ts",
+    "ratings:pool": "tsx --env-file-if-exists=../../.env src/ratings/pool-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

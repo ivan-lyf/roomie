@@ -116,6 +116,7 @@ export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }:
     },
   );
 
+  /** The plans people uploaded: the test homes added to rate (M7) aren't anyone's. */
   app.get('/', async (c) => {
     const rows = await c.var.db
       .select({
@@ -126,6 +127,7 @@ export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }:
         updatedAt: floorplans.updatedAt,
       })
       .from(floorplans)
+      .where(eq(floorplans.source, 'upload'))
       .orderBy(desc(floorplans.updatedAt));
     return c.json(z.array(FloorplanSummary).parse(rows));
   });

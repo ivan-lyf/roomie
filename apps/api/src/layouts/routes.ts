@@ -4,7 +4,6 @@ import {
   Floorplan,
   GenerationInputs,
   type GenerationJob,
-  type LoggedIntent,
   Product,
   RoomAgain,
 } from '@roomie/schema';
@@ -21,6 +20,7 @@ import { recordUsage } from '../usage';
 import { furnishingOf } from './furnishing';
 import { type Generation, generateHome, rearrangeRoom, type RoomStatus } from './generate';
 import type { IntentWriter } from './intent';
+import { logGeneration } from './log';
 
 export type LayoutOptions = {
   db: Db | undefined;
@@ -292,37 +292,15 @@ async function furnish(
       onProgress: (rooms) => (job.rooms = rooms.map((r) => ({ ...r }))),
       onUsage: add,
     });
-    const llmIntent: LoggedIntent = {
-      intent: home.intent,
-      mode: home.mode,
-      model: home.model,
-      usage: home.usage,
-      repairs: home.repairs,
-      seeds: home.seeds,
-    };
-    const row = (candidate: (typeof home.candidates)[number], status: 'candidate' | 'winner') => ({
-      floorplanId: plan.id,
-      generationId: job.generationId,
-      inputs,
-      placements: candidate.placements,
-      score: candidate.score,
-      scoreBreakdown: candidate.breakdown,
-      llmIntent,
-      promptVersion: home.promptVersion,
-      status,
-    });
-    const [winner] = await db.insert(layouts).values(row(home.winner, 'winner')).returning();
-    if (home.candidates.length > 0) {
-      await db.insert(layouts).values(home.candidates.map((c) => row(c, 'candidate')));
-    }
+    const winner = await logGeneration(db, plan.id, job.generationId, inputs, home);
     await db
       .update(floorplans)
-      .set({ furniture: home.winner.placements, furnishedFrom: winner!.id, updatedAt: new Date() })
+      .set({ furniture: home.winner.placements, furnishedFrom: winner, updatedAt: new Date() })
       .where(eq(floorplans.id, plan.id));
     const cost = home.model === null ? 0 : readingCost(home.model, home.usage);
     Object.assign(job, {
       status: 'done',
-      layoutId: winner!.id,
+      layoutId: winner,
       furniture: home.winner.placements,
       ...(cost !== undefined && { costUsd: cost }),
     });
