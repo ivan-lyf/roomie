@@ -49,7 +49,7 @@ describe('loadConfig', () => {
   it('furnishes homes with Claude on the same key, with a model of its own', () => {
     expect(loadConfig({ CLAUDE_API_KEY: 'c' }).layout).toEqual({
       apiKey: 'c',
-      model: 'claude-opus-5-5',
+      model: 'claude-haiku-5-5',
       effort: 'medium',
     });
     const set = { CLAUDE_API_KEY: 'c', LAYOUT_MODEL: 'claude-sonnet-5-5', LAYOUT_EFFORT: 'low' };
