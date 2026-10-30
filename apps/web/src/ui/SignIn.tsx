@@ -4,13 +4,15 @@ import { signInWithEmail, signInWithGoogle, supabase } from '../auth';
 type Props = {
   /** What the AI would do, to finish "Sign in to have the AI …": "read your plan". */
   what: string;
+  /** What to say instead, for a page that isn't an AI step (the rating page, M7). */
+  lead?: string;
 };
 
 /**
  * Signing in, where an AI step would be: by a link sent by email, or with Google. Either comes
  * back to this page signed in, and the step can go ahead.
  */
-export function SignIn({ what }: Props) {
+export function SignIn({ what, lead }: Props) {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState<string>();
   const [error, setError] = useState<string>();
@@ -50,8 +52,9 @@ export function SignIn({ what }: Props) {
   return (
     <section className="space-y-2 rounded-md border border-stone-200 bg-stone-50 p-2">
       <p>
-        Sign in to have the AI {what}. Signing in only keeps what the AI costs in check: your homes
-        stay as they are.
+        {lead ??
+          `Sign in to have the AI ${what}. Signing in only keeps what the AI costs in check: your ` +
+            'homes stay as they are.'}
       </p>
       <form className="flex gap-2" onSubmit={send}>
         <input

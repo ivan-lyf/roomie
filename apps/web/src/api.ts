@@ -7,7 +7,13 @@ import {
   GenerationJob,
   HomeFurnishing,
   Me,
+  NextPair,
   Product,
+  Rating,
+  type RatingInput,
+  type RatingPair,
+  RatingSaved,
+  RatingSummary,
   Refusal,
   type RefusalCode,
   type RoomAgain,
@@ -163,4 +169,40 @@ export async function fetchFurnishing(id: string, signal?: AbortSignal): Promise
   const res = await fetch(`/api/floorplans/${encodeURIComponent(id)}/furnishing`, { signal });
   if (!res.ok) throw await failure(res, 'GET /api/floorplans/:id/furnishing');
   return HomeFurnishing.parse(await res.json());
+}
+
+// The internal rating page (PLAN.md M7): admins only, so every call is signed in.
+
+/** The next pair of layouts to rate; null once every pair has been rated. */
+export async function fetchNextPair(signal?: AbortSignal): Promise<RatingPair | null> {
+  const res = await fetch('/api/admin/ratings/next', { headers: await signedIn(), signal });
+  if (!res.ok) throw await failure(res, 'GET /api/admin/ratings/next');
+  return NextPair.parse(await res.json()).pair;
+}
+
+/** Saves a rating; answers it, with what the scorer would have picked. */
+export async function saveRating(input: RatingInput): Promise<RatingSaved> {
+  const res = await fetch('/api/admin/ratings', {
+    method: 'POST',
+    headers: await signedIn({ 'content-type': 'application/json' }),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await failure(res, 'POST /api/admin/ratings');
+  return RatingSaved.parse(await res.json());
+}
+
+/** Takes a rating back: it's kept, marked archived. */
+export async function archiveRating(id: string): Promise<Rating> {
+  const res = await fetch(`/api/admin/ratings/${id}/archive`, {
+    method: 'POST',
+    headers: await signedIn(),
+  });
+  if (!res.ok) throw await failure(res, 'POST /api/admin/ratings/:id/archive');
+  return Rating.parse(await res.json());
+}
+
+export async function fetchRatingSummary(signal?: AbortSignal): Promise<RatingSummary> {
+  const res = await fetch('/api/admin/ratings/summary', { headers: await signedIn(), signal });
+  if (!res.ok) throw await failure(res, 'GET /api/admin/ratings/summary');
+  return RatingSummary.parse(await res.json());
 }

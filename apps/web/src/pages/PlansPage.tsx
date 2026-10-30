@@ -2,6 +2,7 @@ import type { FloorplanStatus, FloorplanSummary } from '@roomie/schema';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { fetchFloorplans, uploadFloorplan } from '../api';
+import { useAccount } from '../stores/account';
 import { AccountLine } from '../ui/AccountLine';
 import { ACCEPTED, preparePlan } from '../upload';
 
@@ -56,6 +57,7 @@ export function PlansPage() {
           Turn a floor plan into a 3D home, then furnish it with IKEA Canada products.
         </p>
         <AccountLine />
+        <RateLink />
       </header>
 
       <button
@@ -143,5 +145,16 @@ function PlanLink(props: { id: string; name: string; detail: string; ready: bool
         </Link>
       )}
     </li>
+  );
+}
+
+/** For admins: the internal page to rate layouts (PLAN.md M7). */
+function RateLink() {
+  const admin = useAccount((s) => s.me?.admin);
+  if (!admin) return null;
+  return (
+    <Link href="/admin/rate" className="text-xs text-stone-500 underline">
+      Rate layouts
+    </Link>
   );
 }
