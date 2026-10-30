@@ -476,6 +476,23 @@ function weigh(features: Record<string, number | undefined>, by: Record<string, 
   return { score: total > 0 ? sum / total : 0, breakdown };
 }
 
+/**
+ * One room's score from a home's breakdown as logged (`r3.walls`, `r3.relations`, ...): its
+ * features weighed again by today's weights. Undefined when the breakdown has none for the room.
+ */
+export function roomScoreOf(
+  breakdown: Readonly<Record<string, number>>,
+  roomId: string,
+): Scored | undefined {
+  const prefix = `${roomId}.`;
+  const features = Object.fromEntries(
+    Object.entries(breakdown)
+      .filter(([name]) => name.startsWith(prefix))
+      .map(([name, value]) => [name.slice(prefix.length), value]),
+  );
+  return Object.keys(features).length > 0 ? weigh(features, weights.room) : undefined;
+}
+
 type HomeInput = {
   rooms: readonly {
     roomId: string;

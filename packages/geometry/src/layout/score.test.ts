@@ -5,7 +5,14 @@ import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import weights from '../../weights.json';
 import { roomContext } from './room';
-import { type Piece, relationScore, scoreFurniture, scoreHome, scoreRoom } from './score';
+import {
+  type Piece,
+  relationScore,
+  roomScoreOf,
+  scoreFurniture,
+  scoreHome,
+  scoreRoom,
+} from './score';
 import { solveRoom } from './solve';
 import { styleMatch } from './style';
 
@@ -262,6 +269,27 @@ describe('scoreFurniture', () => {
     expect([...scores.rooms.keys()]).toEqual(['r2']);
     expect(scores.rooms.get('r2')!.breakdown).not.toHaveProperty('relations');
     expect(scores.rooms.get('r2')!.breakdown).toHaveProperty('walls');
+  });
+});
+
+describe('roomScoreOf', () => {
+  it("weighs a room's features from a home's logged breakdown again", () => {
+    const solved = intent.rooms.map((room) => solveRoom(plan, room, products, { seed: 1 }));
+    // As a furnishing logs it: each room's features under its id, then the home's own.
+    const logged = {
+      ...Object.fromEntries(
+        solved.flatMap((r) => Object.entries(r.breakdown).map(([k, v]) => [`${r.roomId}.${k}`, v])),
+      ),
+      'r10.walls': 0,
+      rooms: 0.9,
+      budget: 1,
+    };
+    for (const room of solved) {
+      const scored = roomScoreOf(logged, room.roomId)!;
+      expect(scored.score).toBeCloseTo(room.score, 9);
+      expect(scored.breakdown).toEqual(room.breakdown);
+    }
+    expect(roomScoreOf(logged, 'r9')).toBeUndefined();
   });
 });
 

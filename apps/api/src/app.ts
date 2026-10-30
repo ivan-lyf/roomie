@@ -12,6 +12,7 @@ import type { IntentWriter } from './layouts/intent';
 import { layoutRoutes } from './layouts/routes';
 import { products } from './db/schema';
 import type { PlanReader } from './plan-reader/reader';
+import { ratingRoutes } from './ratings/routes';
 import type { Storage } from './storage';
 
 export type AppOptions = {
@@ -62,6 +63,7 @@ export function createApp(options: AppOptions) {
   });
 
   app.route('/floorplans', floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }));
+  app.route('/admin', ratingRoutes({ db, auth, admins: options.admins ?? [] }));
   app.route(
     '/',
     layoutRoutes({

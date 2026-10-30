@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { Floorplan } from './floorplan';
+import { Placement } from './layout';
 
 // Rating layouts (PLAN.md M7): one room from two layouts side by side, which is better, and why in
 // the rater's own words. The picks fit the scorer's weights; the notes are read into labels.
@@ -105,3 +107,70 @@ export const Rating = z.object({
   createdAt: z.coerce.date(),
 });
 export type Rating = z.infer<typeof Rating>;
+
+/** What the rating page sends: the server adds who rated, and when. */
+export const RatingInput = Rating.pick({
+  layoutA: true,
+  layoutB: true,
+  roomId: true,
+  winner: true,
+  livable: true,
+  note: true,
+  itemNotes: true,
+  tags: true,
+  source: true,
+  seconds: true,
+});
+export type RatingInput = z.infer<typeof RatingInput>;
+
+/** One room as one layout has it. */
+export const RoomVersion = z.object({
+  layoutId: z.uuid(),
+  /** The room's items in this layout. */
+  placements: z.array(Placement),
+});
+export type RoomVersion = z.infer<typeof RoomVersion>;
+
+/** The next pair to rate: one room of a home, from two layouts. */
+export const RatingPair = z.object({
+  plan: Floorplan,
+  roomId: z.string().min(1),
+  /** Shown on the left. */
+  a: RoomVersion,
+  /** Shown on the right. */
+  b: RoomVersion,
+});
+export type RatingPair = z.infer<typeof RatingPair>;
+
+/** GET /admin/ratings/next: null once every pair has been rated. */
+export const NextPair = z.object({ pair: RatingPair.nullable() });
+export type NextPair = z.infer<typeof NextPair>;
+
+/** A room's score, and the features it's made of. */
+export const RoomScore = z.object({
+  score: z.number(),
+  breakdown: z.record(z.string(), z.number()),
+});
+export type RoomScore = z.infer<typeof RoomScore>;
+
+/** A rating saved, with what the scorer would have picked, shown once the rater has. */
+export const RatingSaved = z.object({
+  rating: Rating,
+  scorer: z.object({ a: RoomScore, b: RoomScore, pick: RatingWinner }),
+});
+export type RatingSaved = z.infer<typeof RatingSaved>;
+
+/** How the rating is going. */
+export const RatingSummary = z.object({
+  /** Active ratings. */
+  rated: z.number().int().nonnegative(),
+  /** Of them, those with a winner, and those where the scorer would have picked it too. */
+  decided: z.number().int().nonnegative(),
+  scorerAgrees: z.number().int().nonnegative(),
+  /** Of those with a winner, how many were on the left: about half, unless one side draws. */
+  leftWins: z.number().int().nonnegative(),
+  /** Rooms in the pool, and how many have a rating. */
+  rooms: z.number().int().nonnegative(),
+  roomsRated: z.number().int().nonnegative(),
+});
+export type RatingSummary = z.infer<typeof RatingSummary>;
