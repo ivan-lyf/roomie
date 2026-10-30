@@ -48,6 +48,7 @@ pnpm catalog:check       # every active product: sound data, a true-to-size mode
 pnpm plans:eval          # read the test plans with the plan reader and score the readings
 pnpm layouts:eval        # furnish the test homes; report validity, scores, time, cost (--yes pays for new intents)
 pnpm ratings:pool        # the test homes in the database, furnished again from cached intents, to rate (free)
+pnpm ratings:export      # ratings with both rooms' scorer features -> data/ml, for ml/fit_weights.py
 ```
 
 Python: `tools/scraper` runs on uv (`uv run pytest`, `uv run ruff check`). In `ml/`, `uv sync`, then `uv run jupyter lab`.
