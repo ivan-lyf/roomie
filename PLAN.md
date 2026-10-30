@@ -444,9 +444,9 @@ Sign-in exists only to limit token use per account.
 Out of M6: homes tied to accounts (they stay unowned until a pass is bought, §8), payments, password sign-in, a page to see everyone's usage, rate limits beyond the allowance, and deploying (CORS, production redirect URLs).
 
 ### M7 — Feedback loop (1–2 weeks)
-- [ ] Internal `/admin/rate` page, for admins only: one room from two layouts side by side in live 3D, with the real models, colors and textures and the two cameras linked. Pick the better one or "about the same", say whether you'd live with it, flag items in a bad spot, and say why in your own words
-- [ ] Natural-language feedback as training data: every note is read into labels (which items, what's wrong, which scorer feature it bears on), and "Tell it" turns a note into a revised layout of the room to rate against the original
-- [ ] A pool of the test homes to rate, furnished from cached intents at no LLM cost, and pairs picked to teach the scorer the most
+- [x] Internal `/admin/rate` page, for admins only: one room from two layouts side by side in live 3D, with the real models, colors and textures and the two cameras linked. Pick the better one or "about the same", say whether you'd live with it, flag items in a bad spot, and say why in your own words
+- [x] Natural-language feedback as training data: every note is read into labels (which items, what's wrong, which scorer feature it bears on), and "Tell it" turns a note into a revised layout of the room to rate against the original
+- [x] A pool of the test homes to rate, furnished from cached intents at no LLM cost, and pairs picked to teach the scorer the most
 - [ ] Rate 100+ pairs
 - [ ] First `ml/` fit: Bradley–Terry on scorer features → `weights.json`, kept only if it agrees with your ratings better than the hand-set weights on held-out homes
 - [ ] Lessons and few-shot: rules drawn from your notes, and top-rated rooms as examples, in `layout-intent.v2`, kept only if it wins a blind comparison
@@ -572,6 +572,26 @@ All of M7 comes to about $0.30–0.50 of the roughly $1.40 left on the Claude ke
 
     Commits `feat(api): lessons from rating notes`, `feat(geometry): …` for each feature, `feat(api): layout-intent.v2 with lessons and examples`.
 13. **Done check:** the numbers above, written into this section.
+
+    Built on 2026-10-30: steps 1–8, 10 and 11's tools, and step 12's lessons tool. Each was checked in headless Chromium against a throwaway API over an in-memory database, so the dev database holds no test ratings. Three live calls on Haiku 5.5 came to $0.0013 in all:
+
+    - **Reading a note:** "the coffee table is way too far from the sofa, and the TV is off to the side" became two labels, `too_far_from` → `relations` and `off_center` → `tv_view`, each with a fitting rule. $0.0003, 8 s.
+    - **Tell it:** in fr-40's living room, "put the armchair right next to the sofa, facing the coffee table" added `beside` the sofa and kept every other relation. The armchair moved from 2.48 m to 1.38 m from the sofa, and the home stayed valid. $0.0008, 10 s.
+    - **Lessons:** two notes about a stranded armchair became one lesson backed by both. $0.0002.
+
+    **The pool:** all 16 test homes, 249 layouts, 49 rooms. Most homes logged 12 layouts a model; a multi-room home logs only the seeds whose rooms stand together, so Opus's fr-12 logged 2.
+
+    What changed from the plan on the way:
+
+    - **The pool is the test homes only.** An uploaded home's plan can be edited after its layouts were logged.
+    - **Tell it lives in the reveal,** after a pair is rated. It starts on the side not picked, with the note's words.
+    - **The page's AI requests go one at a time.** The API allows an account one AI request at a time, so Tell it pressed while a note was still being read had been refused as busy.
+    - **Fitted weights are kept apart.** `fit_weights.py` writes them to `data/ml/weights-fitted.json`. `pnpm ratings:pool --compare data/ml/weights-fitted.json` furnishes the test homes with both weight sets, from the same intents and seeds, for the blind check at `/admin/rate?compare=weights-fitted`. `--ship` then writes `weights.json`, only if the fitted weights also did better on held-out homes.
+
+    **Still to do:**
+
+    - Ivan: `ADMIN_EMAILS` in `.env`, then 100+ ratings (step 9), the blind checks, and going through the lessons.
+    - Then `layout-intent.v2`, its lessons and examples wired into the intent writer once there are lessons to keep, and the numbers here.
 
 Out of M7: the learned reward model (LightGBM, after several hundred pairs, §7), the vision judge and its screenshots, users' own edits as signals (§7), dragging items to fix a layout on the rating page, voice notes, rating by anyone but admins, fine-tuning, and the user-facing design (M8).
 
