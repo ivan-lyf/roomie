@@ -12,7 +12,7 @@ import {
   type Side,
 } from '@roomie/schema';
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'wouter';
+import { Link, useSearch } from 'wouter';
 import {
   ApiError,
   archiveRating,
@@ -121,6 +121,8 @@ const typing = (target: EventTarget | null) =>
   target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 
 export function RatePage() {
+  // The blind check of other weights, by name: /admin/rate?compare=weights-fitted (M7).
+  const compare = new URLSearchParams(useSearch()).get('compare') || undefined;
   const email = useAccount((s) => s.email);
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [summary, setSummary] = useState<RatingSummary>();
@@ -140,8 +142,8 @@ export function RatePage() {
   const products = useProducts((s) => s.byArticle);
 
   const refreshSummary = useCallback(() => {
-    fetchRatingSummary().then(setSummary, () => setSummary(undefined));
-  }, []);
+    fetchRatingSummary(compare).then(setSummary, () => setSummary(undefined));
+  }, [compare]);
 
   const next = useCallback(async () => {
     setLoaded({ kind: 'loading' });
@@ -150,13 +152,13 @@ export function RatePage() {
     setReading(undefined);
     setError(undefined);
     try {
-      const pair = await fetchNextPair();
+      const pair = await fetchNextPair(compare);
       setLoaded(pair ? { kind: 'pair', pair, shownAt: Date.now() } : { kind: 'done' });
       refreshSummary();
     } catch (e) {
       setLoaded({ kind: 'refused', error: e instanceof Error ? e : new Error(String(e)) });
     }
-  }, [refreshSummary]);
+  }, [compare, refreshSummary]);
 
   // Again once signed in: a sign-in link comes back to this page.
   useEffect(() => {
@@ -304,7 +306,9 @@ export function RatePage() {
         <Link href="/" className="text-xs text-stone-500">
           ← Plans
         </Link>
-        <h1 className="text-xl font-semibold">Rate layouts</h1>
+        <h1 className="text-xl font-semibold">
+          Rate layouts{compare && `: the blind check of ${compare}`}
+        </h1>
       </div>
       {summary && <p className="text-xs text-stone-500">{tally(summary)}</p>}
     </header>
@@ -315,12 +319,18 @@ export function RatePage() {
       <main className="mx-auto flex max-w-3xl flex-col gap-4 p-8 text-sm text-stone-800">
         {header}
         {loaded.kind === 'loading' && <p className="text-stone-500">Finding a pair…</p>}
-        {loaded.kind === 'done' && (
-          <p>
-            Every pair in the pool has been rated. Add more layouts with{' '}
-            <code>pnpm ratings:pool</code>.
-          </p>
-        )}
+        {loaded.kind === 'done' &&
+          (compare ? (
+            <p>
+              Every room of the blind check of {compare} has been rated, but for those that came out
+              the same either way.
+            </p>
+          ) : (
+            <p>
+              Every pair in the pool has been rated. Add more layouts with{' '}
+              <code>pnpm ratings:pool</code>.
+            </p>
+          ))}
         {loaded.kind === 'refused' && <Refused error={loaded.error} />}
       </main>
     );

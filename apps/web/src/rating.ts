@@ -83,6 +83,14 @@ export function tally(s: RatingSummary): string {
     parts.push(`the left one won ${s.leftWins} of ${s.decided}`);
   }
   parts.push(`${s.roomsRated} of ${s.rooms} rooms rated`);
+  const c = s.compare;
+  if (c) {
+    parts.push(
+      `blind check of ${c.name}: picked in ${c.wins}, the current weights in ${c.losses}, ` +
+        `about the same in ${c.ties}, of ${c.rated} rated; ${c.same} of ${c.rooms} rooms came ` +
+        'out the same either way',
+    );
+  }
   return parts.join(' · ');
 }
 

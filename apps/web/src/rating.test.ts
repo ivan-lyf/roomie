@@ -34,6 +34,19 @@ describe('tally', () => {
       '12 rated · the scorer agrees on 7 of 10 with a winner · the left one won 6 of 10 · ' +
         '9 of 49 rooms rated',
     );
+    const compare = {
+      name: 'weights-fitted',
+      rooms: 30,
+      same: 8,
+      rated: 20,
+      wins: 12,
+      losses: 6,
+      ties: 2,
+    };
+    expect(tally({ ...summary, compare })).toBe(
+      '0 rated · 0 of 49 rooms rated · blind check of weights-fitted: picked in 12, the current ' +
+        'weights in 6, about the same in 2, of 20 rated; 8 of 30 rooms came out the same either way',
+    );
   });
 });
 
