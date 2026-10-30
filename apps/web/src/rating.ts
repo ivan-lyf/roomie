@@ -1,5 +1,6 @@
 import type {
   ItemNote,
+  NoteProblem,
   Product,
   RatingSummary,
   RoomProblem,
@@ -33,6 +34,25 @@ export const ROOM_PROBLEMS: Record<RoomProblem, string> = {
   needs_more_seating: 'Needs more seating',
   pieces_dont_go_together: "Pieces don't go together",
 };
+
+/** What a label says is wrong, in words: "B · the sofa is too far from the TV unit". */
+export const NOTE_PROBLEMS: Record<NoteProblem, string> = {
+  too_far_from: 'is too far from',
+  too_close_to: 'is too close to',
+  facing_away: 'faces the wrong way',
+  blocks: 'is in the way',
+  against_window: 'stands in front of a window',
+  off_center: 'is off center',
+  wrong_size: 'is the wrong size',
+  missing: 'is missing',
+  not_needed: "isn't needed",
+  style: "doesn't go with the rest",
+  other: 'has another problem',
+};
+
+/** Whether the rater wrote anything for the AI to read. */
+export const written = (form: { note: string; itemNotes: readonly ItemNote[] }) =>
+  form.note.trim() !== '' || form.itemNotes.some((n) => n.note.trim() !== '');
 
 /** Differences smaller than this aren't worth showing. */
 const NOTICEABLE = 0.02;

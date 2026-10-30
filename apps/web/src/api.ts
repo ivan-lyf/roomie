@@ -8,6 +8,7 @@ import {
   HomeFurnishing,
   Me,
   NextPair,
+  type NoteLabel,
   Product,
   Rating,
   type RatingInput,
@@ -205,4 +206,25 @@ export async function fetchRatingSummary(signal?: AbortSignal): Promise<RatingSu
   const res = await fetch('/api/admin/ratings/summary', { headers: await signedIn(), signal });
   if (!res.ok) throw await failure(res, 'GET /api/admin/ratings/summary');
   return RatingSummary.parse(await res.json());
+}
+
+/** Has the rating's notes read into labels by the AI: a few seconds, a fraction of a cent. */
+export async function readNotes(id: string): Promise<Rating> {
+  const res = await fetch(`/api/admin/ratings/${id}/read`, {
+    method: 'POST',
+    headers: await signedIn(),
+  });
+  if (!res.ok) throw await failure(res, 'POST /api/admin/ratings/:id/read');
+  return Rating.parse(await res.json());
+}
+
+/** Saves the rater's corrections to how their notes were read. */
+export async function saveLabels(id: string, labels: readonly NoteLabel[]): Promise<Rating> {
+  const res = await fetch(`/api/admin/ratings/${id}/labels`, {
+    method: 'PUT',
+    headers: await signedIn({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ labels }),
+  });
+  if (!res.ok) throw await failure(res, 'PUT /api/admin/ratings/:id/labels');
+  return Rating.parse(await res.json());
 }

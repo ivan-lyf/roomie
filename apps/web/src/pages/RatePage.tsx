@@ -1,5 +1,8 @@
 import {
   type ItemNote,
+  type NoteLabel,
+  type NoteReading,
+  type Placement,
   type Product,
   type RatingPair,
   type RatingSaved,
@@ -10,7 +13,15 @@ import {
 } from '@roomie/schema';
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'wouter';
-import { ApiError, archiveRating, fetchNextPair, fetchRatingSummary, saveRating } from '../api';
+import {
+  ApiError,
+  archiveRating,
+  fetchNextPair,
+  fetchRatingSummary,
+  readNotes,
+  saveLabels,
+  saveRating,
+} from '../api';
 import { ROOM_TYPES } from '../format';
 import {
   describeProduct,
@@ -19,12 +30,14 @@ import {
   ROOM_PROBLEMS,
   tally,
   toggleItem,
+  written,
 } from '../rating';
 import { CameraLink, type Preset } from '../scene/home/cameraLink';
 import { ShownFurniture } from '../scene/home/Furniture';
 import { HomeView } from '../scene/home/HomeView';
 import { useAccount } from '../stores/account';
 import { useProducts, useProductsFor } from '../stores/products';
+import { NoteLabels } from '../ui/NoteLabels';
 import { SignIn } from '../ui/SignIn';
 
 // The internal rating page (PLAN.md M7): one room from two layouts side by side in 3D. Pick the
@@ -76,6 +89,26 @@ const button = (on = false) =>
       : 'border-stone-300 bg-white hover:bg-stone-50'
   }`;
 
+/** How the AI is getting on reading a rating's notes. */
+type Reading = { ratingId: string } & (
+  | { status: 'reading' }
+  | { status: 'read'; labels: NoteReading }
+  | { status: 'failed'; error: string }
+);
+
+/**
+ * The readings asked for, one after another: the API lets an account make one AI request at a
+ * time, and rating the next pair shouldn't wait for the last note to be read.
+ */
+let readings: Promise<unknown> = Promise.resolve();
+
+/** Has a rating's notes read once the readings asked for before it are done. */
+function readInTurn(ratingId: string) {
+  const job = readings.then(() => readNotes(ratingId));
+  readings = job.catch(() => undefined);
+  return job;
+}
+
 /** Whether a key went to a text box, not to the page. */
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
@@ -89,6 +122,7 @@ export function RatePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [hovered, setHovered] = useState<{ side: Side; id: string }>();
+  const [reading, setReading] = useState<Reading>();
   const link = useMemo(() => new CameraLink(), []);
   const noteBox = useRef<HTMLTextAreaElement>(null);
 
@@ -106,6 +140,7 @@ export function RatePage() {
     setLoaded({ kind: 'loading' });
     setForm(BLANK);
     setSaved(undefined);
+    setReading(undefined);
     setError(undefined);
     try {
       const pair = await fetchNextPair();
@@ -123,6 +158,22 @@ export function RatePage() {
     const t = setTimeout(() => void next(), 0);
     return () => clearTimeout(t);
   }, [email, next]);
+
+  /** Has a rating's notes read, in turn; shows how they were read if the rating's still shown. */
+  const read = useCallback((ratingId: string) => {
+    setReading({ ratingId, status: 'reading' });
+    const show = (next: Reading) => setReading((now) => (now?.ratingId === ratingId ? next : now));
+    readInTurn(ratingId).then(
+      (rating) =>
+        show(
+          rating.labels
+            ? { ratingId, status: 'read', labels: rating.labels }
+            : { ratingId, status: 'failed', error: 'Nothing was read.' },
+        ),
+      (e: unknown) =>
+        show({ ratingId, status: 'failed', error: e instanceof Error ? e.message : String(e) }),
+    );
+  }, []);
 
   const save = useCallback(async () => {
     if (!pair || saved || saving || !form.winner || form.livable === undefined) return;
@@ -145,12 +196,26 @@ export function RatePage() {
       setSaved(result);
       noteBox.current?.blur();
       refreshSummary();
+      if (written(form)) read(result.rating.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
-  }, [pair, saved, saving, form, loaded, refreshSummary]);
+  }, [pair, saved, saving, form, loaded, refreshSummary, read]);
+
+  /** Saves the rater's corrections to how a note was read. */
+  async function correct(ratingId: string, labels: NoteLabel[]) {
+    setReading((now) =>
+      now?.status === 'read' ? { ...now, labels: { ...now.labels, labels, corrected: true } } : now,
+    );
+    try {
+      const rating = await saveLabels(ratingId, labels);
+      if (rating.labels) setReading({ ratingId, status: 'read', labels: rating.labels });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
 
   /** Takes the last rating back, to rate the same pair again: it's kept, marked archived. */
   const takeBack = useCallback(async () => {
@@ -158,6 +223,7 @@ export function RatePage() {
     try {
       await archiveRating(saved.rating.id);
       setSaved(undefined);
+      setReading(undefined);
       refreshSummary();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -296,7 +362,15 @@ export function RatePage() {
       </div>
 
       {saved ? (
-        <Reveal saved={saved} onNext={() => void next()} onTakeBack={() => void takeBack()} />
+        <Reveal
+          saved={saved}
+          reading={reading?.ratingId === saved.rating.id ? reading : undefined}
+          sides={{ a: sides.a.placements, b: sides.b.placements }}
+          products={products}
+          onLabels={(labels) => void correct(saved.rating.id, labels)}
+          onNext={() => void next()}
+          onTakeBack={() => void takeBack()}
+        />
       ) : (
         <form
           className="grid grid-cols-[auto_1fr] items-start gap-x-4 gap-y-3"
@@ -453,9 +527,21 @@ function ItemLine(props: {
   );
 }
 
-/** After a rating: what the scorer would have picked, and where the two rooms differ most. */
-function Reveal(props: { saved: RatingSaved; onNext: () => void; onTakeBack: () => void }) {
+/**
+ * After a rating: what the scorer would have picked, where the two rooms differ most, and how
+ * the AI read the notes, to correct.
+ */
+function Reveal(props: {
+  saved: RatingSaved;
+  reading: Reading | undefined;
+  sides: Record<Side, readonly Placement[]>;
+  products: ReadonlyMap<string, Product>;
+  onLabels: (labels: NoteLabel[]) => void;
+  onNext: () => void;
+  onTakeBack: () => void;
+}) {
   const { rating, scorer } = props.saved;
+  const { reading } = props;
   const agrees = scorer.pick === rating.winner;
   const gaps = differences(scorer.a, scorer.b);
   return (
@@ -473,6 +559,18 @@ function Reveal(props: { saved: RatingSaved; onNext: () => void; onTakeBack: () 
             </li>
           ))}
         </ul>
+      )}
+      {reading?.status === 'reading' && <p className="text-stone-500">Reading your note…</p>}
+      {reading?.status === 'failed' && (
+        <p className="text-red-700">Your note wasn't read: {reading.error}</p>
+      )}
+      {reading?.status === 'read' && (
+        <NoteLabels
+          reading={reading.labels}
+          sides={props.sides}
+          products={props.products}
+          onChange={props.onLabels}
+        />
       )}
       <div className="flex gap-3">
         <button type="button" className={button(true)} onClick={props.onNext}>
