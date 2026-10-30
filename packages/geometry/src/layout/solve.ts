@@ -1,7 +1,7 @@
 import type { Category, Placement, Relation, RoomIntent, Vec2 } from '@roomie/schema';
 import { bounds, contains } from '../plan/polygon';
-import { type RoomContext, roomContext } from './room';
-import { type Piece, type Scored, type ScoredProduct, scoreRoom } from './score';
+import { type Face, type RoomContext, roomContext } from './room';
+import { type Piece, type Scored, type ScoredProduct, scoreRoom, VIEWING_DISTANCE } from './score';
 import { reach } from './shapes';
 import { turn } from './snap';
 import { ITEM_NOUNS, type LayoutPlan, validateLayout } from './validate';
@@ -137,6 +137,61 @@ function wallSpots(item: Item, ctx: RoomContext, sideways: boolean): Spot[] {
     }
   }
   return spots;
+}
+
+/** How much a wall to put the TV on, straight ahead of the sofa, counts toward the sofa's spot. */
+const LOOK_AHEAD = 0.25;
+
+/**
+ * The wall a seat looks straight at, if any: where its line of sight meets the face, and how far
+ * from the seat. Only a face it looks at squarely counts, not one at a slant.
+ */
+function wallAhead(seat: Spot, ctx: RoomContext): { face: Face; along: number; far: number }[] {
+  const f = frontOf(seat.rotation);
+  return ctx.faces.flatMap((face) => {
+    const square = -dot(f, face.inward);
+    if (square < 0.9) return [];
+    const rel = { x: seat.x - face.p.x, y: seat.y - face.p.y };
+    const far = dot(rel, face.inward) / square;
+    if (far <= 0) return [];
+    const along = dot({ x: rel.x + f.x * far, y: rel.y + f.y * far }, face.d);
+    return along >= 0 && along <= face.length ? [{ face, along, far }] : [];
+  });
+}
+
+/** How well a spot for a sofa leaves a wall ahead to put the TV on, at a distance to watch. */
+function viewAhead(seat: Spot, tv: Item, ctx: RoomContext): number {
+  const room = (w: { face: Face; along: number }) =>
+    w.along >= tv.product.dims.w / 2 && w.along <= w.face.length - tv.product.dims.w / 2;
+  const fits = wallAhead(seat, ctx)
+    .filter(room)
+    .map((w) => {
+      const gap = w.far - tv.product.dims.d / 2;
+      const slack = 2.5;
+      return Math.max(
+        0,
+        1 - Math.max(VIEWING_DISTANCE.from - gap, gap - VIEWING_DISTANCE.to, 0) / slack,
+      );
+    });
+  return Math.max(0, ...fits);
+}
+
+/** Spots for a TV unit on the wall a seat looks straight at, centered on it or a little off. */
+function viewSpots(tv: Item, seat: Spot, ctx: RoomContext): Spot[] {
+  const half = tv.product.dims.w / 2;
+  return wallAhead(seat, ctx).flatMap(({ face, along }) => {
+    if (face.length < 2 * half) return [];
+    const rotation = facing(face.inward);
+    const depth = tv.product.dims.d / 2;
+    return [0, -0.2, 0.2, -0.4, 0.4].map((off) => {
+      const s = Math.min(Math.max(along + off, half), face.length - half);
+      return {
+        x: face.p.x + face.d.x * s + face.inward.x * depth,
+        y: face.p.y + face.d.y * s + face.inward.y * depth,
+        rotation,
+      };
+    });
+  });
 }
 
 /** Spots on a grid over the floor, turned square to each wall or toward what it should face. */
@@ -396,8 +451,15 @@ export function solveRoom(
         Math.abs(turn(spot.rotation, -a.rotation)) < 0.01,
     );
   /** Spots anywhere in the room an item could go, not only by an item it hangs off. */
+  // The sofa that will watch the TV, whatever the intent said: the first sofa, else any seat.
+  const watcher = () =>
+    [...placed.values()].find((p) => p.product.category === 'sofa') ??
+    [...placed.values()].find((p) => p.product.category === 'armchair');
   const anywhere = (item: Item) => [
     ...relativeSpots(item, relations, placed),
+    ...(item.product.category === 'tv_unit' && watcher()
+      ? viewSpots(item, watcher()!.placement, ctx)
+      : []),
     ...(AGAINST_WALL.has(item.product.category)
       ? wallSpots(item, ctx, item.product.category === 'bed' && item.product.dims.w < 1.4)
       : []),
@@ -409,11 +471,18 @@ export function solveRoom(
   /** One of the best few valid spots, drawn the likelier the better, and whether any fit alone. */
   const pick = (item: Item, spots: Spot[]) => {
     const others = [...placed.values()];
+    // A sofa goes where a TV still to place can stand straight ahead of it.
+    const tv =
+      item.product.category === 'sofa' && !watcher()
+        ? items.find((i) => i.product.category === 'tv_unit' && !placed.has(i.ref))
+        : undefined;
     const ranked: { spot: Spot; score: number }[] = spots
       .filter((spot) => leaves(item.ref, spot))
       .map((spot) => ({
         spot,
-        score: score([...others, { ref: item.ref, placement: spot, product: item.product }]),
+        score:
+          score([...others, { ref: item.ref, placement: spot, product: item.product }]) +
+          (tv ? LOOK_AHEAD * viewAhead(spot, tv, ctx) : 0),
       }))
       .sort((a, b) => b.score - a.score);
     const current = placements();

@@ -61,8 +61,10 @@ describe('relationScore', () => {
     ).toBe(0);
     // The TV's nearest window is behind it; the sofa's is ahead and to its left.
     expect(score({ ...relation, target: 'window' }, living, tv, sofa)).toBe(0);
+    // Turned 37° from the window: full marks end at 15°, none from 75°.
     const window = { kind: 'facing', item: 'sofa', target: 'window' } as const;
-    expect(score(window, living, tv, sofa)).toBeCloseTo(1.74 / Math.hypot(1.74, 1.3));
+    const off = (Math.atan2(1.3, 1.74) * 180) / Math.PI;
+    expect(score(window, living, tv, sofa)).toBeCloseTo(1 - (off - 15) / 60);
     expect(score({ ...relation, target: 'nothing' }, living, tv, sofa)).toBeUndefined();
   });
 
@@ -133,7 +135,7 @@ describe('scoreRoom', () => {
   it('weighs the features that apply by weights.json', () => {
     const { score, breakdown } = scoreRoom(living, furnished, { relations });
     expect(Object.keys(breakdown).sort()).toEqual(
-      ['focal', 'relations', 'spread', 'walkway', 'walls', 'windows'].sort(),
+      ['focal', 'relations', 'spread', 'tv_view', 'walkway', 'walls', 'windows'].sort(),
     );
     const w = weights.room as Record<string, number>;
     const total = Object.keys(breakdown).reduce((s, k) => s + w[k]!, 0);
@@ -141,6 +143,20 @@ describe('scoreRoom', () => {
     expect(score).toBeCloseTo(sum / total);
     expect(breakdown.walls).toBeCloseTo(1);
     expect(breakdown.focal).toBeGreaterThan(0.9);
+    expect(breakdown.tv_view).toBeCloseTo(1);
+  });
+
+  it('wants the TV square to the sofa, centered on it, at a distance to watch', () => {
+    const view = (t: Piece, s: Piece = sofa) =>
+      scoreRoom(living, [s, t], { walkway: false }).breakdown.tv_view!;
+    expect(view(tv)).toBeCloseTo(1);
+    // On the side wall, turned 90° from the sofa.
+    expect(view({ ...tv, placement: { x: 6.2, y: 0.25, rotation: 0 } })).toBe(0);
+    // Facing the sofa but 1.2 m off its middle, or the sofa across the room, 7 m away.
+    const aside = view({ ...tv, placement: { x: 8.2, y: 3.0, rotation: -Q } });
+    expect(aside).toBeGreaterThan(0);
+    expect(aside).toBeLessThan(0.3);
+    expect(view(tv, { ...sofa, placement: { x: 1.2, y: 1.8, rotation: Q } })).toBe(0);
   });
 
   it('scores a sofa adrift in the room, turned from the TV, below one against the wall', () => {

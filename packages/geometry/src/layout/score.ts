@@ -65,6 +65,33 @@ function axes(rotation: number) {
 
 const at = (piece: Piece): Vec2 => ({ x: piece.placement.x, y: piece.placement.y });
 
+/** How squarely a piece faces a point: fully within 15° of it, not at all from 75°. */
+function aim(piece: Piece, target: Vec2): number {
+  const { front } = axes(piece.placement.rotation);
+  const to = { x: target.x - piece.placement.x, y: target.y - piece.placement.y };
+  const length = Math.hypot(to.x, to.y);
+  if (length < 1e-9) return 1;
+  const degrees = (Math.acos(Math.max(-1, Math.min(1, dot(front, to) / length))) * 180) / Math.PI;
+  return within(degrees, 0, 15, 60);
+}
+
+/** How far apart a seat and the TV it watches should be, center to center, in meters. */
+export const VIEWING_DISTANCE = { from: 2.2, to: 4 };
+
+/**
+ * How well a seat watches a TV: the two facing each other squarely, the TV roughly centered on
+ * the seat (within 30 cm), at a distance to watch from. Any one of them wrong spoils the view.
+ */
+function view(seat: Piece, tv: Piece): number {
+  const { across } = local(seat, at(tv));
+  return (
+    aim(seat, at(tv)) *
+    aim(tv, at(seat)) *
+    within(Math.abs(across), 0, 0.3, 1.2) *
+    within(distance(at(seat), at(tv)), VIEWING_DISTANCE.from, VIEWING_DISTANCE.to, 2.5)
+  );
+}
+
 /** A point in a piece's own frame: across (+ to its left) and along (+ to its front). */
 function local(piece: Piece, p: Vec2) {
   const { front, left } = axes(piece.placement.rotation);
@@ -159,10 +186,7 @@ export function relationScore(
         target = other && at(other);
       }
       if (!target) return undefined;
-      const { front } = axes(item.placement.rotation);
-      const to = { x: target.x - item.placement.x, y: target.y - item.placement.y };
-      const length = Math.hypot(to.x, to.y);
-      return length < 1e-9 ? 1 : Math.max(0, dot(front, to) / length);
+      return aim(item, target);
     }
     case 'in_front_of': {
       const target = pieces.get(relation.target);
@@ -312,6 +336,13 @@ export function scoreRoom(
         );
       }),
     );
+  }
+
+  // The TV and the sofa that watches it (any seat, without a sofa), whatever the intent said.
+  if (tv.length > 0 && seats.length > 0) {
+    const sofas = seats.filter((p) => p.product.category === 'sofa');
+    const watchers = sofas.length > 0 ? sofas : seats;
+    features.tv_view = Math.max(...tv.flatMap((t) => watchers.map((s) => view(s, t))));
   }
 
   if (options.walkway !== false && standing.length > 0) {
