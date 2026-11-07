@@ -1,14 +1,16 @@
 import { validateFloorplan } from '@roomie/geometry';
 import type { Floorplan } from '@roomie/schema';
 import { useMemo } from 'react';
+import { planProblemText } from '../../copy';
 import { useEditor } from '../../stores/editor';
 
 /** What still has to be fixed before the plan is ready; click one to select what it's about. */
 export function ProblemsPanel({ plan }: { plan: Floorplan }) {
   const select = useEditor((s) => s.select);
   const problems = useMemo(() => validateFloorplan(plan), [plan]);
+  const names = useMemo(() => new Map(plan.rooms.map((r) => [r.id, r.name])), [plan.rooms]);
   if (problems.length === 0) {
-    return <p className="text-xs text-green-700">No problems: the plan is ready for 3D.</p>;
+    return <p className="text-xs text-green-700">Nothing to check: the plan is ready to furnish.</p>;
   }
   return (
     <ul className="flex flex-col gap-1">
@@ -19,7 +21,7 @@ export function ProblemsPanel({ plan }: { plan: Floorplan }) {
             onClick={() => select(p.ids)}
             className="w-full rounded px-2 py-1 text-left text-xs text-red-800 hover:bg-red-50"
           >
-            {p.message}
+            {planProblemText(p, names)}
           </button>
         </li>
       ))}

@@ -1,5 +1,6 @@
 import { Redirect, Route, Switch } from 'wouter';
 import { CatalogPage } from './pages/CatalogPage';
+import { CheckPage } from './pages/CheckPage';
 import { EditorPage } from './pages/EditorPage';
 import { HomePage } from './pages/HomePage';
 import { HomesPage } from './pages/HomesPage';
@@ -16,7 +17,7 @@ export function App() {
         <Route path="/homes" component={HomesPage} />
         <Route path="/catalog" component={CatalogPage} />
         <Route path="/admin/rate" component={RatePage} />
-        <Route path="/plans/:id/check">{({ id }) => <EditorPage id={id} />}</Route>
+        <Route path="/plans/:id/check">{({ id }) => <CheckPage id={id} />}</Route>
         <Route path="/plans/:id/edit">{({ id }) => <EditorPage id={id} />}</Route>
         <Route path="/plans/:id/preferences">{({ id }) => <HomePage id={id} />}</Route>
         <Route path="/plans/:id/list">{({ id }) => <ListPage id={id} />}</Route>

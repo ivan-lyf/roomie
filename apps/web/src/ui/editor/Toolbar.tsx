@@ -15,11 +15,11 @@ export const TOOLS: { tool: Tool; label: string; key: string; hint: string }[] =
   },
   { tool: 'door', label: 'Door', key: 'd', hint: 'Click a wall' },
   { tool: 'window', label: 'Window', key: 'n', hint: 'Click a wall' },
-  { tool: 'passage', label: 'Passage', key: 'p', hint: 'An opening with no door: click a wall' },
+  { tool: 'passage', label: 'Open doorway', key: 'p', hint: 'A doorway with no door: click a wall' },
   { tool: 'room', label: 'Room', key: 'r', hint: 'Click its corners; click the first to close' },
   { tool: 'split', label: 'Split room', key: 's', hint: 'Draw a line across a room' },
-  { tool: 'obstacle', label: 'Fixture', key: 'o', hint: 'Drag a box: counters, closets, columns' },
-  { tool: 'measure', label: 'Scale', key: 'm', hint: 'Measure something to set the scale' },
+  { tool: 'obstacle', label: 'Built-in', key: 'o', hint: 'Drag a box: counters, closets, columns' },
+  { tool: 'measure', label: 'Measure', key: 'm', hint: 'Measure something you know the size of' },
 ];
 
 export const FIXTURES: Record<ObstacleKind, string> = {

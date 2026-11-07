@@ -13,10 +13,6 @@ const INTERNAL = [
   'pages/RatePage.tsx',
   'ui/CatalogPanel.tsx',
   'ui/NoteLabels.tsx',
-  // Screens M8 hasn't redone yet; each leaves this list as its new version lands.
-  'pages/EditorPage.tsx',
-  'ui/editor/ScalePanel.tsx',
-  'ui/editor/Toolbar.tsx',
 ];
 
 function files(dir: string): string[] {
@@ -37,7 +33,8 @@ function shownStrings(source: string): string[] {
   // Template holes, nested strings and all.
   for (let prev = ''; prev !== bare; ) [prev, bare] = [bare, bare.replace(/\$\{[^{}]*\}/g, ' ')];
   const strings: string[] = [];
-  for (const m of bare.matchAll(/>([^<>{}]*[A-Za-z][^<>{}]*)</g)) strings.push(m[1]!.trim());
+  // Text between tags, not after an arrow function's `=>`.
+  for (const m of bare.matchAll(/(?<!=)>([^<>{}]*[A-Za-z][^<>{}]*)</g)) strings.push(m[1]!.trim());
   for (const m of bare.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*)\1/g)) {
     const s = m[2]!;
     const sentence = /[A-Z]/.test(s) || (/\s/.test(s) && !/\b[a-z0-9]+[-:][a-z0-9[\]/.%-]+/.test(s));

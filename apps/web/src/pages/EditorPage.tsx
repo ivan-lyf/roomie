@@ -3,7 +3,8 @@ import { useEffect } from 'react';
 import { Link } from 'wouter';
 import demoImage from '../../../../fixtures/plans/00-demo-1br/plan.png';
 import { floorplanImageUrl } from '../api';
-import { type SaveState, useAutosave } from '../autosave';
+import { refusalText } from '../copy';
+import { useAutosave } from '../autosave';
 import { PlanCanvas } from '../editor/PlanCanvas';
 import { DEMO_ID, usePlan } from '../plans';
 import { usePlanReader } from '../reading';
@@ -14,26 +15,30 @@ import { ProblemsPanel } from '../ui/editor/ProblemsPanel';
 import { RoomsPanel } from '../ui/editor/RoomsPanel';
 import { ScalePanel } from '../ui/editor/ScalePanel';
 import { TOOLS, Toolbar } from '../ui/editor/Toolbar';
-import { SignIn } from '../ui/SignIn';
-
-const SAVE_LABELS: Record<SaveState, string> = {
-  saved: 'Saved',
-  unsaved: 'Unsaved changes',
-  saving: 'Saving…',
-  failed: 'Not saved',
-  local: 'Demo: changes are not saved',
-};
+import { useSignIn } from '../ui/account/signIn';
+import { ButtonLink } from '../ui/kit';
+import { SaveLabel } from '../ui/SaveLabel';
 
 const typing = (e: KeyboardEvent) =>
   e.target instanceof HTMLElement && e.target.closest('input, select, textarea') !== null;
 
-/** The 2D editor: set the scale, then trace or correct the plan over its image. */
+/**
+ * The advanced editor, the "fix it myself" path (§4.3): set the size, then trace or correct the
+ * plan over its image. Done goes back to the guided check.
+ */
 export function EditorPage({ id }: { id: string }) {
   const { plan, error } = usePlan(id);
   const save = useAutosave(id);
   const reader = usePlanReader(id, plan);
   const calibrated = Boolean(plan?.scale);
   const reading = reader.read.state === 'reading';
+  const openSignIn = useSignIn((s) => s.open);
+  const signIn = reader.read.state === 'signIn';
+
+  // Signed out, a reading waits for sign-in and then starts by itself (reading.ts).
+  useEffect(() => {
+    if (signIn) openSignIn({ reason: 'step' });
+  }, [signIn, openSignIn]);
 
   // A new plan opens on the scale; every visit starts with nothing selected.
   useEffect(() => {
@@ -100,7 +105,7 @@ export function EditorPage({ id }: { id: string }) {
       <p className="p-8 text-sm text-stone-700">
         {error}{' '}
         <Link href="/homes" className="underline">
-          Back to your plans
+          Back to your homes
         </Link>
       </p>
     );
@@ -111,15 +116,15 @@ export function EditorPage({ id }: { id: string }) {
   const readAgain = () => {
     const sure =
       !isTraced(plan) ||
-      confirm("Reading the plan again replaces what's traced. You can undo it afterwards.");
+      confirm("Reading your plan again replaces what's drawn. You can undo it afterwards.");
     if (sure) void reader.run(true);
   };
 
   return (
     <main className="flex h-full flex-col text-sm text-stone-800">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-stone-200 bg-white px-3">
-        <Link href="/homes" className="text-stone-500 hover:text-stone-800">
-          ← Plans
+        <Link href={`/plans/${id}/check`} className="text-stone-500 hover:text-stone-800">
+          ← Back to the check
         </Link>
         <input
           key={plan.name}
@@ -133,19 +138,12 @@ export function EditorPage({ id }: { id: string }) {
           disabled={reading}
           className="w-64 rounded border border-transparent px-2 py-1 font-semibold hover:border-stone-300"
         />
-        <span className={`text-xs ${save.state === 'failed' ? 'text-red-700' : 'text-stone-500'}`}>
-          {SAVE_LABELS[save.state]}
-          {save.state === 'failed' && (
-            <button type="button" onClick={save.retry} className="ml-1 underline">
-              Retry
-            </button>
-          )}
-        </span>
+        <SaveLabel {...save} />
         <span className="ml-auto text-xs text-stone-500">
           {status === 'ready'
-            ? 'Ready for 3D'
+            ? 'Ready to furnish'
             : status === 'needs_calibration'
-              ? 'Needs its scale'
+              ? 'Needs its size'
               : 'Not finished'}
         </span>
         {id !== DEMO_ID && plan.image && (
@@ -155,19 +153,12 @@ export function EditorPage({ id }: { id: string }) {
             disabled={reading}
             className="rounded-md border border-stone-300 px-3 py-1.5 hover:bg-stone-50 disabled:opacity-40"
           >
-            {plan.reading ? 'Read the plan again' : 'Read the plan'}
+            {plan.reading ? 'Read my plan again' : 'Read my plan'}
           </button>
         )}
-        <Link
-          href={`/plans/${id}`}
-          className={`rounded-md px-3 py-1.5 ${
-            plan.walls.length > 0 && plan.scale
-              ? 'bg-stone-800 text-white'
-              : 'pointer-events-none bg-stone-200 text-stone-500'
-          }`}
-        >
-          View in 3D
-        </Link>
+        <ButtonLink href={`/plans/${id}/check?step=2`} size="sm">
+          Done
+        </ButtonLink>
       </header>
       <div className="relative flex min-h-0 flex-1">
         <Toolbar calibrated={calibrated} />
@@ -179,11 +170,16 @@ export function EditorPage({ id }: { id: string }) {
               id === DEMO_ID ? demoImage : plan.image ? floorplanImageUrl(plan.id) : undefined
             }
           />
-          {reader.read.state === 'signIn' && (
+          {signIn && (
             <div className="absolute inset-x-4 top-4 flex items-start gap-3 rounded-lg bg-white px-4 py-3 shadow">
-              <div className="flex-1">
-                <SignIn what="read your plan" />
-              </div>
+              <p className="flex-1">Sign in to have your plan read. We start as soon as you&apos;re in.</p>
+              <button
+                type="button"
+                onClick={() => openSignIn({ reason: 'step' })}
+                className="underline"
+              >
+                Sign in
+              </button>
               <button type="button" onClick={reader.dismiss} className="underline">
                 Trace it by hand
               </button>
@@ -193,8 +189,10 @@ export function EditorPage({ id }: { id: string }) {
             <div className="absolute inset-x-4 top-4 flex items-start gap-3 rounded-lg bg-amber-50 px-4 py-3 text-amber-900 shadow">
               <p className="flex-1">
                 {reader.read.noReader
-                  ? 'No plan reader is set up (it needs GEMINI_API_KEY), so trace the plan by hand.'
-                  : `The plan couldn't be read: ${reader.read.message}`}
+                  ? "Plans can't be read automatically here, so trace it by hand."
+                  : reader.read.code
+                    ? refusalText(reader.read.code)
+                    : "We couldn't read this plan automatically."}
               </p>
               {!reader.read.noReader && (
                 <button
@@ -214,7 +212,7 @@ export function EditorPage({ id }: { id: string }) {
           )}
         </div>
         <aside className="flex w-80 shrink-0 flex-col gap-5 overflow-y-auto border-l border-stone-200 bg-white p-4">
-          <Section title="Scale">
+          <Section title="Size">
             <ScalePanel plan={plan} />
           </Section>
           {calibrated && (
@@ -225,7 +223,7 @@ export function EditorPage({ id }: { id: string }) {
               <Section title="Rooms">
                 <RoomsPanel plan={plan} />
               </Section>
-              <Section title="Problems">
+              <Section title="Things to check">
                 <ProblemsPanel plan={plan} />
               </Section>
             </>
@@ -236,7 +234,7 @@ export function EditorPage({ id }: { id: string }) {
           <div className="absolute inset-0 flex items-center justify-center bg-white/60">
             <p className="flex items-center gap-3 rounded-lg bg-white px-4 py-3 shadow-lg">
               <span className="size-4 animate-spin rounded-full border-2 border-stone-300 border-t-stone-800" />
-              Reading the plan with Gemini… this can take a few minutes.
+              Reading your plan… this usually takes a minute or two.
             </p>
           </div>
         )}

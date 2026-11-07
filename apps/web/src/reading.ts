@@ -1,5 +1,5 @@
 import { isTraced } from '@roomie/geometry';
-import type { Floorplan } from '@roomie/schema';
+import type { Floorplan, RefusalCode } from '@roomie/schema';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, readFloorplan } from './api';
 import { supabase } from './auth';
@@ -13,7 +13,14 @@ export type ReadState =
   /** Waiting for the user to sign in, which reading needs (PLAN.md M6). */
   | { state: 'signIn'; replace: boolean }
   | { state: 'reading'; replace: boolean }
-  | { state: 'failed'; message: string; replace: boolean; noReader: boolean };
+  | {
+      state: 'failed';
+      message: string;
+      replace: boolean;
+      noReader: boolean;
+      /** Why the API refused, when it did (signed out, the daily limit). */
+      code?: RefusalCode;
+    };
 
 /** Plans this page has started reading, so one that fails isn't read again and again. */
 const started = new Set<string>();
@@ -49,6 +56,7 @@ export function usePlanReader(id: string, plan: Floorplan | undefined) {
           message: e instanceof Error ? e.message : String(e),
           replace,
           noReader: e instanceof ApiError && e.status === 503 && e.code === undefined,
+          ...(e instanceof ApiError && e.code && { code: e.code }),
         });
       } finally {
         // What the reading cost, in the account line.

@@ -42,7 +42,7 @@ const UNITS: Record<SourceUnit, string> = {
 };
 
 const METHOD_NAMES: Record<Scale['method'], string> = {
-  labels: "the plan's dimension labels",
+  labels: "the measurements on the plan",
   wall_length: "a wall's length",
   area: 'an area',
   area_and_side: 'an area and one side',
@@ -152,14 +152,14 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
       <p className="text-xs text-stone-600">
         {scale ? (
           <>
-            1 px = {(scale.metersPerPixel * 100).toFixed(2)} cm, from {METHOD_NAMES[scale.method]}
-            {scale.residual > 0 && <>, {(scale.residual * 100).toFixed(1)}% off the other inputs</>}
+            Sized from {METHOD_NAMES[scale.method]}
+            {scale.residual > 0 && <>, {(scale.residual * 100).toFixed(1)}% off the other figures</>}
             .
           </>
         ) : (
           <>
-            Not set yet. Measure something on the plan to set its scale; everything else is drawn in
-            meters after.
+            Not set yet. Measure something on the plan you know the size of; everything else is
+            drawn to size after.
           </>
         )}
       </p>
@@ -167,7 +167,7 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
       {candidates.length > 0 && (
         <div className="flex flex-col gap-1">
           <p className="text-xs text-stone-600">
-            The plan&apos;s dimension labels fit more than one unit. Which are they in?
+            The measurements on your plan fit more than one unit. Which are they in?
           </p>
           {candidates.map((c) => (
             <button
@@ -178,7 +178,7 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
             >
               {UNITS[c.sourceUnit]}
               <span className="block text-xs text-stone-500">
-                Labels agree within {(c.residual * 100).toFixed(1)}%
+                Measurements agree within {(c.residual * 100).toFixed(1)}%
                 {!c.plausible && '; doors or rooms come out odd sizes'}
               </span>
             </button>
@@ -187,7 +187,7 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
       )}
       {waiting && candidates.length === 0 && (
         <p className="text-xs text-stone-600">
-          The plan was read (in orange) but has no dimension labels to scale it by. With the Scale
+          The plan was read (in orange) but has no measurements to size it by. With the Measure
           tool, click one of its walls or rooms you know the size of.
         </p>
       )}
@@ -227,7 +227,7 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
           <p className="text-xs text-stone-500">
             {outlinePixels
               ? `Outline drawn${scale ? `: ${squareMeters(outlinePixels * mpp2)} now` : ''}.`
-              : `With the Scale tool, click around the area (or click a room). ` +
+              : `With the Measure tool, click around the area (or click a room). ` +
                 COVERS_HINT[covers]}
           </p>
           <input
@@ -246,7 +246,7 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
               ? `Line drawn${scale ? `: ${formatLength(linePixels * mpp, imperial)} now` : ''}.`
               : method === 'area_and_side' && !measure.outline
                 ? 'Then draw a line along one side of it.'
-                : 'With the Scale tool, click both ends of a wall you know the length of ' +
+                : 'With the Measure tool, click both ends of a wall you know the length of ' +
                   '(or click a wall).'}
           </p>
           <input
@@ -266,7 +266,7 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
           onClick={apply}
           className="rounded-md bg-stone-800 px-3 py-1.5 text-white disabled:opacity-40"
         >
-          {scale ? 'Rescale the plan' : 'Set the scale'}
+          {scale ? 'Resize the plan' : 'Set the size'}
         </button>
         {(measure.line || measure.outline) && (
           <button
@@ -284,13 +284,13 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
 
       {checks.length > 0 && (
         <div className="flex flex-col gap-1">
-          <h4 className="text-xs font-medium text-stone-600">Dimension labels against the plan</h4>
+          <h4 className="text-xs font-medium text-stone-600">The plan&apos;s measurements against the drawing</h4>
           <ul className="flex flex-col gap-0.5 text-xs">
             {checks.map((c) => {
               const room = plan.rooms.find((r) => r.id === c.roomId);
               return (
                 <li key={c.labelId} className={c.agrees ? 'text-stone-600' : 'text-red-700'}>
-                  {c.agrees ? '✓' : '✗'} {room?.name}: label {c.text}, drawn{' '}
+                  {c.agrees ? '✓' : '✗'} {room?.name}: says {c.text}, drawn{' '}
                   {c.measured.map((m) => formatLength(m, imperial)).join(' × ')}
                   {` (${(c.error * 100).toFixed(1)}% off)`}
                 </li>
@@ -298,11 +298,6 @@ export function ScalePanel({ plan }: { plan: Floorplan }) {
             })}
           </ul>
         </div>
-      )}
-      {plan.reading && (
-        <p className="text-xs text-stone-400">
-          Read by {plan.reading.model} in {Math.round(plan.reading.durationMs / 1000)} s.
-        </p>
       )}
     </div>
   );

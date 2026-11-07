@@ -67,6 +67,22 @@ export function formatLength(meters: number, imperial: boolean): string {
   return inches === 0 ? `${feet}′` : `${feet}′ ${inches}″`;
 }
 
+/** A length to the nearest foot or tenth of a meter, for "about 11′ × 10′". */
+export function formatRough(meters: number, imperial: boolean): string {
+  return imperial ? `${Math.round(meters / FOOT)}′` : `${meters.toFixed(1)} m`;
+}
+
+/** A room's two sides, roughly: `11′ × 10′`, `3.4 × 3.0 m`. */
+export function formatSides(width: number, depth: number, imperial: boolean): string {
+  if (imperial) return `${formatRough(width, true)} × ${formatRough(depth, true)}`;
+  return `${width.toFixed(1)} × ${depth.toFixed(1)} m`;
+}
+
+/** An area in the plan's unit: `620 sq ft`, `58 m²`. */
+export function formatArea(m2: number, imperial: boolean): string {
+  return imperial ? `${Math.round(m2 / SQUARE_FOOT).toLocaleString('en-CA')} sq ft` : `${Math.round(m2)} m²`;
+}
+
 /**
  * A length the user typed, in meters: `12'4"`, `12 ft`, `3.6 m`, `360 cm`. A bare number is in
  * the plan's unit: feet on imperial plans, else meters.
