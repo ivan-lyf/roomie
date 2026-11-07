@@ -14,7 +14,8 @@
     },
     "web": {
       "root": "apps/web",
-      "framework": "vite"
+      "framework": "vite",
+      "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
     }
   },
   "rewrites": [
