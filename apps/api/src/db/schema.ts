@@ -58,6 +58,8 @@ export const floorplans = pgTable('floorplans', {
   name: text('name').notNull(),
   status: text('status').$type<FloorplanStatus>().notNull(),
   source: text('source').$type<FloorplanSource>().notNull().default('upload'),
+  /** The account that made it, if it was made signed in (M8): its homes, on any device. */
+  ownerId: uuid('owner_id'),
   image: jsonb('image').$type<PlanImage>(),
   walls: jsonb('walls').$type<Wall[]>().notNull(),
   openings: jsonb('openings').$type<Opening[]>().notNull(),

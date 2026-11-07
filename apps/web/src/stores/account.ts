@@ -1,7 +1,8 @@
 import type { Me } from '@roomie/schema';
 import { create } from 'zustand';
-import { fetchMe } from '../api';
+import { claimFloorplans, fetchMe } from '../api';
 import { supabase } from '../auth';
+import { browserHomes } from '../homes';
 
 // Who's signed in, and what they've spent on AI today: never undone, never saved.
 
@@ -35,5 +36,10 @@ supabase?.auth.onAuthStateChange((_, session) => {
   if (email === useAccount.getState().email) return;
   useAccount.setState({ email, me: undefined });
   // After the callback: Supabase holds its lock while it runs.
-  setTimeout(() => void useAccount.getState().refresh());
+  setTimeout(() => {
+    void useAccount.getState().refresh();
+    // The homes made here before signing in follow the account from now on (M8).
+    const ids = browserHomes();
+    if (email !== null && ids.length > 0) claimFloorplans(ids).catch(() => undefined);
+  });
 });

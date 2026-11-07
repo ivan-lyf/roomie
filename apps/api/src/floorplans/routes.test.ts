@@ -1,10 +1,12 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { Floorplan, FloorplanSummary } from '@roomie/schema';
+import { Floorplan, FloorplanSummary, Product } from '@roomie/schema';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import catalog from '../../../../fixtures/catalog/products.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import { createApp, type AppOptions } from '../app';
+import { products } from '../db/schema';
 import { testHomePlan } from '../ratings/pool';
 import { testDb } from '../test/db';
 import { pngHeader } from '../test/fixtures';
@@ -82,30 +84,108 @@ describe('POST /api/floorplans', () => {
   });
 });
 
+/** Two accounts, signed in by token. */
+const accounts = {
+  kind: 'verify' as const,
+  verify: async (token: string) =>
+    ({
+      ann: { id: '00000000-0000-4000-8000-0000000000a1', email: 'ann@example.com' },
+      bob: { id: '00000000-0000-4000-8000-0000000000b2', email: 'bob@example.com' },
+    })[token],
+};
+const as = (token: string) => ({ headers: { authorization: `Bearer ${token}` } });
+
+async function list(query = '', init: RequestInit = {}, options: Partial<AppOptions> = {}) {
+  const res = await app(options).request(`/api/floorplans${query}`, init);
+  expect(res.status).toBe(200);
+  return FloorplanSummary.array().parse(await res.json());
+}
+
 describe('floorplans', () => {
-  it('lists plans, most recently changed first', async () => {
+  it("lists this browser's plans, most recently changed first", async () => {
     const first = await uploaded();
     const second = await uploaded();
+    await uploaded();
     await app().request(`/api/floorplans/${first.id}`, {
       method: 'PUT',
       body: JSON.stringify({ ...first, name: 'Renamed' }),
     });
-    const list = FloorplanSummary.array().parse(
-      await (await app().request('/api/floorplans')).json(),
-    );
-    expect(list.map((p) => [p.id, p.name])).toEqual([
+    expect((await list(`?ids=${second.id},${first.id},nonsense`)).map((p) => [p.id, p.name])).toEqual([
       [first.id, 'Renamed'],
       [second.id, 'Unit 4B'],
     ]);
   });
 
+  it("lists nobody's plans to someone with none", async () => {
+    await uploaded();
+    expect(await list()).toEqual([]);
+  });
+
+  it("gives a plan made signed in to its account, and lists the account's plans anywhere", async () => {
+    const options = { auth: accounts };
+    const anns = await uploaded(options);
+    const res = await app(options).request('/api/floorplans', {
+      method: 'POST',
+      body: (() => {
+        const form = new FormData();
+        form.set('image', new File([new Uint8Array(pngHeader(10, 10))], 'a.png'));
+        return form;
+      })(),
+      ...as('ann'),
+    });
+    const owned = Floorplan.parse(await res.json());
+    expect((await list('', as('ann'), options)).map((p) => p.id)).toEqual([owned.id]);
+    expect(await list('', as('bob'), options)).toEqual([]);
+    // Bob's browser holds the id of the one Ann made signed out, and sees it with his own.
+    expect((await list(`?ids=${anns.id}`, as('bob'), options)).map((p) => p.id)).toEqual([
+      anns.id,
+    ]);
+  });
+
+  it("claims this browser's unowned plans on signing in, and nobody else's", async () => {
+    const options = { auth: accounts };
+    const loose = await uploaded();
+    const post = (token: string, ids: string[]) =>
+      app(options).request('/api/floorplans/claim', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+        headers: { authorization: `Bearer ${token}` },
+      });
+    expect(await (await post('ann', [loose.id])).json()).toEqual({ claimed: 1 });
+    expect(await (await post('bob', [loose.id])).json()).toEqual({ claimed: 0 });
+    expect((await list('', as('ann'), options)).map((p) => p.id)).toEqual([loose.id]);
+    const signedOut = await app(options).request('/api/floorplans/claim', {
+      method: 'POST',
+      body: JSON.stringify({ ids: [loose.id] }),
+    });
+    expect(signedOut.status).toBe(401);
+  });
+
+  it('sums up what is in each home for its card', async () => {
+    await db.insert(products).values(Product.array().parse(catalog));
+    const [a, b] = Product.array().parse(catalog);
+    const plan = await uploaded();
+    const at = { roomId: 'r1', x: 1, y: 1, rotation: 0 };
+    await app().request(`/api/floorplans/${plan.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...plan,
+        furniture: [
+          { id: 'f1', articleNo: a!.articleNo, ...at },
+          { id: 'f2', articleNo: a!.articleNo, ...at },
+          { id: 'f3', articleNo: b!.articleNo, ...at },
+        ],
+      }),
+    });
+    const [card] = await list(`?ids=${plan.id}`);
+    expect(card).toMatchObject({ hasImage: true, itemCount: 3 });
+    expect(card!.totalCad).toBeCloseTo(2 * a!.priceCad + b!.priceCad, 2);
+  });
+
   it('leaves the test homes added to rate out of the list, but opens them', async () => {
     const mine = await uploaded();
     const added = await testHomePlan(db, { name: '00-demo-1br', plan: Floorplan.parse(demo) });
-    const list = FloorplanSummary.array().parse(
-      await (await app().request('/api/floorplans')).json(),
-    );
-    expect(list.map((p) => p.id)).toEqual([mine.id]);
+    expect((await list(`?ids=${mine.id},${added!.plan.id}`)).map((p) => p.id)).toEqual([mine.id]);
     const res = await app().request(`/api/floorplans/${added!.plan.id}`);
     expect(Floorplan.parse(await res.json()).source).toBe('test_set');
   });

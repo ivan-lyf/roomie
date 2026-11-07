@@ -3,14 +3,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DEFAULT_CEILING_HEIGHT, isTraced, planStatus } from '@roomie/geometry';
 import { Floorplan, FloorplanEdit, FloorplanSummary, type Materials } from '@roomie/schema';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { Allowance } from '../allowance';
-import { accountOf, type Auth } from '../auth';
+import { accountOf, type Auth, optionalAccountOf } from '../auth';
 import type { Db } from '../db/client';
-import { floorplans } from '../db/schema';
+import { floorplans, products } from '../db/schema';
 import { ReadingCache } from '../plan-reader/cache';
 import { type PlanReader, ReaderError } from '../plan-reader/reader';
 import type { Storage } from '../storage';
@@ -91,6 +91,8 @@ export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }:
         await mkdir(path.dirname(localPath(key)), { recursive: true });
         await writeFile(localPath(key), bytes);
       }
+      // Made signed in, the home is the account's, on any device (M8); else only this browser's.
+      const owner = await optionalAccountOf(c, auth);
       const given = typeof body['name'] === 'string' ? body['name'].trim() : '';
       const name = (given || file.name.replace(/\.[^.]+$/, '') || 'My home').slice(0, 120);
       const [row] = await c.var.db
@@ -98,6 +100,7 @@ export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }:
         .values({
           id,
           name,
+          ownerId: owner?.id ?? null,
           status: 'uploaded',
           image: { key, width: info.width, height: info.height },
           walls: [],
@@ -116,20 +119,82 @@ export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }:
     },
   );
 
-  /** The plans people uploaded: the test homes added to rate (M7) aren't anyone's. */
+  /**
+   * Someone's homes: the ones in `?ids=` (made in this browser, which keeps their ids) and the
+   * ones their account owns, newest change first. Without either, none: nobody sees everyone's.
+   * The test homes added to rate (M7) aren't anyone's.
+   */
   app.get('/', async (c) => {
+    const ids = (c.req.query('ids') ?? '')
+      .split(',')
+      .filter((id) => z.uuid().safeParse(id).success)
+      .slice(0, 200);
+    const owner = await optionalAccountOf(c, auth);
+    const mine = [
+      ...(ids.length > 0 ? [inArray(floorplans.id, ids)] : []),
+      ...(owner ? [eq(floorplans.ownerId, owner.id)] : []),
+    ];
+    if (mine.length === 0) return c.json([]);
     const rows = await c.var.db
       .select({
         id: floorplans.id,
         name: floorplans.name,
         status: floorplans.status,
+        image: floorplans.image,
+        furniture: floorplans.furniture,
         createdAt: floorplans.createdAt,
         updatedAt: floorplans.updatedAt,
       })
       .from(floorplans)
-      .where(eq(floorplans.source, 'upload'))
+      .where(and(eq(floorplans.source, 'upload'), or(...mine)))
       .orderBy(desc(floorplans.updatedAt));
-    return c.json(z.array(FloorplanSummary).parse(rows));
+    const articleNos = [...new Set(rows.flatMap((r) => r.furniture.map((p) => p.articleNo)))];
+    const prices = new Map(
+      articleNos.length === 0
+        ? []
+        : (
+            await c.var.db
+              .select({ articleNo: products.articleNo, priceCad: products.priceCad })
+              .from(products)
+              .where(inArray(products.articleNo, articleNos))
+          ).map((p) => [p.articleNo, p.priceCad]),
+    );
+    const summaries = rows.map(({ image, furniture, ...row }) => {
+      const total = furniture.reduce((t, p) => t + (prices.get(p.articleNo) ?? 0), 0);
+      return {
+        ...row,
+        hasImage: image !== null,
+        itemCount: furniture.length,
+        totalCad: Math.round(total * 100) / 100,
+      };
+    });
+    return c.json(z.array(FloorplanSummary).parse(summaries));
+  });
+
+  /**
+   * Gives the account the homes made in this browser before signing in, so they follow it to
+   * other devices. Only homes nobody owns yet are claimed.
+   */
+  app.post('/claim', async (c) => {
+    const account = await accountOf(c, auth);
+    if (account instanceof Response) return account;
+    const body = z
+      .object({ ids: z.array(z.uuid()).max(200) })
+      .safeParse(await c.req.json().catch(() => undefined));
+    if (!body.success) return c.json({ error: z.prettifyError(body.error) }, 400);
+    if (body.data.ids.length === 0) return c.json({ claimed: 0 });
+    const claimed = await c.var.db
+      .update(floorplans)
+      .set({ ownerId: account.id })
+      .where(
+        and(
+          inArray(floorplans.id, body.data.ids),
+          isNull(floorplans.ownerId),
+          eq(floorplans.source, 'upload'),
+        ),
+      )
+      .returning({ id: floorplans.id });
+    return c.json({ claimed: claimed.length });
   });
 
   app.get('/:id', async (c) => {

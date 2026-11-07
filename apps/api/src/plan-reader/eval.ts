@@ -296,6 +296,7 @@ export function emptyPlan(name: string): Floorplan {
     name,
     status: 'uploaded',
     source: 'upload',
+    ownerId: null,
     image: null,
     walls: [],
     openings: [],

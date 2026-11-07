@@ -107,6 +107,25 @@ export async function accountOf(c: Context, auth: Auth | undefined): Promise<Acc
   );
 }
 
+/**
+ * The account a request is signed in as, or none: for routes that work signed out too and only
+ * remember who made something (a home's owner, M8). A bad or unverifiable token counts as none.
+ */
+export async function optionalAccountOf(
+  c: Context,
+  auth: Auth | undefined,
+): Promise<Account | undefined> {
+  if (!auth) return undefined;
+  if (auth.kind === 'off') return LOCAL_ACCOUNT;
+  const token = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
+  if (!token) return undefined;
+  try {
+    return await auth.verify(token);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Lets a request through only when it's signed in, with its account in `c.var.account`. */
 export function requireAccount(auth: Auth | undefined): MiddlewareHandler<AccountEnv> {
   return async (c, next) => {

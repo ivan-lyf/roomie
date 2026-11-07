@@ -284,6 +284,8 @@ export const Floorplan = z.object({
   name: z.string().min(1),
   status: FloorplanStatus,
   source: FloorplanSource.default('upload'),
+  /** The account that made it, when it was made signed in: it's listed for them anywhere. */
+  ownerId: z.uuid().nullable().default(null),
   image: PlanImage.nullable(),
   walls: z.array(Wall),
   openings: z.array(Opening),
@@ -309,13 +311,20 @@ export const Floorplan = z.object({
 });
 export type Floorplan = z.infer<typeof Floorplan>;
 
-/** A floorplan in a list of them. */
+/** A floorplan in a list of them: enough for a card in "Your homes". */
 export const FloorplanSummary = Floorplan.pick({
   id: true,
   name: true,
   status: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  /** Whether there's a plan image to show as the card's picture. */
+  hasImage: z.boolean(),
+  /** The pieces of furniture in the home. */
+  itemCount: z.number().int().nonnegative(),
+  /** What they cost together, in CAD, at the catalog's prices. */
+  totalCad: z.number().nonnegative(),
 });
 export type FloorplanSummary = z.infer<typeof FloorplanSummary>;
 
@@ -327,6 +336,7 @@ export type FloorplanSummary = z.infer<typeof FloorplanSummary>;
 export const FloorplanEdit = Floorplan.omit({
   id: true,
   source: true,
+  ownerId: true,
   image: true,
   reading: true,
   furnishedFrom: true,

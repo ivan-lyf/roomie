@@ -83,8 +83,13 @@ export async function fetchMe(signal?: AbortSignal): Promise<Me> {
   return Me.parse(await res.json());
 }
 
-export async function fetchFloorplans(signal?: AbortSignal): Promise<FloorplanSummary[]> {
-  const res = await fetch('/api/floorplans', { signal });
+/** The homes made in this browser (`ids`) and, signed in, the account's own (M8). */
+export async function fetchFloorplans(
+  ids: readonly string[],
+  signal?: AbortSignal,
+): Promise<FloorplanSummary[]> {
+  const query = ids.length > 0 ? `?ids=${ids.join(',')}` : '';
+  const res = await fetch(`/api/floorplans${query}`, { headers: await signedIn(), signal });
   if (!res.ok) throw await failure(res, 'GET /api/floorplans');
   return z.array(FloorplanSummary).parse(await res.json());
 }
@@ -95,14 +100,32 @@ export async function fetchFloorplan(id: string, signal?: AbortSignal): Promise<
   return Floorplan.parse(await res.json());
 }
 
-/** Uploads a plan image (PNG or JPEG) and returns the new, still empty, floorplan. */
+/**
+ * Uploads a plan image (PNG or JPEG) and returns the new, still empty, floorplan: the signed-in
+ * account's, when there is one.
+ */
 export async function uploadFloorplan(image: Blob, name: string): Promise<Floorplan> {
   const form = new FormData();
   form.set('image', image, `${name}.png`);
   form.set('name', name);
-  const res = await fetch('/api/floorplans', { method: 'POST', body: form });
+  const res = await fetch('/api/floorplans', {
+    method: 'POST',
+    body: form,
+    headers: await signedIn(),
+  });
   if (!res.ok) throw await failure(res, 'POST /api/floorplans');
   return Floorplan.parse(await res.json());
+}
+
+/** Gives the signed-in account the homes made in this browser that nobody owns yet. */
+export async function claimFloorplans(ids: readonly string[]): Promise<number> {
+  const res = await fetch('/api/floorplans/claim', {
+    method: 'POST',
+    headers: await signedIn({ 'content-type': 'application/json' }),
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) throw await failure(res, 'POST /api/floorplans/claim');
+  return z.object({ claimed: z.number() }).parse(await res.json()).claimed;
 }
 
 export const floorplanImageUrl = (id: string) => `/api/floorplans/${encodeURIComponent(id)}/image`;

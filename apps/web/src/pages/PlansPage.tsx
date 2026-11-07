@@ -2,6 +2,7 @@ import type { FloorplanStatus, FloorplanSummary } from '@roomie/schema';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { fetchFloorplans, uploadFloorplan } from '../api';
+import { browserHomes, rememberHome } from '../homes';
 import { useAccount } from '../stores/account';
 import { AccountLine } from '../ui/AccountLine';
 import { ACCEPTED, preparePlan } from '../upload';
@@ -28,7 +29,7 @@ export function PlansPage() {
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetchFloorplans(ctrl.signal)
+    fetchFloorplans(browserHomes(), ctrl.signal)
       .then(setPlans)
       .catch((e: unknown) => {
         if (!ctrl.signal.aborted) setListError(e instanceof Error ? e.message : String(e));
@@ -43,6 +44,7 @@ export function PlansPage() {
       const { image, name } = await preparePlan(file);
       setUpload({ state: 'busy', step: 'Uploading…' });
       const plan = await uploadFloorplan(image, name);
+      rememberHome(plan.id);
       navigate(`/plans/${plan.id}/edit`);
     } catch (e) {
       setUpload({ state: 'failed', error: e instanceof Error ? e.message : String(e) });
