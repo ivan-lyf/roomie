@@ -598,10 +598,11 @@ Out of M7: the learned reward model (LightGBM, after several hundred pairs, §7)
 ### M8 — Front end
 The screens people use, and a landing page, designed with Claude Design from `docs/frontend-design.md`.
 - [x] A Claude Design pass over the brief: the "Roomie Frontend Prototype" canvas on claude.ai (2026-10-28), screens 0–9 in the drafting-table look
-- [ ] Tokens and type, `ui/kit` primitives, and the landing page with My plans (§4.1)
-- [ ] The brief's phases A–E over the app as built: reading your plan, the guided Check wizard, the workspace shell, preferences and furnishing progress, "Why here?", the swap drawer, try another layout, the sign-in dialog and daily limit, and the shopping list
-- [ ] A copy pass with the brief's vocabulary (§9), and `copy.test.ts` checking for banned words
-- [ ] First-time help (§5) and accessibility (§7): every action by keyboard, an axe check with no serious issues
+- [x] Tokens and type, `ui/kit` primitives, and the landing page with My plans (§4.1)
+- [x] The brief's phases A–E over the app as built: reading your plan, the guided Check wizard, the workspace shell, preferences and furnishing progress, "Why here?", the swap drawer, try another layout, the sign-in dialog and daily limit, and the shopping list
+- [x] A copy pass with the brief's vocabulary (§9), and `copy.test.ts` checking for banned words
+- [x] First-time help (§5) and accessibility (§7): every action by keyboard, an axe check with no serious issues
+- [ ] A first-time tester who isn't a developer, from upload to a shopping list, without help (§11)
 - Internal pages (`/catalog`, `/admin/rate`) stay plain. Mobile stays out of scope.
 
 **Done when:** the brief's definition of done (§11) holds for every screen: a first-time tester who isn't a developer goes from upload to a furnished home and a shopping list without help.
@@ -628,6 +629,15 @@ The prototype's delete on home cards is left out (nothing is hard-deleted, and t
 9. First-time tips, keyboard and focus, live region, reduced motion, and an axe check.
 
 The API still reports rooms finishing only when the whole job ends, so the progress card fills the home in at the end, as §4.5 allows.
+
+**Built** (2026-11-07), steps 1–9, checked in headless Chromium against the dev server and with axe on every screen (no serious or critical issues). Where it differs from the brief:
+- "Try a sample apartment" makes a copy of the sample as a home of one's own (`POST /floorplans/sample`), so the sample can be checked, furnished and kept like an upload.
+- Style cards are drawn plan tiles in each style's colours, not renders of the sample home: renders need a furnishing per style.
+- "Add furniture" picks a piece, then a click on the floor places it; dropping it at the solver's best spot is still to do.
+- A room that couldn't be furnished offers: raise the budget, drop what was asked for in it, or leave it empty. Naming the one piece to drop needs reason codes from the API, which sends sentences.
+- The top view looks straight down with the perspective camera, turned but never tilted, rather than an orthographic one.
+
+**Still to do:** the first-time tester (§11), and a paid end-to-end run of furnishing from the new Preferences page (a few cents on Haiku).
 
 ## 7. Feedback pipeline roadmap (post-MVP)
 
