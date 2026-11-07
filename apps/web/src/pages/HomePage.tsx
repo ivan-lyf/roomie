@@ -20,6 +20,7 @@ import { ContextPanel } from '../ui/workspace/ContextPanel';
 import { FurnishingCard } from '../ui/workspace/FurnishingCard';
 import { RoomRail } from '../ui/workspace/RoomRail';
 import { SwapSheet } from '../ui/workspace/SwapSheet';
+import { Tips } from '../ui/workspace/Tips';
 import { TopBar } from '../ui/workspace/TopBar';
 import { ViewControls } from '../ui/workspace/ViewControls';
 
@@ -65,6 +66,7 @@ export function HomePage({ id }: { id: string }) {
     ),
   );
   const { view, cutaway, ceilings, resets, imperial: chosenUnits } = useWorkspace();
+  const busy = useFurnish((s) => s.busy);
   const imperial = chosenUnits ?? isImperial(plan?.scale?.sourceUnit);
 
   // Keep the room in the URL, so a view can be linked to.
@@ -170,6 +172,9 @@ export function HomePage({ id }: { id: string }) {
           />
           <div className="pointer-events-none absolute top-4 left-4">
             <FurnishingCard plan={plan} />
+          </div>
+          <div className="pointer-events-none absolute top-4 right-4">
+            <Tips show={plan.furniture.length > 0 && !busy} />
           </div>
           <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
             <ViewControls roomId={roomId} firstRoom={firstRoom} onRoom={setRoomId} />
