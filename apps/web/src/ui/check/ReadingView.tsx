@@ -5,7 +5,13 @@ import { ButtonLink, Notice } from '../kit';
 const STEPS = ['Finding walls', 'Reading room names', 'Finding doors and windows'];
 
 /** While a plan is read: the image with a scanning line, and steps that pass by (§4.2). */
-export function ReadingImage({ imageUrl }: { imageUrl: string | undefined }) {
+export function ReadingImage({
+  imageUrl,
+  scanning = true,
+}: {
+  imageUrl: string | undefined;
+  scanning?: boolean;
+}) {
   return (
     <div className="relative overflow-hidden border border-line bg-surface p-8">
       {imageUrl ? (
@@ -13,7 +19,9 @@ export function ReadingImage({ imageUrl }: { imageUrl: string | undefined }) {
       ) : (
         <div className="h-80" />
       )}
-      <div aria-hidden className="absolute inset-x-0 h-0.5 animate-scan bg-accent/60 shadow-[0_0_24px_8px_rgb(29_78_216/0.18)]" />
+      {scanning && (
+        <div aria-hidden className="absolute inset-x-0 h-0.5 animate-scan bg-accent/60 shadow-[0_0_24px_8px_rgb(29_78_216/0.18)]" />
+      )}
     </div>
   );
 }

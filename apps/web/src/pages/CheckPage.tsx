@@ -102,7 +102,7 @@ export function CheckPage({ id }: { id: string }) {
       <Shell id={id} step="plan">
         <div className="flex flex-wrap items-center gap-14">
           <div className="min-w-0 flex-[999_1_560px]">
-            <ReadingImage imageUrl={imageUrl} />
+            <ReadingImage imageUrl={imageUrl} scanning={false} />
           </div>
           <div className="flex-[1_1_300px]">
             <CantRead

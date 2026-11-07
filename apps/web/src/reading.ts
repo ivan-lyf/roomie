@@ -2,7 +2,7 @@ import { isTraced } from '@roomie/geometry';
 import type { Floorplan, RefusalCode } from '@roomie/schema';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, readFloorplan } from './api';
-import { supabase } from './auth';
+import { signOut, supabase } from './auth';
 import { DEMO_ID } from './plans';
 import { useAccount } from './stores/account';
 import { useEditor } from './stores/editor';
@@ -51,6 +51,12 @@ export function usePlanReader(id: string, plan: Floorplan | undefined) {
         editor.setTool(result.scale ? 'select' : 'measure');
         setRead({ state: 'idle' });
       } catch (e) {
+        // The browser thought it was signed in, but the session has run out: sign in again.
+        // Signing out drops the stale session, so the reading waits for a fresh one (below).
+        if (e instanceof ApiError && e.code === 'sign_in_required') {
+          await signOut();
+          return setRead({ state: 'signIn', replace });
+        }
         setRead({
           state: 'failed',
           message: e instanceof Error ? e.message : String(e),
