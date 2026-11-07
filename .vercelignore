@@ -1,0 +1,7 @@
+# Never uploaded to Vercel: scraped IKEA data and models (personal use only, CLAUDE.md), and the
+# offline tools that make them.
+/data
+/ml
+/tools/scraper
+.venv/
+__pycache__/

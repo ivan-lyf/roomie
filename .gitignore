@@ -8,6 +8,7 @@ node_modules/
 .pnpm-store/
 
 # Build output
+.vercel/
 dist/
 build/
 .vite/

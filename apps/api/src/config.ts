@@ -2,7 +2,13 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { StorageConfig } from './storage';
 
-const defaultDataDir = fileURLToPath(new URL('../../../data', import.meta.url));
+/**
+ * Caches and uploads without a bucket: the repo's data/ locally; on Vercel, where only /tmp can
+ * be written, a folder there (it lasts only as long as the function's instance).
+ */
+const defaultDataDir = process.env['VERCEL']
+  ? '/tmp/roomie'
+  : fileURLToPath(new URL('../../../data', import.meta.url));
 
 /**
  * The Gemini models that read plans, in order: Google's current Flash model (the free tier has no
