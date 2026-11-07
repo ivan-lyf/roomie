@@ -595,15 +595,39 @@ All of M7 comes to about $0.30–0.50 of the roughly $1.40 left on the Claude ke
 
 Out of M7: the learned reward model (LightGBM, after several hundred pairs, §7), the vision judge and its screenshots, users' own edits as signals (§7), dragging items to fix a layout on the rating page, voice notes, rating by anyone but admins, fine-tuning, and the user-facing design (M8).
 
-### M8 — Front end (later)
-The screens people use, and a landing page, designed with Claude Design from `docs/frontend-design.md`. Until then, every milestone's screens stay plain.
-- [ ] A Claude Design pass over the brief: tokens and type, `ui/kit` primitives, and the landing page with My plans (§4.1)
+### M8 — Front end
+The screens people use, and a landing page, designed with Claude Design from `docs/frontend-design.md`.
+- [x] A Claude Design pass over the brief: the "Roomie Frontend Prototype" canvas on claude.ai (2026-10-28), screens 0–9 in the drafting-table look
+- [ ] Tokens and type, `ui/kit` primitives, and the landing page with My plans (§4.1)
 - [ ] The brief's phases A–E over the app as built: reading your plan, the guided Check wizard, the workspace shell, preferences and furnishing progress, "Why here?", the swap drawer, try another layout, the sign-in dialog and daily limit, and the shopping list
 - [ ] A copy pass with the brief's vocabulary (§9), and `copy.test.ts` checking for banned words
 - [ ] First-time help (§5) and accessibility (§7): every action by keyboard, an axe check with no serious issues
 - Internal pages (`/catalog`, `/admin/rate`) stay plain. Mobile stays out of scope.
 
-**Done when:** the brief's definition of done (§11) holds for every screen: a first-time tester who isn't a developer goes from upload to a furnished home and a shopping list without help. Its detailed steps are written when it starts.
+**Done when:** the brief's definition of done (§11) holds for every screen: a first-time tester who isn't a developer goes from upload to a furnished home and a shopping list without help.
+
+#### M8 in detail
+
+**Sources.** The brief (`docs/frontend-design.md`) settles behaviour and words; the prototype canvas settles the look. Where they differ, the brief wins, with two decisions taken with Ivan on 2026-11-07:
+- **Homes belong to whoever made them.** Sign-in is still asked for only before an AI step, and homes still autosave without an account. A home made while signed in is owned by the account (`floorplans.owner_id`); "Your homes" lists the account's homes plus the ones made in this browser (their ids kept in `localStorage`), and signing in claims this browser's unowned homes. `GET /floorplans` no longer lists everyone's. `GET`/`PUT /floorplans/:id` stay open to anyone holding the id, for now.
+- **A welcome page at `/`**, as the prototype draws it. The app's start screen (upload plus Your homes) moves to `/homes`; a visitor who has homes goes straight there.
+
+The prototype's delete on home cards is left out (nothing is hard-deleted, and the brief doesn't ask for it).
+
+**Routes.** `/` welcome, `/homes` start, `/plans/:id/check` reading and the Check wizard, `/plans/:id/edit` the advanced editor, `/plans/:id/preferences`, `/plans/:id` the workspace (furnishing is a state of it; `/3d` redirects), `/plans/:id/list` the shopping list.
+
+**Steps**, each its own commits:
+1. Foundations: tokens and fonts (§6) in `index.css`, `ui/kit` on Radix primitives and `lucide-react`, `copy.ts` (vocabulary, room-type icons, problem and refusal messages), `copy.test.ts` for banned words, the narrow-screen notice.
+2. API: `owner_id` (migration `0010`), the list by `?ids=` plus owner, `POST /floorplans/claim`, and summaries with item count and total for the cards.
+3. Welcome and Your homes.
+4. Reading and the Check wizard (size, rooms, doors and windows) over `PlanCanvas` in a view mode; the editor's copy pass, with Done going back to Check.
+5. Preferences: rooms, budget with three anchors (600, 1,200 and 2,500 per room), style cards, must-haves.
+6. Workspace: top bar, room rail, view controls with a top view, context panel with the item card and "Why here?", swap and add sheets, remove with an undo toast, snap back from invalid drops, furnishing progress with per-room fixes.
+7. Shopping list in the new look.
+8. The sign-in dialog before AI steps and the daily-limit message; no dollars on user screens.
+9. First-time tips, keyboard and focus, live region, reduced motion, and an axe check.
+
+The API still reports rooms finishing only when the whole job ends, so the progress card fills the home in at the end, as §4.5 allows.
 
 ## 7. Feedback pipeline roadmap (post-MVP)
 
