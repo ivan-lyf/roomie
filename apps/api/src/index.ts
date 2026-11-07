@@ -1,4 +1,3 @@
-import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { type Auth, signingKeyCount, supabaseVerifier } from './auth';
 import { loadConfig } from './config';
@@ -47,6 +46,7 @@ if (!auth) {
     (e: unknown) => console.warn("Couldn't fetch the Supabase project's signing keys:", e),
   );
 }
+/** The API, built from the environment: served by `dev.ts` locally, as a function on Vercel. */
 const app = createApp({
   dataDir: config.dataDir,
   db,
@@ -61,6 +61,5 @@ const app = createApp({
   admins: config.admins,
 });
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`api listening on http://localhost:${info.port}`);
-});
+export default app;
+export const port = config.port;
