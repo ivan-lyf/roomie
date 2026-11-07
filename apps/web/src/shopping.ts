@@ -23,7 +23,7 @@ export type ShoppingList = {
   totalCad: number;
   /** What the items IKEA no longer sells come to, within the total. */
   unavailableCad: number;
-  /** When the prices were scraped: the latest of them. */
+  /** When the prices were read from IKEA.ca: the oldest of them, the date to check against. */
   pricedAt: Date | undefined;
 };
 
@@ -82,7 +82,7 @@ export function shoppingList(
     count: lines.reduce((s, l) => s + l.quantity, 0),
     totalCad: sum(lines),
     unavailableCad: sum(lines.filter((l) => l.flag === 'discontinued')),
-    pricedAt: dates.length > 0 ? new Date(Math.max(...dates)) : undefined,
+    pricedAt: dates.length > 0 ? new Date(Math.min(...dates)) : undefined,
   };
 }
 
@@ -131,7 +131,46 @@ export function toCsv(list: ShoppingList): string {
   return `\uFEFF${rows.map((r) => r.map(field).join(',')).join('\r\n')}\r\n`;
 }
 
-/** The list as plain text, to paste: one line per product, its article number first. */
+/** A room's part of the list: its lines with how many go in it, and what they come to. */
+export type RoomGroup = {
+  roomId: string;
+  name: string;
+  lines: { line: ShoppingLine; quantity: number; cad: number | undefined }[];
+  subtotalCad: number;
+};
+
+/** The list room by room (§4.7), identical pieces in a room on one line, rooms in plan order. */
+export function byRoom(list: ShoppingList, rooms: Floorplan['rooms']): RoomGroup[] {
+  return rooms.flatMap((room) => {
+    const lines = list.lines.flatMap((line) => {
+      const here = line.rooms.find((r) => r.roomId === room.id);
+      if (!here) return [];
+      const cad =
+        line.unitCad === undefined ? undefined : (cents(line.unitCad) * here.quantity) / 100;
+      return [{ line, quantity: here.quantity, cad }];
+    });
+    if (lines.length === 0) return [];
+    const subtotalCad = lines.reduce((t, l) => t + cents(l.cad ?? 0), 0) / 100;
+    return [{ roomId: room.id, name: room.name, lines, subtotalCad }];
+  });
+}
+
+/**
+ * The list as plain text, to paste into a note or an email (§4.7): per product its name and
+ * colour, article number, quantity, price and link.
+ */
 export function toText(list: ShoppingList): string {
-  return list.lines.map((l) => `${l.articleNo} × ${l.quantity}  ${lineName(l)}`).join('\n');
+  return list.lines
+    .map((l) =>
+      [
+        `${l.quantity} × ${lineName(l)}`,
+        l.articleNo,
+        l.lineCad === undefined ? 'price unknown' : `$${l.lineCad.toFixed(2)}`,
+        l.product?.url,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    )
+    .concat(`Total: $${list.totalCad.toFixed(2)}`)
+    .join('\n');
 }

@@ -1,6 +1,6 @@
 import type { Product } from '@roomie/schema';
 import { describe, expect, it } from 'vitest';
-import { shoppingList, toCsv, toText } from './shopping';
+import { byRoom, shoppingList, toCsv, toText } from './shopping';
 
 const product = (
   articleNo: string,
@@ -88,7 +88,7 @@ describe('shoppingList', () => {
       'missing',
     ]);
     expect(list.lines[3]!.lineCad).toBeUndefined();
-    expect(list.pricedAt).toEqual(new Date('2026-10-25T00:00:00Z'));
+    expect(list.pricedAt).toEqual(new Date('2026-10-20T00:00:00Z'));
   });
 
   it('adds many small prices exactly', () => {
@@ -119,9 +119,23 @@ describe('toCsv', () => {
 });
 
 describe('toText', () => {
-  it('lists article numbers with quantities, to paste', () => {
-    expect(toText(shoppingList(plan, products)).split('\n')[0]).toBe(
-      '900.000.12 × 3  TEST Nightstand - white',
+  it('lists each product with its number, quantity, price and link, to paste', () => {
+    const lines = toText(shoppingList(plan, products)).split('\n');
+    expect(lines[0]).toBe(
+      '3 × TEST Nightstand - white · 900.000.12 · $59.97 · https://www.ikea.com/ca/en/p/test-90000012/',
     );
+    expect(lines.at(-1)).toBe('Total: $1017.97');
+  });
+});
+
+describe('byRoom', () => {
+  it('splits the list by room, with how many go in each and what each room comes to', () => {
+    const groups = byRoom(shoppingList(plan, products), plan.rooms);
+    expect(groups.map((g) => g.name)).toEqual(['Bedroom', 'Living']);
+    expect(groups[0]!.lines.map((l) => [l.line.articleNo, l.quantity, l.cad])).toEqual([
+      ['900.000.12', 2, 39.98],
+    ]);
+    const total = groups.reduce((t, g) => t + g.subtotalCad, 0);
+    expect(total).toBeCloseTo(shoppingList(plan, products).totalCad, 9);
   });
 });
