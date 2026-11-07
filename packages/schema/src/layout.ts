@@ -118,4 +118,32 @@ export const GenerationJob = z.object({
   /** What the LLM calls cost, in dollars, when the model's price is known. */
   costUsd: z.number().optional(),
 });
+
+/** What a furnishing was asked for: the whole home, new pieces for a room, or a rearrange. */
+export const GenerationRoute = z.enum(['furnish_home', 'new_pieces', 'rearrange']);
+export type GenerationRoute = z.infer<typeof GenerationRoute>;
+
+/**
+ * A furnishing as stored, so any server can answer how it's going (M8: the API runs as
+ * functions, each with its own memory). The browser sees it as a `GenerationJob`.
+ */
+export const Generation = z.object({
+  /** The `generationId` its layouts are logged under. */
+  id: z.uuid(),
+  floorplanId: z.uuid(),
+  /** Who asked; none for a rearrange, which anyone may ask for. */
+  accountId: z.uuid().nullable(),
+  route: GenerationRoute,
+  /** The room furnished again; none for the whole home. */
+  roomId: z.string().nullable(),
+  status: GenerationJob.shape.status,
+  rooms: z.array(RoomProgress),
+  error: z.string().nullable(),
+  layoutId: z.uuid().nullable(),
+  furniture: z.array(Placement).nullable(),
+  costUsd: z.number().nonnegative().nullable(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type Generation = z.infer<typeof Generation>;
 export type GenerationJob = z.infer<typeof GenerationJob>;

@@ -1,7 +1,7 @@
-import type { Floorplan, Layout, Product, Rating, Usage } from '@roomie/schema';
+import type { Floorplan, Generation, Layout, Product, Rating, Usage } from '@roomie/schema';
 import type { InferSelectModel } from 'drizzle-orm';
 import { describe, expectTypeOf, it } from 'vitest';
-import type { floorplans, layouts, products, ratings, usage } from './schema';
+import type { floorplans, generations, layouts, products, ratings, usage } from './schema';
 
 // Type-level checks: `pnpm typecheck` fails if a table drifts from its zod schema.
 describe('db schema', () => {
@@ -11,5 +11,6 @@ describe('db schema', () => {
     expectTypeOf<InferSelectModel<typeof layouts>>().toEqualTypeOf<Layout>();
     expectTypeOf<InferSelectModel<typeof ratings>>().toEqualTypeOf<Rating>();
     expectTypeOf<InferSelectModel<typeof usage>>().toEqualTypeOf<Usage>();
+    expectTypeOf<InferSelectModel<typeof generations>>().toEqualTypeOf<Generation>();
   });
 });

@@ -4,7 +4,12 @@
     "api": {
       "root": "apps/api",
       "framework": "hono",
-      "entrypoint": "src/index.ts"
+      "entrypoint": "src/index.ts",
+      "functions": {
+        "src/index.ts": {
+          "maxDuration": 300
+        }
+      }
     },
     "web": {
       "root": "apps/web",
@@ -14,11 +19,15 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": { "service": "api" }
+      "destination": {
+        "service": "api"
+      }
     },
     {
       "source": "/(.*)",
-      "destination": { "service": "web" }
+      "destination": {
+        "service": "web"
+      }
     }
   ]
 }

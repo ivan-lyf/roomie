@@ -1,3 +1,4 @@
+import { waitUntil } from '@vercel/functions';
 import { createApp } from './app';
 import { type Auth, signingKeyCount, supabaseVerifier } from './auth';
 import { loadConfig } from './config';
@@ -59,6 +60,8 @@ const app = createApp({
   ...(auth && { auth }),
   allowance: config.allowance,
   admins: config.admins,
+  // On Vercel a function may stop once it has answered: furnishing goes on after its 202.
+  ...(process.env['VERCEL'] && { background: waitUntil }),
 });
 
 export default app;

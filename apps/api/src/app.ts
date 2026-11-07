@@ -43,6 +43,8 @@ export type AppOptions = {
   roomReviser?: RoomReviser;
   /** The time now, for tests of the allowance's day. */
   now?: () => Date;
+  /** Keeps work going after its response: Vercel's `waitUntil` (see `layoutRoutes`). */
+  background?: (work: Promise<unknown>) => void;
 };
 
 export const DEFAULT_ALLOWANCE: AllowanceConfig = { dailyUsd: 1, timeZone: 'America/Vancouver' };
@@ -88,6 +90,7 @@ export function createApp(options: AppOptions) {
       seeds: options.layoutSeeds,
       auth,
       allowance,
+      background: options.background,
     }),
   );
 

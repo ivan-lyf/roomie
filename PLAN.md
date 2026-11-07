@@ -639,6 +639,8 @@ The API still reports rooms finishing only when the whole job ends, so the progr
 
 **Still to do:** the first-time tester (§11), and a paid end-to-end run of furnishing from the new Preferences page (a few cents on Haiku).
 
+**Deploying** (2026-11-07): `vercel.json` runs `api` (at `/api/*`) and `web` (everything else) as one Vercel project. Furnishings live in the `generations` table, not the API's memory, so any function instance answers a poll and holds a home, or an account, to one furnishing at a time; one untouched for 10 minutes counts as failed. The work after a furnishing's 202 is kept alive with `waitUntil`, within the API's 300 s limit. Still needed before a deploy works: `DATA_DIR=/tmp/roomie` and the storage variables in Vercel, the sample apartment's image bundled with the API, and the account lock for plan reading, which is still per instance.
+
 ## 7. Feedback pipeline roadmap (post-MVP)
 
 1. **Few-shot prompting** with top-rated layouts, and lessons from your rating notes (M7)

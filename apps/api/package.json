@@ -23,6 +23,7 @@
     "@hono/node-server": "^2.1.5",
     "@roomie/geometry": "workspace:*",
     "@roomie/schema": "workspace:*",
+    "@vercel/functions": "^3.11.0",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.13",

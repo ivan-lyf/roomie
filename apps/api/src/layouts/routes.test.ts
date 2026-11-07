@@ -18,11 +18,12 @@ import catalog from '../../../../fixtures/catalog/products.json';
 import intentJson from '../../../../fixtures/plans/00-demo-1br/intent.json';
 import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import { type AppOptions, createApp } from '../app';
-import { layouts, products, usage } from '../db/schema';
+import { generations, layouts, products, usage } from '../db/schema';
 import { ReaderError } from '../plan-reader/reader';
 import { testDb } from '../test/db';
 import { pngHeader } from '../test/fixtures';
 import type { IntentWriter } from './intent';
+import { STALE_MS } from './jobs';
 
 let dataDir: string;
 let db: Awaited<ReturnType<typeof testDb>>;
@@ -121,9 +122,9 @@ describe('POST /api/floorplans/:id/layouts', () => {
     let job: GenerationJob | undefined;
     for (let i = 0; i < 100 && job?.status !== 'done' && job?.status !== 'failed'; i++) {
       await new Promise((r) => setTimeout(r, 50));
-      // The same app: generations live in its memory.
+      // Another instance of the API, as on Vercel: generations live in the database.
       job = (await (
-        await served.request(`/api/generations/${generationId}`)
+        await app().request(`/api/generations/${generationId}`)
       ).json()) as GenerationJob;
     }
     expect(job).toMatchObject({ status: 'done', rooms: [{ status: 'done' }, { status: 'done' }] });
@@ -290,9 +291,50 @@ describe('POST /api/floorplans/:id/rooms/:roomId/layouts', () => {
     const served = app(writer);
     const first = await post(served, `/api/floorplans/${plan.id}/layouts`, inputs);
     expect(first.status).toBe(202);
-    const second = await post(served, url, pieces);
+    // Refused by another instance too: the home is held in the database.
+    const second = await post(app(writer), url, pieces);
     expect(second.status).toBe(409);
     expect((await finished(served, first)).status).toBe('done');
+  });
+
+  it('holds an account to one furnishing at a time, whichever instance is asked', async () => {
+    const [one, two] = [await savedDemo(), await savedDemo()];
+    const served = app(writer);
+    const first = await post(served, `/api/floorplans/${one.id}/layouts`, inputs);
+    expect(first.status).toBe(202);
+    const other = await post(app(writer), `/api/floorplans/${two.id}/layouts`, inputs);
+    expect(other.status).toBe(409);
+    expect(await other.json()).toMatchObject({ code: 'busy' });
+    expect((await finished(served, first)).status).toBe('done');
+  });
+
+  it('lets go of a home whose furnishing died with its server', async () => {
+    const plan = await savedDemo();
+    await db.insert(generations).values({
+      id: randomUUID(),
+      floorplanId: plan.id,
+      accountId: null,
+      route: 'furnish_home',
+      roomId: null,
+      status: 'running',
+      rooms: [],
+      updatedAt: new Date(Date.now() - STALE_MS - 1000),
+    });
+    const served = app(writer);
+    const res = await post(served, `/api/floorplans/${plan.id}/layouts`, inputs);
+    expect(res.status).toBe(202);
+    expect((await finished(served, res)).status).toBe('done');
+  });
+
+  it('keeps furnishing after it answers, through the background it is given', async () => {
+    const plan = await savedDemo();
+    const kept: Promise<unknown>[] = [];
+    const served = app(writer, { background: (work) => void kept.push(work) });
+    const res = await post(served, `/api/floorplans/${plan.id}/layouts`, inputs);
+    expect(res.status).toBe(202);
+    expect(kept).toHaveLength(1);
+    await kept[0];
+    expect((await finished(served, res)).status).toBe('done');
   });
 });
 

@@ -4,7 +4,9 @@ import type {
   Dims,
   FloorplanSource,
   FloorplanStatus,
+  Generation,
   GenerationInputs,
+  GenerationRoute,
   ItemNote,
   LayoutStatus,
   LlmRoute,
@@ -14,6 +16,7 @@ import type {
   Obstacle,
   Opening,
   Placement,
+  RoomProgress,
   PlanImage,
   PlanReading,
   PlanText,
@@ -131,6 +134,33 @@ export const layouts = pgTable(
   (t) => [
     index('layouts_floorplan_id_idx').on(t.floorplanId),
     index('layouts_generation_id_idx').on(t.generationId),
+  ],
+).enableRLS();
+
+/** Furnishings, under way or done: kept here so any instance of the API can answer (M8). */
+export const generations = pgTable(
+  'generations',
+  {
+    id: uuid('id').primaryKey(),
+    floorplanId: uuid('floorplan_id')
+      .notNull()
+      .references(() => floorplans.id),
+    // A Supabase Auth user, as in `usage`.
+    accountId: uuid('account_id'),
+    route: text('route').$type<GenerationRoute>().notNull(),
+    roomId: text('room_id'),
+    status: text('status').$type<Generation['status']>().notNull(),
+    rooms: jsonb('rooms').$type<RoomProgress[]>().notNull(),
+    error: text('error'),
+    layoutId: uuid('layout_id'),
+    furniture: jsonb('furniture').$type<Placement[]>(),
+    costUsd: numeric('cost_usd', { precision: 10, scale: 6, mode: 'number' }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('generations_floorplan_status_idx').on(t.floorplanId, t.status),
+    index('generations_account_status_idx').on(t.accountId, t.status),
   ],
 ).enableRLS();
 
