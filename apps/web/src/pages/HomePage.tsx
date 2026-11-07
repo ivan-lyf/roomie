@@ -109,7 +109,7 @@ export function HomePage({ id }: { id: string }) {
     return (
       <p className="p-8 text-sm text-stone-700">
         {error}{' '}
-        <Link href="/" className="underline">
+        <Link href="/homes" className="underline">
           Back to your plans
         </Link>
       </p>

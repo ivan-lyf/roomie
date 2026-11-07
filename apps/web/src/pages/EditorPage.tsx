@@ -99,7 +99,7 @@ export function EditorPage({ id }: { id: string }) {
     return (
       <p className="p-8 text-sm text-stone-700">
         {error}{' '}
-        <Link href="/" className="underline">
+        <Link href="/homes" className="underline">
           Back to your plans
         </Link>
       </p>
@@ -118,7 +118,7 @@ export function EditorPage({ id }: { id: string }) {
   return (
     <main className="flex h-full flex-col text-sm text-stone-800">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-stone-200 bg-white px-3">
-        <Link href="/" className="text-stone-500 hover:text-stone-800">
+        <Link href="/homes" className="text-stone-500 hover:text-stone-800">
           ← Plans
         </Link>
         <input
@@ -159,7 +159,7 @@ export function EditorPage({ id }: { id: string }) {
           </button>
         )}
         <Link
-          href={`/plans/${id}/3d`}
+          href={`/plans/${id}`}
           className={`rounded-md px-3 py-1.5 ${
             plan.walls.length > 0 && plan.scale
               ? 'bg-stone-800 text-white'

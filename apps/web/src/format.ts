@@ -49,6 +49,9 @@ const cad = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' 
 /** A price in Canadian dollars: `$1,249.00`. */
 export const formatPrice = (cadAmount: number) => cad.format(cadAmount);
 
+/** A price without cents when it has none, for totals and labels: `$1,249`, `$49.99`. */
+export const formatDollars = (cadAmount: number) => cad.format(cadAmount).replace(/\.00$/, '');
+
 export const squareMeters = (m2: number) =>
   `${m2.toFixed(1)} m² · ${Math.round(m2 / SQUARE_FOOT)} sq ft`;
 

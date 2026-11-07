@@ -42,7 +42,7 @@ export function HomePanel(props: Props) {
   return (
     <aside className="m-4 flex w-96 shrink-0 flex-col gap-3 overflow-y-auto rounded-xl bg-white p-4 text-sm text-stone-800 shadow-lg">
       <div className="flex items-center justify-between text-xs">
-        <Link href="/" className="text-stone-500 hover:text-stone-800">
+        <Link href="/homes" className="text-stone-500 hover:text-stone-800">
           ← Plans
         </Link>
         <UndoRedo />

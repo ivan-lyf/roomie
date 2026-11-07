@@ -45,7 +45,7 @@ export function ListPage({ id }: { id: string }) {
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-4 p-8 text-sm text-stone-800 print:p-0">
-      <Link href={`/plans/${id}/3d`} className="text-xs text-stone-500 print:hidden">
+      <Link href={`/plans/${id}`} className="text-xs text-stone-500 print:hidden">
         ← Back to the home
       </Link>
       <header>
@@ -60,7 +60,7 @@ export function ListPage({ id }: { id: string }) {
       {list.lines.length === 0 ? (
         <p className="text-stone-500">
           Nothing to buy yet: furnish the home first.{' '}
-          <Link href={`/plans/${id}/3d`} className="underline">
+          <Link href={`/plans/${id}`} className="underline">
             Open it in 3D
           </Link>
         </p>
@@ -154,7 +154,7 @@ function Line({ id, line }: { id: string; line: ShoppingLine }) {
             {line.flag === 'discontinued' ? 'No longer sold at IKEA' : 'No longer in the catalog'}
             <span className="print:hidden">
               {': '}
-              <Link href={`/plans/${id}/3d?room=${first.roomId}`} className="underline">
+              <Link href={`/plans/${id}?room=${first.roomId}`} className="underline">
                 swap it
               </Link>
             </span>

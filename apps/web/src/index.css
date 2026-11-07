@@ -6,7 +6,7 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-canvas: #f7f7f4;
-  --color-grid: #e6e6e0;
+  --color-grid-line: #e6e6e0;
   --color-surface: #ffffff;
   --color-ink: #1c1c1a;
   --color-ink-muted: #4a4a45;
@@ -52,8 +52,8 @@
 @utility bg-grid {
   background-color: var(--color-canvas);
   background-image:
-    linear-gradient(var(--color-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+    linear-gradient(var(--color-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-grid-line) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 

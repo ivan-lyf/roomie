@@ -303,7 +303,7 @@ export function RatePage() {
   const header = (
     <header className="flex flex-wrap items-baseline justify-between gap-2">
       <div>
-        <Link href="/" className="text-xs text-stone-500">
+        <Link href="/homes" className="text-xs text-stone-500">
           ← Plans
         </Link>
         <h1 className="text-xl font-semibold">

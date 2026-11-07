@@ -15,7 +15,6 @@ const INTERNAL = [
   'ui/NoteLabels.tsx',
   // Screens M8 hasn't redone yet; each leaves this list as its new version lands.
   'pages/EditorPage.tsx',
-  'pages/PlansPage.tsx',
   'ui/editor/ScalePanel.tsx',
   'ui/editor/Toolbar.tsx',
 ];
