@@ -10,10 +10,13 @@ import {
 } from '@roomie/schema';
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react';
 import { Plane, type Ray, Vector3 } from 'three';
+import { familyName } from '../../catalog';
+import { formatDollars } from '../../format';
 import { PREVIEW_ID, type Problems } from '../../furnishing';
 import { useFloorplan } from '../../stores/floorplan';
 import { useFurnish } from '../../stores/furnish';
 import { useProducts } from '../../stores/products';
+import { useToast } from '../../ui/kit';
 import { ProductModel } from '../ProductModel';
 
 /** A pointer that moves further than this, in pixels, is dragging the item, not clicking it. */
@@ -168,8 +171,13 @@ function Movable({ plan, placement, product, problems }: MovableProps) {
     orbit(true);
     const { preview, setPreview } = useFurnish.getState();
     if (g.moved && preview?.id === placement.id) {
-      const { x, y, rotation, roomId } = preview;
-      useFloorplan.getState().moveItem(placement.id, { x, y, rotation, roomId });
+      // Let go where it doesn't fit, it goes back to where it was, and says why (§2.7).
+      if (problems?.length) {
+        useToast.getState().show(`Put back: ${problems[0]!.message.replace(/\.$/, '')}.`);
+      } else {
+        const { x, y, rotation, roomId } = preview;
+        useFloorplan.getState().moveItem(placement.id, { x, y, rotation, roomId });
+      }
     }
     setPreview(undefined);
   };
@@ -192,6 +200,7 @@ function Movable({ plan, placement, product, problems }: MovableProps) {
         </group>
       )}
       {selected && <Why problems={problems} height={product.dims.h} />}
+      {hovered && !selected && !placing && <Label product={product} />}
     </Item>
   );
 }
@@ -287,9 +296,20 @@ function Why({ problems, height }: { problems: LayoutProblem[] | undefined; heig
   if (!problems?.length) return null;
   return (
     <Html position={[0, height + 0.25, 0]} center zIndexRange={[20, 0]}>
-      <div className="pointer-events-none w-56 rounded-md bg-red-700 px-2 py-1 text-center text-xs text-white shadow">
+      <div className="pointer-events-none w-56 bg-danger px-2 py-1 text-center text-xs text-white">
         {problems[0]!.message}
         {problems.length > 1 && ` (+${problems.length - 1} more)`}
+      </div>
+    </Html>
+  );
+}
+
+/** On hover, which piece it is and what it costs (§4.6). */
+function Label({ product }: { product: Product }) {
+  return (
+    <Html position={[0, product.dims.h + 0.2, 0]} center zIndexRange={[20, 0]}>
+      <div className="pointer-events-none bg-ink px-2 py-1 font-mono text-xs whitespace-nowrap text-white">
+        {familyName(product)} · {formatDollars(product.priceCad)}
       </div>
     </Html>
   );

@@ -46,6 +46,10 @@ export type HomeViewProps = {
   link?: { camera: CameraLink; id: string };
   /** What stands in the home: its furniture, and anything marked on it. */
   children?: ReactNode;
+  /** Seen from above, the easiest view to move things in (§4.6); a 3D view when undefined. */
+  top?: boolean;
+  /** Counts up to frame the view afresh, as it first was. */
+  resets?: number;
 };
 
 /**
@@ -81,7 +85,7 @@ export function HomeView(props: HomeViewProps) {
       {props.children}
       {ceilings && <Ceilings plan={plan} />}
       <Ground home={home} />
-      <Framing extent={focus} link={link} />
+      <Framing extent={focus} link={link} top={props.top ?? false} resets={props.resets ?? 0} />
       <EffectComposer multisampling={4}>
         <N8AO aoRadius={0.5} distanceFalloff={0.5} intensity={2.5} halfRes />
         <ToneMapping mode={ToneMappingMode.NEUTRAL} />
@@ -174,7 +178,17 @@ function Ground({ home }: { home: Extent }) {
  * gliding over when the extent changes. Linked, it moves with the other views, and goes to the
  * preset views they're all sent to: each corner in turn, or from above.
  */
-function Framing({ extent, link }: { extent: Extent; link: HomeViewProps['link'] }) {
+function Framing({
+  extent,
+  link,
+  top,
+  resets,
+}: {
+  extent: Extent;
+  link: HomeViewProps['link'];
+  top: boolean;
+  resets: number;
+}) {
   const controls = useRef<CameraControls>(null);
   const framed = useRef(false);
   const invalidate = useThree((s) => s.invalidate);
@@ -192,11 +206,20 @@ function Framing({ extent, link }: { extent: Extent; link: HomeViewProps['link']
   useEffect(() => {
     const c = controls.current;
     if (!c) return;
-    frame(c, framed.current ? c.azimuthAngle : AZIMUTH, POLAR, framed.current);
+    frame(c, framed.current ? c.azimuthAngle : AZIMUTH, top ? TOP_POLAR : POLAR, framed.current);
     framed.current = true;
-    // Framing again is for a new extent only.
+    // Framing again is for a new extent, or a switch between 3D and the view from above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.x, center.y, radius]);
+  }, [center.x, center.y, radius, top]);
+
+  // Reset view: back to how the extent was first framed.
+  useEffect(() => {
+    const c = controls.current;
+    if (!c || resets === 0) return;
+    frame(c, AZIMUTH, top ? TOP_POLAR : POLAR, true);
+    // Only a reset frames it again here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resets]);
 
   useEffect(() => {
     const c = controls.current;
@@ -235,7 +258,9 @@ function Framing({ extent, link }: { extent: Extent; link: HomeViewProps['link']
       makeDefault
       minDistance={1}
       maxDistance={80}
-      maxPolarAngle={Math.PI / 2 - 0.05}
+      // From above, the camera turns about the room but never tilts.
+      minPolarAngle={top ? TOP_POLAR : 0}
+      maxPolarAngle={top ? TOP_POLAR : Math.PI / 2 - 0.05}
     />
   );
 }

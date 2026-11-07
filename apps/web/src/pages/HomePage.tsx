@@ -1,18 +1,27 @@
 import { turn } from '@roomie/geometry';
-import type { Floorplan } from '@roomie/schema';
+import { FURNISHABLE } from '@roomie/schema';
 import { useEffect, useState } from 'react';
-import { Link } from 'wouter';
-import { floorplanImageUrl } from '../api';
+import { Link, Redirect } from 'wouter';
 import { useAutosave } from '../autosave';
+import { familyName } from '../catalog';
+import { isImperial } from '../format';
 import { nudgeItem, removeItem, rotateItem } from '../furnishing';
 import { useFurnishingProgress } from '../generation';
 import { DEMO_ID, usePlan } from '../plans';
 import { HomeScene } from '../scene/home/HomeScene';
-import { redo, undo } from '../stores/floorplan';
+import { redo, undo, useFloorplan } from '../stores/floorplan';
 import { useFurnish } from '../stores/furnish';
 import { useIntents } from '../stores/intents';
-import { useProductsFor } from '../stores/products';
-import { HomePanel } from '../ui/HomePanel';
+import { useProducts, useProductsFor } from '../stores/products';
+import { useWorkspace } from '../stores/workspace';
+import { useToast } from '../ui/kit';
+import { AddSheet } from '../ui/workspace/AddSheet';
+import { ContextPanel } from '../ui/workspace/ContextPanel';
+import { FurnishingCard } from '../ui/workspace/FurnishingCard';
+import { RoomRail } from '../ui/workspace/RoomRail';
+import { SwapSheet } from '../ui/workspace/SwapSheet';
+import { TopBar } from '../ui/workspace/TopBar';
+import { ViewControls } from '../ui/workspace/ViewControls';
 
 /** R turns an item a quarter, Shift+R by 15°. */
 const STEP = Math.PI / 2;
@@ -27,10 +36,23 @@ const NUDGES: Record<string, [number, number]> = {
   ArrowDown: [0, 1],
 };
 
+/** Removes an item, with a toast to take it back (§4.6): no confirmation, since undo can. */
+function removeWithUndo(itemId: string) {
+  const plan = useFloorplan.getState().plan;
+  const item = plan?.furniture.find((f) => f.id === itemId);
+  const product = item && useProducts.getState().byArticle.get(item.articleNo);
+  removeItem(itemId);
+  useToast.getState().show(`${product ? familyName(product) : 'Piece'} removed`, {
+    label: 'Undo',
+    run: undo,
+  });
+}
+
+/** Your home (§4.6): look at the result, understand it, and change it. */
 export function HomePage({ id }: { id: string }) {
   const { plan, error } = usePlan(id);
-  // Wall colors, floors and lights are saved like any other edit.
-  useAutosave(id);
+  // Wall colours, floors and lights are saved like any other edit.
+  const save = useAutosave(id);
   const [roomId, setRoomId] = useState(
     () => new URLSearchParams(location.search).get('room') ?? undefined,
   );
@@ -42,8 +64,8 @@ export function HomePage({ id }: { id: string }) {
       (f) => f.articleNo,
     ),
   );
-  const [cutaway, setCutaway] = useState(true);
-  const [ceilings, setCeilings] = useState(false);
+  const { view, cutaway, ceilings, resets, imperial: chosenUnits } = useWorkspace();
+  const imperial = chosenUnits ?? isImperial(plan?.scale?.sourceUnit);
 
   // Keep the room in the URL, so a view can be linked to.
   useEffect(() => {
@@ -53,15 +75,16 @@ export function HomePage({ id }: { id: string }) {
     history.replaceState(null, '', params.size > 0 ? `?${params}` : location.pathname);
   }, [roomId]);
 
-  // Escape stops placing, else closes the swap list, else lets go of the item, else goes back to
-  // the whole home. R turns what's being placed or the item selected, S opens its swap list,
-  // Delete removes the item, arrows nudge it.
+  // Esc stops placing, else closes a sheet, else lets go of the piece, else goes back to the
+  // whole home. R turns what's being placed or the piece selected, S opens its swap drawer,
+  // Delete removes it, arrows nudge it (§4.6).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Keys typed into a field are the field's; a ticked checkbox leaves them to the page.
-      const field = 'input:not([type=checkbox]):not([type=radio]), select, textarea';
+      const field = 'input:not([type=checkbox]):not([type=radio]), select, textarea, [role=dialog]';
       if (e.target instanceof HTMLElement && e.target.closest(field)) return;
       const furnish = useFurnish.getState();
+      const workspace = useWorkspace.getState();
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
       // While a furnishing is under way, the furniture stays as it is.
@@ -77,17 +100,17 @@ export function HomePage({ id }: { id: string }) {
       const by = e.shiftKey ? STEP_FINE : STEP;
       if (e.key === 'Escape') {
         if (furnish.armed) furnish.arm(undefined);
-        else if (furnish.swapping) furnish.setSwapping(false);
+        else if (workspace.sheet) workspace.set({ sheet: undefined });
         else if (item) furnish.select(undefined);
         else setRoomId(undefined);
       } else if (key === 's' && item) {
-        furnish.setSwapping(!furnish.swapping);
+        workspace.set({ sheet: workspace.sheet === 'swap' ? undefined : 'swap' });
       } else if (key === 'r' && furnish.armed) {
         furnish.turnArmed(turn(furnish.armed.rotation, by));
       } else if (key === 'r' && item) {
         rotateItem(item, by);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && item) {
-        removeItem(item);
+        removeWithUndo(item);
       } else if (e.key in NUDGES && item) {
         e.preventDefault();
         const [dx, dy] = NUDGES[e.key]!;
@@ -100,69 +123,62 @@ export function HomePage({ id }: { id: string }) {
   }, []);
 
   useFurnishingProgress();
-  // Picking and placing start afresh on each home.
-  useEffect(() => () => useFurnish.getState().reset(), [id]);
-  // What its furnishings planned, for why each item is there; the demo was never furnished.
+  // Picking, placing and the view start afresh on each home.
+  useEffect(
+    () => () => {
+      useFurnish.getState().reset();
+      useWorkspace.getState().reset();
+    },
+    [id],
+  );
+  // What its furnishings planned, for why each piece is there; the demo was never furnished.
   useEffect(() => void useIntents.getState().load(id === DEMO_ID ? undefined : id), [id]);
 
   if (error) {
     return (
-      <p className="p-8 text-sm text-stone-700">
-        {error}{' '}
+      <main className="p-8 text-lg">
+        We couldn&apos;t open this home.{' '}
         <Link href="/homes" className="underline">
-          Back to your plans
+          Back to your homes
         </Link>
-      </p>
+      </main>
     );
   }
-  if (!plan) return null;
-  if (plan.walls.length === 0 || !plan.scale) return <NotTraced id={id} plan={plan} />;
+  if (!plan) {
+    return (
+      <main aria-live="polite" className="p-8 text-ink-muted">
+        Opening your home…
+      </main>
+    );
+  }
+  if (plan.walls.length === 0 || !plan.scale) return <Redirect to={`/plans/${id}/check`} replace />;
+  const firstRoom = plan.rooms.find((r) => FURNISHABLE.has(r.roomType))?.id ?? plan.rooms[0]?.id;
   return (
-    <main className="flex h-full">
-      <HomePanel
-        id={id}
-        plan={plan}
-        roomId={roomId}
-        onRoom={setRoomId}
-        cutaway={cutaway}
-        onCutaway={setCutaway}
-        ceilings={ceilings}
-        onCeilings={setCeilings}
-      />
-      <div className="min-w-0 flex-1">
-        <HomeScene
-          plan={plan}
-          roomId={roomId}
-          onRoom={setRoomId}
-          cutaway={cutaway}
-          ceilings={ceilings}
-        />
-      </div>
-    </main>
-  );
-}
-
-/** An uploaded plan that has no walls yet: its image, and what comes next. */
-function NotTraced({ id, plan }: { id: string; plan: Floorplan }) {
-  return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-4 p-8 text-sm text-stone-800">
-      <h1 className="text-xl font-semibold">{plan.name}</h1>
-      <p className="text-stone-600">
-        Its walls and rooms aren&apos;t traced yet.{' '}
-        <Link href={`/plans/${id}/edit`} className="underline">
-          Open it in the editor
-        </Link>{' '}
-        to set its scale and trace it.
-      </p>
-      {plan.image && (
-        <img
-          src={floorplanImageUrl(plan.id)}
-          alt={`The uploaded plan of ${plan.name}`}
-          width={plan.image.width}
-          height={plan.image.height}
-          className="h-auto w-full rounded-lg border border-stone-200 bg-white"
-        />
-      )}
-    </main>
+    <div className="flex h-full flex-col">
+      <TopBar id={id} plan={plan} imperial={imperial} save={save} />
+      <main className="flex min-h-0 flex-1">
+        <RoomRail id={id} plan={plan} roomId={roomId} onRoom={setRoomId} />
+        <div className="relative min-w-0 flex-1">
+          <HomeScene
+            plan={plan}
+            roomId={roomId}
+            onRoom={setRoomId}
+            cutaway={cutaway}
+            ceilings={ceilings}
+            top={view === 'top'}
+            resets={resets}
+          />
+          <div className="pointer-events-none absolute top-4 left-4">
+            <FurnishingCard plan={plan} />
+          </div>
+          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
+            <ViewControls roomId={roomId} firstRoom={firstRoom} onRoom={setRoomId} />
+          </div>
+        </div>
+        <ContextPanel id={id} plan={plan} roomId={roomId} imperial={imperial} saved={id !== DEMO_ID} />
+      </main>
+      <SwapSheet plan={plan} imperial={imperial} />
+      <AddSheet plan={plan} roomId={roomId} imperial={imperial} />
+    </div>
   );
 }

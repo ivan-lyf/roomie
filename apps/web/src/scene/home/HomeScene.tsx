@@ -13,13 +13,16 @@ type Props = {
   /** Lower the walls between the camera and the rooms in view. */
   cutaway: boolean;
   ceilings: boolean;
+  /** Seen from above (§4.6). */
+  top?: boolean;
+  resets?: number;
 };
 
 /**
  * The home being edited, in 3D: its furniture can be picked, placed and moved, with what's wrong
  * marked as it goes (M3, M5).
  */
-export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
+export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings, top, resets }: Props) {
   const floorEvents = useFloorEvents(plan, onRoom);
   const problems = useLayoutProblems(plan);
   return (
@@ -28,6 +31,8 @@ export function HomeScene({ plan, roomId, onRoom, cutaway, ceilings }: Props) {
       roomId={roomId}
       cutaway={cutaway}
       ceilings={ceilings}
+      top={top}
+      resets={resets}
       floorEvents={floorEvents}
       onPointerMissed={() => {
         onRoom(undefined);
