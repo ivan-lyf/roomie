@@ -1,9 +1,9 @@
 import { Redirect, useLocation } from 'wouter';
 import { hasHomes } from '../homes';
 import { AccountMenu } from '../ui/account/AccountMenu';
+import { SampleLink } from '../ui/SampleLink';
 import { useSignIn } from '../ui/account/signIn';
 import { Button, ButtonLink } from '../ui/kit';
-import { DEMO_ID } from '../plans';
 
 const REASONS = [
   {
@@ -75,9 +75,7 @@ export function WelcomePage() {
               <ButtonLink href="/homes" size="lg">
                 Upload your floor plan
               </ButtonLink>
-              <ButtonLink href={`/plans/${DEMO_ID}/check`} variant="link">
-                Try a sample apartment →
-              </ButtonLink>
+              <SampleLink />
             </div>
           </div>
           <PlanFigure />

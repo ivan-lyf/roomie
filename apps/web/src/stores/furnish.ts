@@ -1,4 +1,4 @@
-import type { GenerationJob, Placement } from '@roomie/schema';
+import type { GenerationJob, GenerationInputs, Placement, RefusalCode } from '@roomie/schema';
 import { create } from 'zustand';
 
 // What furnishing is doing, apart from the plan itself: never undone, never saved.
@@ -12,8 +12,18 @@ export type Preview = Pick<Placement, 'x' | 'y' | 'rotation' | 'roomId'> & {
   articleNo?: string;
 };
 
-/** The last furnishing started: of the whole home, or one room again (`roomId`). */
-export type Furnishing = { roomId?: string | undefined; job?: GenerationJob; error?: string };
+/**
+ * The last furnishing started: of the whole home, or one room again (`roomId`), with what it was
+ * asked for (`inputs`), so a room that didn't work out can be tried again with a change.
+ */
+export type Furnishing = {
+  roomId?: string | undefined;
+  inputs?: GenerationInputs;
+  job?: GenerationJob;
+  error?: string;
+  /** Why the API refused to start it, when it did: the daily limit, already busy. */
+  code?: RefusalCode;
+};
 
 type FurnishState = {
   /** The product picked to place, and its turn: the next click on a room's floor places it. */

@@ -182,6 +182,20 @@ describe('floorplans', () => {
     expect(card!.totalCad).toBeCloseTo(2 * a!.priceCad + b!.priceCad, 2);
   });
 
+  it('copies the sample apartment as a home of its own, with its image', async () => {
+    const res = await app().request('/api/floorplans/sample', { method: 'POST' });
+    expect(res.status).toBe(201);
+    const sample = Floorplan.parse(await res.json());
+    const original = Floorplan.parse(demo);
+    expect(sample).toMatchObject({ name: 'Sample apartment', source: 'upload', status: 'ready' });
+    expect(sample.id).not.toBe(original.id);
+    expect(sample.rooms).toEqual(original.rooms);
+    expect(sample.furniture).toEqual([]);
+    const image = await app().request(`/api/floorplans/${sample.id}/image`);
+    expect(image.headers.get('content-type')).toBe('image/png');
+    expect((await list(`?ids=${sample.id}`)).map((p) => p.name)).toEqual(['Sample apartment']);
+  });
+
   it('leaves the test homes added to rate out of the list, but opens them', async () => {
     const mine = await uploaded();
     const added = await testHomePlan(db, { name: '00-demo-1br', plan: Floorplan.parse(demo) });

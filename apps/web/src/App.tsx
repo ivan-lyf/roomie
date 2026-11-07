@@ -5,6 +5,7 @@ import { EditorPage } from './pages/EditorPage';
 import { HomePage } from './pages/HomePage';
 import { HomesPage } from './pages/HomesPage';
 import { ListPage } from './pages/ListPage';
+import { PreferencesPage } from './pages/PreferencesPage';
 import { RatePage } from './pages/RatePage';
 import { WelcomePage } from './pages/WelcomePage';
 import { SignInDialog } from './ui/account/SignInDialog';
@@ -19,7 +20,7 @@ export function App() {
         <Route path="/admin/rate" component={RatePage} />
         <Route path="/plans/:id/check">{({ id }) => <CheckPage id={id} />}</Route>
         <Route path="/plans/:id/edit">{({ id }) => <EditorPage id={id} />}</Route>
-        <Route path="/plans/:id/preferences">{({ id }) => <HomePage id={id} />}</Route>
+        <Route path="/plans/:id/preferences">{({ id }) => <PreferencesPage id={id} />}</Route>
         <Route path="/plans/:id/list">{({ id }) => <ListPage id={id} />}</Route>
         <Route path="/plans/:id/3d">
           {({ id }) => <Redirect to={`/plans/${id}${location.search}`} replace />}

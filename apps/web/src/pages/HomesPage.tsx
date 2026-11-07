@@ -7,10 +7,10 @@ import { fetchFloorplans, floorplanImageUrl, uploadFloorplan } from '../api';
 import { homeStatus } from '../copy';
 import { formatDollars } from '../format';
 import { browserHomes, rememberHome } from '../homes';
-import { DEMO_ID } from '../plans';
 import { useAccount } from '../stores/account';
 import { AccountMenu } from '../ui/account/AccountMenu';
-import { Button, ButtonLink, Header, Notice, Price } from '../ui/kit';
+import { SampleLink } from '../ui/SampleLink';
+import { Button, Header, Notice, Price } from '../ui/kit';
 import { ACCEPTED, preparePlan } from '../upload';
 
 type Upload =
@@ -152,9 +152,7 @@ export function HomesPage() {
 
         <p className="m-0 text-ink-muted">
           No plan handy?{' '}
-          <ButtonLink href={`/plans/${DEMO_ID}/check`} variant="link" className="font-semibold">
-            Try a sample apartment →
-          </ButtonLink>
+          <SampleLink className="font-semibold" />
         </p>
 
         <section aria-labelledby="your-homes" className="mt-4 flex flex-col gap-4">

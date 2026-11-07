@@ -7,6 +7,7 @@ import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
+import demo from '../../../../fixtures/plans/00-demo-1br/floorplan.json';
 import type { Allowance } from '../allowance';
 import { accountOf, type Auth, optionalAccountOf } from '../auth';
 import type { Db } from '../db/client';
@@ -29,6 +30,9 @@ export const DEFAULT_MATERIALS: Materials = {
 };
 
 const CONTENT_TYPES = { png: 'image/png', jpeg: 'image/jpeg' } as const;
+
+/** The sample apartment's plan image, drawn at the sample plan's own pixels. */
+const SAMPLE_IMAGE = new URL('../../../../fixtures/plans/00-demo-1br/plan.png', import.meta.url);
 const EXTENSIONS = { png: 'png', jpeg: 'jpg' } as const;
 
 export type FloorplanOptions = {
@@ -62,6 +66,18 @@ export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }:
     await next();
   });
 
+  /** Keeps a plan's image, in the bucket or on disk, under a key made from its plan's id. */
+  const storeImage = async (id: string, bytes: Uint8Array, type: keyof typeof EXTENSIONS) => {
+    const key = `${id}.${EXTENSIONS[type]}`;
+    if (plans) {
+      await plans.put(key, bytes, CONTENT_TYPES[type]);
+    } else {
+      await mkdir(path.dirname(localPath(key)), { recursive: true });
+      await writeFile(localPath(key), bytes);
+    }
+    return key;
+  };
+
   /** The plan with this id, read back through zod (its JSONB columns are only typed). */
   const load = async (db: Db, id: string): Promise<Floorplan | undefined> => {
     if (!z.uuid().safeParse(id).success) return undefined;
@@ -84,13 +100,7 @@ export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }:
       if (!info) return c.json({ error: 'The plan has to be a PNG or JPEG image.' }, 415);
 
       const id = randomUUID();
-      const key = `${id}.${EXTENSIONS[info.type]}`;
-      if (plans) {
-        await plans.put(key, bytes, CONTENT_TYPES[info.type]);
-      } else {
-        await mkdir(path.dirname(localPath(key)), { recursive: true });
-        await writeFile(localPath(key), bytes);
-      }
+      const key = await storeImage(id, bytes, info.type);
       // Made signed in, the home is the account's, on any device (M8); else only this browser's.
       const owner = await optionalAccountOf(c, auth);
       const given = typeof body['name'] === 'string' ? body['name'].trim() : '';
@@ -118,6 +128,41 @@ export function floorplanRoutes({ db, plans, dataDir, reader, auth, allowance }:
       return c.json(Floorplan.parse(row), 201);
     },
   );
+
+  /**
+   * A copy of the sample apartment as a home of one's own (M8): "Try a sample apartment" can then
+   * be checked, furnished and kept like an upload. The copy is the caller's when signed in.
+   */
+  app.post('/sample', async (c) => {
+    const bytes = new Uint8Array(await readFile(SAMPLE_IMAGE));
+    const info = readImageInfo(bytes);
+    if (!info) return c.json({ error: 'The sample image is missing.' }, 500);
+    const sample = Floorplan.parse(demo);
+    const id = randomUUID();
+    const key = await storeImage(id, bytes, info.type);
+    const owner = await optionalAccountOf(c, auth);
+    const [row] = await c.var.db
+      .insert(floorplans)
+      .values({
+        id,
+        name: 'Sample apartment',
+        status: planStatus(sample),
+        ownerId: owner?.id ?? null,
+        image: { key, width: info.width, height: info.height },
+        walls: sample.walls,
+        openings: sample.openings,
+        rooms: sample.rooms,
+        obstacles: sample.obstacles,
+        labels: sample.labels,
+        scale: sample.scale,
+        ceilingHeight: sample.ceilingHeight,
+        ceilingHeightSource: sample.ceilingHeightSource,
+        materials: sample.materials,
+        reading: null,
+      })
+      .returning();
+    return c.json(Floorplan.parse(row), 201);
+  });
 
   /**
    * Someone's homes: the ones in `?ids=` (made in this browser, which keeps their ids) and the

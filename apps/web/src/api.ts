@@ -117,6 +117,13 @@ export async function uploadFloorplan(image: Blob, name: string): Promise<Floorp
   return Floorplan.parse(await res.json());
 }
 
+/** A copy of the sample apartment as a home of one's own, to check, furnish and keep. */
+export async function copySample(): Promise<Floorplan> {
+  const res = await fetch('/api/floorplans/sample', { method: 'POST', headers: await signedIn() });
+  if (!res.ok) throw await failure(res, 'POST /api/floorplans/sample');
+  return Floorplan.parse(await res.json());
+}
+
 /** Gives the signed-in account the homes made in this browser that nobody owns yet. */
 export async function claimFloorplans(ids: readonly string[]): Promise<number> {
   const res = await fetch('/api/floorplans/claim', {

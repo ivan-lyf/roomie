@@ -1,6 +1,6 @@
-import type { GenerationJob } from '@roomie/schema';
+import type { GenerationInputs, GenerationJob } from '@roomie/schema';
 import { useEffect } from 'react';
-import { fetchGeneration } from './api';
+import { ApiError, fetchGeneration } from './api';
 import { saveNow } from './autosave';
 import { useAccount } from './stores/account';
 import { useFloorplan } from './stores/floorplan';
@@ -25,20 +25,26 @@ export async function runFurnishing(
   roomIds: string[],
   roomId: string | undefined,
   begin: () => Promise<string>,
+  inputs?: GenerationInputs,
 ) {
   const { setBusy, setFurnishing } = useFurnish.getState();
   setBusy(true);
-  setFurnishing({ roomId });
+  setFurnishing({ roomId, inputs });
   try {
     if (!(await saveNow())) {
       throw new Error("Your latest changes couldn't be saved, so this has to wait: try again.");
     }
     const generationId = await begin();
     const rooms = roomIds.map((id) => ({ roomId: id, status: 'waiting' as const }));
-    setFurnishing({ roomId, job: { generationId, floorplanId, status: 'running', rooms } });
+    setFurnishing({ roomId, inputs, job: { generationId, floorplanId, status: 'running', rooms } });
   } catch (e) {
     setBusy(false);
-    setFurnishing({ roomId, error: message(e) });
+    setFurnishing({
+      roomId,
+      inputs,
+      error: message(e),
+      ...(e instanceof ApiError && e.code && { code: e.code }),
+    });
   }
 }
 
@@ -61,6 +67,7 @@ export function useFurnishingProgress() {
   const furnishing = useFurnish((s) => s.furnishing);
   const job = furnishing?.job;
   const roomId = furnishing?.roomId;
+  const inputs = furnishing?.inputs;
   useEffect(() => {
     if (!job || job.status !== 'running') return;
     const ctrl = new AbortController();
@@ -68,7 +75,7 @@ export function useFurnishingProgress() {
       fetchGeneration(job.generationId, ctrl.signal)
         .then((next) => {
           const { setBusy, setFurnishing } = useFurnish.getState();
-          setFurnishing({ roomId, job: next });
+          setFurnishing({ roomId, inputs, job: next });
           if (next.status === 'running') return;
           setBusy(false);
           // What it cost, in the account line.
@@ -79,12 +86,12 @@ export function useFurnishingProgress() {
           if (ctrl.signal.aborted) return;
           const { setBusy, setFurnishing } = useFurnish.getState();
           setBusy(false);
-          setFurnishing({ roomId, job, error: message(e) });
+          setFurnishing({ roomId, inputs, job, error: message(e) });
         });
     }, POLL_MS);
     return () => {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [job, roomId]);
+  }, [job, roomId, inputs]);
 }
